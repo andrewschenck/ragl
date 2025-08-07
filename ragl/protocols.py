@@ -9,15 +9,15 @@ import numpy as np
 
 
 __all__ = (
-    'Embedder',
-    'Retriever',
-    'Tokenizer',
-    'VectorStorage',
+    'EmbedderProtocol',
+    'RAGStoreProtocol',
+    'TokenizerProtocol',
+    'StorageProtocol',
 )
 
 
 @runtime_checkable
-class Embedder(Protocol):
+class EmbedderProtocol(Protocol):
     """
     Protocol for text embedding.
 
@@ -35,7 +35,7 @@ class Embedder(Protocol):
 
 
 @runtime_checkable
-class VectorStorage(Protocol):
+class StorageProtocol(Protocol):
     """
     Protocol for vector storage operations.
 
@@ -46,14 +46,14 @@ class VectorStorage(Protocol):
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
-    def delete_text(self, text_id: str) -> None:  # noqa: D102
+    def delete_text(self, text_id: str) -> bool:  # noqa: D102
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
     def get_relevant(
             self,
             embedding: np.ndarray,
-            top_k: int = 1,
+            top_k: int,
             *,
             min_time: int | None,
             max_time: int | None,
@@ -75,27 +75,28 @@ class VectorStorage(Protocol):
             embedding: np.ndarray,
             *,
             text_id: str | None,
-            metadata: Mapping[str, Any] | None = None,
+            metadata: Mapping[str, Any] | None,
     ) -> str:  # noqa: D102
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
 
 @runtime_checkable
-class Retriever(Protocol):
+class RAGStoreProtocol(Protocol):
     """
     Protocol for text retrieval.
 
     Defines methods for storing and retrieving text.
     """
 
-    storage: VectorStorage
+    embedder: EmbedderProtocol
+    storage: StorageProtocol
 
     def clear(self) -> None:  # noqa: D102
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
-    def delete_text(self, text_id: str) -> None:  # noqa: D102
+    def delete_text(self, text_id: str) -> bool:  # noqa: D102
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
@@ -126,7 +127,7 @@ class Retriever(Protocol):
 
 
 @runtime_checkable
-class Tokenizer(Protocol):
+class TokenizerProtocol(Protocol):
     """
     Protocol for text tokenization.
 

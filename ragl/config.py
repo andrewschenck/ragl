@@ -5,14 +5,21 @@ from typing import Any
 from ragl.exceptions import ConfigurationError
 
 __all__ = (
+    'HFConfig',
     'EmbedderConfig',
-    'RAGConfig',
+    'ManagerConfig',
     'RedisConfig',
+    'StorageConfig',
 )
 
 
 @dataclass
 class EmbedderConfig:
+    """Base configuration for text embedding."""
+
+
+@dataclass
+class HFConfig(EmbedderConfig):
     """
         Attributes:
             model_name_or_path:
@@ -67,78 +74,12 @@ class EmbedderConfig:
 
 
 @dataclass
-class RAGConfig:
-    """
-    Configuration for RAGEngine.
+class StorageConfig:
+    """Base configuration for storage backends."""
 
-    Attributes:
-        index_name:
-            Name of the index in the vector storage.
-        chunk_size:
-            Size of text chunks to create from documents.
-        overlap:
-            Number of overlapping tokens between chunks.
-        max_query_length:
-            Maximum length of queries for the retriever.
-        max_input_length:
-            Maximum length of input text for the embedder.
-        default_base_id:
-            Default base ID for documents in the index.
-        paranoid:
-            Whether to perform additional checks and sanitization
-            of input data.
-    """
-
-    index_name: str = 'rag_index'
-    chunk_size: int = 512
-    overlap: int = 64
-    max_query_length: int = 8192
-    max_input_length: int = (1024 * 1024) * 10
-    default_base_id: str = 'doc'
-    paranoid: bool = True
-
-    def __post_init__(self) -> None:
-        """Validate configuration after initialization."""
-        self._validate_chunk_settings()
-        self._validate_limits()
-        self._validate_names()
-
-    def _validate_chunk_settings(self) -> None:
-        if self.chunk_size < 1:
-            raise ConfigurationError(f'{self.chunk_size=} must be positive')
-
-        if self.overlap < 0:
-            raise ConfigurationError(f'{self.overlap=} must be non-negative')
-
-        if self.overlap >= self.chunk_size:
-            raise ConfigurationError( f'({self.overlap=}) must be less than '
-                                      f'({self.chunk_size=})')
-
-    def _validate_limits(self) -> None:
-        if self.max_query_length < 1:
-            raise ConfigurationError(f'{self.max_query_length=} must be '
-                                     'positive')
-
-        if self.max_input_length < 1:
-            raise ConfigurationError(f'{self.max_input_length=} must be '
-                                     'positive')
-
-        if self.max_query_length > self.max_input_length:
-            raise ConfigurationError(f'{self.max_query_length=} cannot exceed '
-                                     f'{self.max_input_length=}')
-
-    def _validate_names(self) -> None:
-        if not self.index_name or not self.index_name.strip():
-            raise ConfigurationError('index_name cannot be empty')
-
-        if not re.match(r'^[a-zA-Z0-9_-]+$', self.index_name):
-            raise ConfigurationError('index_name contains invalid characters')
-
-        if not self.default_base_id or not self.default_base_id.strip():
-            raise ConfigurationError('default_base_id cannot be empty')
 
 @dataclass
-class RedisConfig:
+class RedisConfig(StorageConfig):
     """
     Configuration for Redis connection.
 
@@ -217,3 +158,75 @@ class RedisConfig:
         if self.health_check_interval < 1:
             raise ConfigurationError(f'{self.health_check_interval=} must be '
                                      'positive')
+
+
+@dataclass
+class ManagerConfig:
+    """
+    Configuration for RAGManager.
+
+    Attributes:
+        index_name:
+            Name of the index in the vector storage.
+        chunk_size:
+            Size of text chunks to create from documents.
+        overlap:
+            Number of overlapping tokens between chunks.
+        max_query_length:
+            Maximum length of queries for the retriever.
+        max_input_length:
+            Maximum length of input text for the embedder.
+        default_base_id:
+            Default base ID for documents in the index.
+        paranoid:
+            Whether to perform additional checks and sanitization
+            of input data.
+    """
+
+    index_name: str = 'rag_index'
+    chunk_size: int = 512
+    overlap: int = 64
+    max_query_length: int = 8192
+    max_input_length: int = (1024 * 1024) * 10
+    default_base_id: str = 'doc'
+    paranoid: bool = True
+
+    def __post_init__(self) -> None:
+        """Validate configuration after initialization."""
+        self._validate_chunk_settings()
+        self._validate_limits()
+        self._validate_names()
+
+    def _validate_chunk_settings(self) -> None:
+        if self.chunk_size < 1:
+            raise ConfigurationError(f'{self.chunk_size=} must be positive')
+
+        if self.overlap < 0:
+            raise ConfigurationError(f'{self.overlap=} must be non-negative')
+
+        if self.overlap >= self.chunk_size:
+            raise ConfigurationError( f'({self.overlap=}) must be less than '
+                                      f'({self.chunk_size=})')
+
+    def _validate_limits(self) -> None:
+        if self.max_query_length < 1:
+            raise ConfigurationError(f'{self.max_query_length=} must be '
+                                     'positive')
+
+        if self.max_input_length < 1:
+            raise ConfigurationError(f'{self.max_input_length=} must be '
+                                     'positive')
+
+        if self.max_query_length > self.max_input_length:
+            raise ConfigurationError(f'{self.max_query_length=} cannot exceed '
+                                     f'{self.max_input_length=}')
+
+    def _validate_names(self) -> None:
+        if not self.index_name or not self.index_name.strip():
+            raise ConfigurationError('index_name cannot be empty')
+
+        if not re.match(r'^[a-zA-Z0-9_-]+$', self.index_name):
+            raise ConfigurationError('index_name contains invalid characters')
+
+        if not self.default_base_id or not self.default_base_id.strip():
+            raise ConfigurationError('default_base_id cannot be empty')

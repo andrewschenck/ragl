@@ -137,6 +137,9 @@ class RedisStorage:
             raise ConfigurationError('both redis_client and redis_config '
                                      'were provided; only one is permitted')
 
+        if dimensions is None:
+            raise ConfigurationError('dimensions required for schema creation')
+
         if redis_client is not None:
             self.redis_client = redis_client
             try:
@@ -146,8 +149,7 @@ class RedisStorage:
                 msg = f'injected Redis client connection failed: {e}'
                 _LOG.error(msg)
                 raise StorageConnectionError(msg) from e
-
-        else:  # todo might be consolidation between if and else here
+        else:
             assert redis_config is not None
 
             pool_config = {**self.POOL_DEFAULTS, **redis_config.to_dict()}
@@ -161,9 +163,6 @@ class RedisStorage:
                 msg = f'failed to connect to Redis: {e}'
                 _LOG.error(msg)
                 raise StorageConnectionError(msg) from e
-
-        if dimensions is None:
-            raise ConfigurationError('dimensions required for schema creation')
 
         self.dimensions = dimensions
         self.index_name = index_name

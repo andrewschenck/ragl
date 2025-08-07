@@ -1,33 +1,28 @@
 from typing import Mapping, Any
 
-from ragl.protocols import Embedder, VectorStorage
+from ragl.protocols import EmbedderProtocol, StorageProtocol
 
 
-__all__ =  ('StandardRetriever',)
+__all__ =  ('RAGStore',)
 
 
-# todo rename RAGStore RAGEngine (X) (or RAGPipeline / Retrieval)
-# todo rename StandardRetriever RAGStore
-# todo rename protocols.Retriever to RAGStoreProtocol (name TBD)
-# todo rename RAGConfig EngineConfig(?)
-# todo update string / doc / log / isinstance references to RAGStore / RAGEngine / Retriever / StandardRetriever
-
-
-class StandardRetriever:
+class RAGStore:
     """
     Retrieve text using an embedder and storage.
 
     Attributes:
         embedder:
-            Embedder instance for vectorization.
+            EmbedderProtocol-conforming object for
+            vectorization.
         storage:
-            VectorStorage instance for data.
+            StorageProtocol-conforming object for
+            backend data storage and retrieval.
     """
 
-    embedder: Embedder
-    storage: VectorStorage
+    embedder: EmbedderProtocol
+    storage: StorageProtocol
 
-    def __init__(self, embedder: Embedder, storage: VectorStorage):
+    def __init__(self, embedder: EmbedderProtocol, storage: StorageProtocol):
         """
         Initialize with embedder and storage.
 
@@ -35,21 +30,31 @@ class StandardRetriever:
             embedder:
                 Embedder for text vectorization.
             storage:
-                Storage backend for data.
+                Storage backend for data storage and retrieval.
 
         Raises:
             TypeError: If args don’t implement protocols.
         """
-        if not isinstance(embedder, Embedder):
-            raise TypeError('embedder must implement Embedder')
-        if not isinstance(storage, VectorStorage):
-            raise TypeError('storage must implement VectorStorage')
+        if not isinstance(embedder, EmbedderProtocol):
+            raise TypeError('embedder must implement EmbedderProtocol')
+        if not isinstance(storage, StorageProtocol):
+            raise TypeError('storage must implement StorageProtocol')
         self.embedder = embedder
         self.storage = storage
 
     def clear(self) -> None:
         """Clear all data from storage."""
         self.storage.clear()
+
+    def delete_text(self, text_id: str) -> bool:
+        """
+        Delete a text from storage.
+
+        Args:
+            text_id:
+                ID of text to delete.
+        """
+        return self.storage.delete_text(text_id)
 
     def get_relevant(
             self,
@@ -81,16 +86,6 @@ class StandardRetriever:
             min_time=min_time,
             max_time=max_time,
         )
-
-    def delete_text(self, text_id: str) -> None:
-        """
-        Delete a text from storage.
-
-        Args:
-            text_id:
-                ID of text to delete.
-        """
-        self.storage.delete_text(text_id)
 
     def list_texts(self) -> list[str]:
         """

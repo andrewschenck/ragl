@@ -9,7 +9,7 @@ import psutil
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from ragl.config import EmbedderConfig
+from ragl.config import HFConfig
 
 
 __all__ = ('HFEmbedder',)
@@ -39,7 +39,7 @@ class HFEmbedder:
         assert isinstance(dimensions, int)
         return dimensions
 
-    def __init__(self, config: EmbedderConfig) -> None:
+    def __init__(self, config: HFConfig) -> None:
         """
         Initialize the HFEmbedder with configuration.
 

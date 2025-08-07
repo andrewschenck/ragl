@@ -7,17 +7,17 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Iterator
 
-from ragl.config import RAGConfig
+from ragl.config import ManagerConfig
 from ragl.constants import TEXT_ID_PREFIX
 from ragl.exceptions import DataError, ValidationError
-from ragl.protocols import Retriever, Tokenizer
+from ragl.protocols import RAGStoreProtocol, TokenizerProtocol
 from ragl.textunit import TextUnit
 from ragl.tokenizer import TiktokenTokenizer
 
 
 __all__ = (
     'RAGTelemetry',
-    'RAGEngine',
+    'RAGManager',
 )
 
 
@@ -74,8 +74,6 @@ class RAGTelemetry:
         Returns:
             A dictionary containing operational metrics.
         """
-        recent = list(self.recent_durations)
-
         # Total / Failed / Successful Calls
         total_calls = self.total_calls
         failure_count = self.failure_count
@@ -94,6 +92,7 @@ class RAGTelemetry:
         avg_duration = round(self.avg_duration, 4)
 
         # Recent Avg / Med Durations
+        recent = list(self.recent_durations)
         recent_avg = round(statistics.mean(recent), 4) if recent else 0.0
         recent_med = round(statistics.median(recent), 4) if recent else 0.0
 
@@ -109,7 +108,7 @@ class RAGTelemetry:
         }
 
 
-class RAGEngine:
+class RAGManager:
     """
     Manage text chunks for retrieval-augmented generation.
 
@@ -125,10 +124,11 @@ class RAGEngine:
     parent_id, always specify base_id to avoid collisions.
 
     Attributes:
-        retriever:
-            Retriever for storage operations.
+        ragstore:
+            RagstoreProtocol-conforming object for storage
+            operations.
         tokenizer:
-            Tokenizer for text splitting.
+            TokenizerProtocol-conforming object for text splitting.
         chunk_size:
             Size of text chunks.
         overlap:
@@ -139,8 +139,8 @@ class RAGEngine:
     MAX_QUERY_LENGTH = 8192
     MAX_INPUT_LENGTH = (1024 * 1024) * 10
 
-    retriever: Retriever
-    tokenizer: Tokenizer
+    ragstore: RAGStoreProtocol
+    tokenizer: TokenizerProtocol
     chunk_size: int
     overlap: int
     paranoid: bool
@@ -148,31 +148,31 @@ class RAGEngine:
 
     def __init__(
             self,
-            config: RAGConfig,
-            retriever: Retriever | None = None,
+            config: ManagerConfig,
+            ragstore: RAGStoreProtocol,
             *,
-            tokenizer: Tokenizer = TiktokenTokenizer(),
+            tokenizer: TokenizerProtocol = TiktokenTokenizer(),
     ):
         """
         Initialize RAG store with configuration.
 
         Args:
             config:
-                Configuration object with RAG parameters.
-            retriever:
-                Backend for storage and retrieval.
+                Configuration object with RAG parameters. # todo
+            ragstore:
+                Manages embedding for storage and retrieval.
             tokenizer:
                 Tokenizer for text splitting.
         """
-        if not isinstance(retriever, Retriever):
-            raise TypeError('backend must implement Backend protocol')
-        if not isinstance(tokenizer, Tokenizer):
-            raise TypeError('tokenizer must implement Tokenizer')
+        if not isinstance(ragstore, RAGStoreProtocol):
+            raise TypeError('retriever must implement RAGStoreProtocol')
+        if not isinstance(tokenizer, TokenizerProtocol):
+            raise TypeError('tokenizer must implement TokenizerProtocol')
 
         chunk_size, overlap = self._validate_params(config.chunk_size,
                                                     config.overlap)
 
-        self.retriever = retriever
+        self.ragstore = ragstore
         self.tokenizer = tokenizer
         self.chunk_size = chunk_size
         self.overlap = overlap
@@ -234,7 +234,7 @@ class RAGEngine:
             if base_id:
                 parent_id = base_id
             else:
-                current_text_count = len(self.retriever.list_texts())
+                current_text_count = len(self.ragstore.list_texts())
                 parent_id = f'{TEXT_ID_PREFIX}{current_text_count + 1}'
 
             # parent_id = base_id or default_id
@@ -273,7 +273,7 @@ class RAGEngine:
             text_id: ID of text to delete.
         """
         with self.track_operation('delete_text'):
-            self.retriever.delete_text(text_id)
+            self.ragstore.delete_text(text_id)
 
     def get_context(
             self,
@@ -310,7 +310,7 @@ class RAGEngine:
             self._validate_query(query)
             self._validate_top_k(top_k)
 
-            results = self.retriever.get_relevant(
+            results = self.ragstore.get_relevant(
                 query=query,
                 top_k=top_k,
                 min_time=min_time,
@@ -335,8 +335,8 @@ class RAGEngine:
             Health status dictionary.
         """
         with self.track_operation('health_check'):
-            if hasattr(self.retriever.storage, 'health_check'):
-                return self.retriever.storage.health_check()
+            if hasattr(self.ragstore.storage, 'health_check'):
+                return self.ragstore.storage.health_check()
             return {'status': 'health_check_not_supported'}
 
     def get_performance_metrics(
@@ -374,7 +374,7 @@ class RAGEngine:
             Sorted list of text IDs.
         """
         with self.track_operation('list_texts'):
-            text_ids = self.retriever.list_texts()
+            text_ids = self.ragstore.list_texts()
             _LOG.info('retrieved %s texts', len(text_ids))
             return text_ids
 
@@ -383,7 +383,7 @@ class RAGEngine:
         Reset the store to empty state.
         """
         with self.track_operation('reset'):
-            self.retriever.clear()
+            self.ragstore.clear()
 
         if reset_metrics:
             self.reset_metrics()
@@ -570,7 +570,7 @@ class RAGEngine:
         metadata = {k: v for k, v in chunk_data.items()
                     if k not in {'text_id', 'text', 'distance'}}
 
-        text_id = self.retriever.store_text(
+        text_id = self.ragstore.store_text(
             text=chunk,
             text_id=text_id,
             metadata=metadata

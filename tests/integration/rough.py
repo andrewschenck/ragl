@@ -10,15 +10,15 @@
 from pprint import pprint
 import logging
 
-from ragl import RAGEngine
+from ragl import RAGManager
 from ragl import HFEmbedder
-from ragl import StandardRetriever
+from ragl import RAGStore
 from ragl import TextUnit
 from ragl.storage.redis import RedisStorage
 from ragl.exceptions import ValidationError
 # from ragl.tokenizer import TiktokenTokenizer
 
-from ragl.config import EmbedderConfig, RAGConfig, RedisConfig
+from ragl.config import HFConfig, ManagerConfig, RedisConfig
 
 
 _LOG = logging.getLogger(__name__)
@@ -28,26 +28,28 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
     redis_config = RedisConfig(host='localhost', port=6379, db=0)
-    embedder_config = EmbedderConfig(cache_maxsize=20)
-    rag_config = RAGConfig(chunk_size=100, overlap=20, index_name='rag_00')  # todo rename EngineConfig
+    embedder_config = HFConfig(cache_maxsize=20)
+    manager_config = ManagerConfig(chunk_size=100, overlap=20, index_name='rag_00')  # todo rename EngineConfig
 
     # embedder = HFEmbedder(model_name_or_path='all-MiniLM-L6-v2')
     embedder = HFEmbedder(config=embedder_config)
     # embedder = HFEmbedder(model_name_or_path='all-mpnet-base-v2')
     # embedder = HFEmbedder('sentence-transformers/all-MiniLM-L12-v2')
 
-    # Setup for RedisStorage
-    redis_storage = RedisStorage(  # todo combine dataclasses somehow so we only pass in one param? give it embedder and rag_config
+    # todo combine dataclasses somehow so we only pass in one param? give it embedder and rag_config
+    storage = RedisStorage(
         redis_config=redis_config,
         dimensions=embedder.dimensions,
-        index_name=rag_config.index_name,
+        index_name=manager_config.index_name,
     )
-    redis_retriever = StandardRetriever(embedder=embedder, storage=redis_storage)
-    ragstore = RAGEngine(
-        config=rag_config,
-        retriever=redis_retriever,
+    ragstore = RAGStore(embedder=embedder, storage=storage)
+    manager = RAGManager(
+        config=manager_config,
+        ragstore=ragstore,
         # tokenizer=TiktokenTokenizer(encoding_name='cl100k_base'),
     )
+    # todo convenience function that takes a RedisConfig and builds everything
+    #  else from defaults, returns the manager
 
     def print_context(query: str, contexts: list[TextUnit]):
         print(f"\nContext for '{query}':")
@@ -76,32 +78,32 @@ if __name__ == "__main__":
 
     # Test 1: Basic Functionality with String (Redis)
     _LOG.info("Starting Test 1: Basic Functionality with String (Redis)")
-    ragstore.reset(reset_metrics=False)
+    manager.reset(reset_metrics=False)
     large_text = (
         "Artificial Intelligence (AI) is a broad field encompassing various techniques. "
         "Machine Learning (ML) is a subset of AI that focuses on training models with data. "
         "Deep Learning (DL), a further subset, uses neural networks with many layers."
     ) * 2
-    docs = ragstore.add_text(text_or_doc=large_text, base_id="doc:large_redis")
+    docs = manager.add_text(text_or_doc=large_text, base_id="doc:large_redis")
     print_texts(docs, "Documents after adding large text (Redis)")
-    contexts = ragstore.get_context(query="What is Deep Learning?", top_k=2)
+    contexts = manager.get_context(query="What is Deep Learning?", top_k=2)
     print_context("What is Deep Learning?", contexts)
     assert len(docs) > 1, "Should create multiple chunks"
     assert any("Deep Learning" in ctx.text for ctx in contexts), "Should retrieve relevant content"
-    ragstore.delete_text(docs[0].text_id)
-    remaining_texts = ragstore.list_texts()
+    manager.delete_text(docs[0].text_id)
+    remaining_texts = manager.list_texts()
     assert docs[0].text_id not in remaining_texts, "Deleted text should not be listed"
 
     # Test 4: No Split with Metadata (Redis)
     _LOG.info("Starting Test 4: No Split with Metadata (Redis)")
-    ragstore.reset(reset_metrics=False)
+    manager.reset(reset_metrics=False)
     meta_doc = TextUnit(
         text_id="", text="AI is transformative", distance=0.0,
         tags=["tech", "AI"], confidence=0.9, timestamp=1698201600,
     )
-    docs = ragstore.add_text(text_or_doc=meta_doc, base_id="doc:meta_redis", split=False)
+    docs = manager.add_text(text_or_doc=meta_doc, base_id="doc:meta_redis", split=False)
     print_texts(docs, "Documents after adding with metadata (no split, Redis)")
-    contexts = ragstore.get_context(query="AI transformative", top_k=1)
+    contexts = manager.get_context(query="AI transformative", top_k=1)
     print_context("AI transformative", contexts)
     assert len(docs) == 1, "Should store one chunk"
     assert contexts[0].tags == ["tech", "AI"], "Tags should be preserved"
@@ -110,14 +112,14 @@ if __name__ == "__main__":
 
     # Test 6: Malformed Metadata (Redis)
     _LOG.info("Starting Test 6: Malformed Metadata (Redis)")
-    ragstore.reset(reset_metrics=False)
+    manager.reset(reset_metrics=False)
     malformed_doc = TextUnit(
         text_id="", text="AI is cool", distance=0.0,
         timestamp="not_an_int", tags="not_a_list", confidence="invalid",
     )
-    docs = ragstore.add_text(text_or_doc=malformed_doc, base_id="doc:malformed_redis", split=False)
+    docs = manager.add_text(text_or_doc=malformed_doc, base_id="doc:malformed_redis", split=False)
     print_texts(docs, "Documents after adding malformed TextUnit (Redis)")
-    contexts = ragstore.get_context(query="AI is cool", top_k=1)
+    contexts = manager.get_context(query="AI is cool", top_k=1)
     print_context("AI is cool", contexts)
     assert contexts[0].tags == ["not_a_list"], "Tags should be a list with the original string"
     assert isinstance(contexts[0].timestamp, int) and contexts[0].timestamp == 0, "Timestamp should default to 0"
@@ -125,33 +127,33 @@ if __name__ == "__main__":
 
     # Test 9: Timestamp Filtering (Redis)
     _LOG.info("Starting Test 9: Timestamp Filtering (Redis)")
-    ragstore.reset(reset_metrics=False)
+    manager.reset(reset_metrics=False)
     timestamp_doc = TextUnit(text_id="", text="AI advancements", distance=0.0, timestamp=1700000000)
-    docs = ragstore.add_text(text_or_doc=timestamp_doc, base_id="doc:time_redis")
+    docs = manager.add_text(text_or_doc=timestamp_doc, base_id="doc:time_redis")
     print_texts(docs, "Documents with fixed timestamp (Redis)")
-    contexts = ragstore.get_context(query="AI advancements", top_k=1, min_time=1800000000)
+    contexts = manager.get_context(query="AI advancements", top_k=1, min_time=1800000000)
     print_context("AI advancements (out of range)", contexts)
     assert not contexts, "No results should be returned due to timestamp filter"
-    contexts = ragstore.get_context(query="AI advancements", top_k=1, min_time=1600000000)
+    contexts = manager.get_context(query="AI advancements", top_k=1, min_time=1600000000)
     assert contexts, "Results should be returned within timestamp range"
 
     # Test 11: Empty Input and Reset (Redis)
     _LOG.info("Starting Test 11: Empty Input and Reset (Redis)")
-    ragstore.reset(reset_metrics=False)
+    manager.reset(reset_metrics=False)
     try:
-        ragstore.add_text("")
+        manager.add_text("")
         assert False, "Empty string should raise ValueError"
     except ValidationError:
         pass
-    docs = ragstore.add_text("Test reset", base_id="doc:reset_redis")
-    ragstore.reset(reset_metrics=False)
-    assert not ragstore.list_texts(), "Store should be empty after reset"
+    docs = manager.add_text("Test reset", base_id="doc:reset_redis")
+    manager.reset(reset_metrics=False)
+    assert not manager.list_texts(), "Store should be empty after reset"
 
     # Test 14: Sort by Time (Redis)
     _LOG.info("Starting Test 14: Sort by Time (Redis)")
-    ragstore.reset(reset_metrics=False)
+    manager.reset(reset_metrics=False)
     docs = [
-        ragstore.add_text(
+        manager.add_text(
             TextUnit(text_id="", text=f"AI part {i}", distance=0.0,
                      timestamp=1698201600 + i * 1000),
             base_id=f"doc:time_sort_redis_{i}",
@@ -160,8 +162,8 @@ if __name__ == "__main__":
         for i in range(3)
     ]
     print_texts(docs, "Documents with increasing timestamps (Redis)")
-    contexts = ragstore.get_context(query="AI part", top_k=3,
-                                    sort_by_time=True)
+    contexts = manager.get_context(query="AI part", top_k=3,
+                                   sort_by_time=True)
     print_context("AI part (sorted by time)", contexts)
     timestamps = [ctx.timestamp for ctx in contexts]
     assert timestamps == sorted(
@@ -170,16 +172,16 @@ if __name__ == "__main__":
 
     # Test 18: Large top_k with Few Items (Redis)
     _LOG.info("Starting Test 18: Large top_k with Few Items (Redis)")
-    ragstore.reset(reset_metrics=False)
-    docs = ragstore.add_text("Small text", base_id="doc:small_redis")
-    contexts = ragstore.get_context(query="Small", top_k=10)
+    manager.reset(reset_metrics=False)
+    docs = manager.add_text("Small text", base_id="doc:small_redis")
+    contexts = manager.get_context(query="Small", top_k=10)
     print_context("Small", contexts)
     assert len(contexts) == 1, "Should return only available items, not top_k"
 
 
     # Test 19: No Base ID (Redis)
-    docs = ragstore.add_text("no base id")
-    contexts = ragstore.get_context(query="no base id", top_k=1)
+    docs = manager.add_text("no base id")
+    contexts = manager.get_context(query="no base id", top_k=1)
     print_context("no base id", contexts)
 
 
@@ -263,10 +265,10 @@ if __name__ == "__main__":
 
 
     embedding = embedder.embed('This is a test sentence')
-    redis_storage.store_text('foo', embedding)
+    storage.store_text('foo', embedding)
     _LOG.info("All tests completed successfully!")
-    pprint(ragstore.get_performance_metrics())
-    pprint(ragstore.get_health_status())
+    pprint(manager.get_performance_metrics())
+    pprint(manager.get_health_status())
     pprint(embedder.get_memory_usage())
 
     # # Test cache hits
