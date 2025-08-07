@@ -12,18 +12,30 @@ class TextUnit:
     Represent a stored text chunk.
 
     Attributes:
-        text_id: Unique identifier.
-        text: Text content.
-        chunk_position: Position in parent text.
-        parent_id: ID of parent document.
-        distance: Similarity distance.
-        source: Source of the text.
-        tags: List of tags.
-        confidence: Confidence score.
-        language: Language of the text.
-        section: Section within source.
-        author: Author of the text.
-        timestamp: Storage timestamp.
+        text_id:
+            Unique identifier.
+        text:
+            Text content.
+        chunk_position:
+            Position in parent text.
+        parent_id:
+            ID of parent document.
+        distance:
+            Similarity distance.
+        source:
+            Source of the text.
+        tags:
+            List of tags.
+        confidence:
+            Confidence score.
+        language:
+            Language of the text.
+        section:
+            Section within source.
+        author:
+            Author of the text.
+        timestamp:
+            Storage timestamp.
     """
 
     # pylint: disable=too-many-instance-attributes

@@ -123,11 +123,11 @@ class RedisStorage:
                 Name of the Redis search index.
 
         Raises:
-            ValueError:
-                If dimensions is None or neither redis_client
-                nor config is provided.
             StorageConnectionError:
                 If Redis connection or index creation fails.
+            ConfigurationError:
+                If both redis_client and redis_config are provided,
+                or if schema version mismatch occurs.
         """
         if redis_client is None and redis_config is None:
             raise ConfigurationError('either redis_client or redis_config '
@@ -147,7 +147,7 @@ class RedisStorage:
                 _LOG.error(msg)
                 raise StorageConnectionError(msg) from e
 
-        else:
+        else:  # todo might be consolidation between if and else here
             assert redis_config is not None
 
             pool_config = {**self.POOL_DEFAULTS, **redis_config.to_dict()}
@@ -160,7 +160,7 @@ class RedisStorage:
             except redis.ConnectionError as e:
                 msg = f'failed to connect to Redis: {e}'
                 _LOG.error(msg)
-                raise ConfigurationError(msg) from e
+                raise StorageConnectionError(msg) from e
 
         if dimensions is None:
             raise ConfigurationError('dimensions required for schema creation')
@@ -217,7 +217,7 @@ class RedisStorage:
         except redis.ConnectionError as e:
             msg = f'Failed to connect to Redis: {e}'
             _LOG.error(msg)
-            raise ConfigurationError(msg) from e
+            raise StorageConnectionError(msg) from e
 
     def clear(self) -> None:
         """
@@ -274,15 +274,6 @@ class RedisStorage:
             max_time:
                 Maximum timestamp filter.
 
-        Raises:
-            ValueError:
-                If embedding dimensions do not match or
-                if top_k is not positive.
-            StorageConnectionError:
-                If Redis connection fails.
-            QueryError:
-                If search operation fails.
-
         Returns:
             List of result dicts, may be fewer than top_k.
         """
@@ -322,7 +313,7 @@ class RedisStorage:
                 health_status['memory_info'] = self._extract_memory_info(info)
 
         index_info = self.index.info()
-        health_status['index_exists'] = True if index_info else False
+        health_status['index_exists'] = bool(index_info)
         health_status['index_healthy'] = 'num_docs' in index_info
         health_status['document_count'] = index_info.get('num_docs', 0)
 
@@ -386,16 +377,11 @@ class RedisStorage:
                 Optional metadata mapping.
 
         Raises:
-            ValueError:
-                If text is empty, text_id is invalid, or
-                embedding dimensions do not match.
-            StorageConnectionError:
-                If Redis connection fails.
-            DataError:
-                If Redis operation fails.
+            ValidationError:
+                If text is empty.
         """
         if not text.strip():
-            raise ValueError('text cannot be empty')
+            raise ValidationError('text cannot be empty')
 
         if text_id is None:
             _LOG.debug('generating text_id')
@@ -556,7 +542,7 @@ class RedisStorage:
             Generated or provided text ID.
         """
         if text_id is None:
-            with self.redis_client as client:
+            with self.redis_context() as client:
                 counter = client.incr(self.TEXT_COUNTER_KEY)
             text_id = f'{TEXT_ID_PREFIX}{counter}'
         return text_id
@@ -647,7 +633,7 @@ class RedisStorage:
                 query_params=vector_query.params,
             )
 
-        except redisvl.exceptions.RedisVLException as e:
+        except redisvl.exceptions.RedisVLError as e:
             error_msg = str(e).lower()
             if 'oom' in error_msg or 'memory' in error_msg:
                 _LOG.error('Redis out of memory during search: %s', e)
@@ -732,14 +718,14 @@ class RedisStorage:
                 Maximum timestamp filter.
 
         Raises:
-            ValueError:
+            ValidationError:
                 If top_k is not positive.
 
         Returns:
             Configured VectorQuery object.
         """
         if top_k < 1:
-            raise ValueError('top_k must be positive')
+            raise ValidationError('top_k must be positive')
 
         _min_time: int | str | None = min_time
         _max_time: int | str | None = max_time
@@ -848,23 +834,24 @@ class RedisStorage:
                 Text ID to validate.
 
         Raises:
-            ValueError:
+            ValidationError:
                 If text_id is invalid.
         """
         if not text_id or not text_id.strip():
-            raise ValueError('text_id cannot be empty')
+            raise ValidationError('text_id cannot be empty')
 
         if len(text_id) > MAX_TEXT_ID_LENGTH:
-            raise ValueError('text_id too long: '
-                             f'{len(text_id)} > {MAX_TEXT_ID_LENGTH}')
+            raise ValidationError('text_id too long: '
+                                  f'{len(text_id)} > {MAX_TEXT_ID_LENGTH}')
 
         if not text_id.startswith(TEXT_ID_PREFIX):
-            raise ValueError(f'text_id must start with "{TEXT_ID_PREFIX}"')
+            raise ValidationError('text_id must start with '
+                                  f'"{TEXT_ID_PREFIX}"')
 
     @staticmethod
     def _validate_top_k(top_k: int) -> None:
         if not isinstance(top_k, int) or top_k < 1:
-            raise ValueError('top_k must be a positive integer')
+            raise ValidationError('top_k must be a positive integer')
 
     def __del__(self):
         """Destructor to ensure Redis connection is closed."""

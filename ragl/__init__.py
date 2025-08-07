@@ -1,14 +1,14 @@
 import logging
 
 from ragl.embedder import HFEmbedder
-from ragl.ragstore import RAGStore
+from ragl.engine import RAGEngine
 from ragl.retriever import StandardRetriever
 from ragl.textunit import TextUnit
 
 
 __all__ = (
     'HFEmbedder',
-    'RAGStore',
+    'RAGEngine',
     'StandardRetriever',
     'TextUnit',
 )

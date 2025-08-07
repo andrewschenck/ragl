@@ -51,7 +51,7 @@ class HFEmbedder:
         self._cache_size = config.cache_maxsize
         self._memory_threshold = config.memory_threshold
         self._auto_cleanup = config.auto_clear_cache
-        self._embed_cached = lru_cache(maxsize=self._cache_size)(self._embed_impl)  # todo
+        self._embed_cached = lru_cache(self._cache_size)(self._embed_impl)
 
     def cache_info(self):
         """

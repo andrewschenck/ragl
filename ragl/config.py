@@ -69,7 +69,7 @@ class EmbedderConfig:
 @dataclass
 class RAGConfig:
     """
-    Configuration for RAGStore.
+    Configuration for RAGEngine.
 
     Attributes:
         index_name:

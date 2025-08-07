@@ -17,7 +17,7 @@ from ragl.tokenizer import TiktokenTokenizer
 
 __all__ = (
     'RAGTelemetry',
-    'RAGStore',
+    'RAGEngine',
 )
 
 
@@ -109,7 +109,7 @@ class RAGTelemetry:
         }
 
 
-class RAGStore:
+class RAGEngine:
     """
     Manage text chunks for retrieval-augmented generation.
 
@@ -209,7 +209,7 @@ class RAGStore:
                 Whether to split the text.
 
         Raises:
-            ValueError:
+            ValidationError:
                 If text is empty or params invalid.
             DataError:
                 If no chunks are stored.
@@ -225,7 +225,7 @@ class RAGStore:
 
             if isinstance(text_or_doc, str):
                 if not text_or_doc.strip():
-                    raise ValueError('text cannot be empty')
+                    raise ValidationError('text cannot be empty')
                 text_or_doc = self._sanitize_text_input(text_or_doc)
 
             elif isinstance(text_or_doc, TextUnit):
@@ -271,10 +271,6 @@ class RAGStore:
 
         Args:
             text_id: ID of text to delete.
-
-        Raises:
-            DataError:
-                If delete operation fails.
         """
         with self.track_operation('delete_text'):
             self.retriever.delete_text(text_id)
@@ -303,10 +299,6 @@ class RAGStore:
                 Maximum timestamp filter.
             sort_by_time:
                 Sort by time instead of distance.
-
-        Raises:
-            QueryError: If retrieval fails.
-            ValueError: If query is invalid or top_k is not positive.
 
         Returns:
             List of TextUnit instances, possibly fewer than top_k
@@ -389,10 +381,6 @@ class RAGStore:
     def reset(self, *, reset_metrics: bool = True) -> None:
         """
         Reset the store to empty state.
-
-        Raises:
-            DataError:
-                If clear operation fails.
         """
         with self.track_operation('reset'):
             self.retriever.clear()
@@ -566,10 +554,6 @@ class RAGStore:
                 Position of the chunk.
             parent_id:
                 ID of parent document.
-
-        Raises:
-            DataError:
-                If storage operation fails.
 
         Returns:
             Stored TextUnit instance.

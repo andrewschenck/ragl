@@ -6,7 +6,14 @@ from ragl.protocols import Embedder, VectorStorage
 __all__ =  ('StandardRetriever',)
 
 
-class StandardRetriever:  # todo gotta be a better name for this one
+# todo rename RAGStore RAGEngine (X) (or RAGPipeline / Retrieval)
+# todo rename StandardRetriever RAGStore
+# todo rename protocols.Retriever to RAGStoreProtocol (name TBD)
+# todo rename RAGConfig EngineConfig(?)
+# todo update string / doc / log / isinstance references to RAGStore / RAGEngine / Retriever / StandardRetriever
+
+
+class StandardRetriever:
     """
     Retrieve text using an embedder and storage.
 
@@ -41,13 +48,7 @@ class StandardRetriever:  # todo gotta be a better name for this one
         self.storage = storage
 
     def clear(self) -> None:
-        """
-        Clear all data from storage.
-
-        Raises:
-            DataError:
-                If clear operation fails.
-        """
+        """Clear all data from storage."""
         self.storage.clear()
 
     def get_relevant(
@@ -71,12 +72,6 @@ class StandardRetriever:  # todo gotta be a better name for this one
             max_time:
                 Maximum timestamp filter.
 
-        Raises:
-            ValueError:
-                If top_k is not positive.
-            QueryError:
-                If retrieval fails.
-
         Returns:
             List of result dicts.
         """
@@ -94,10 +89,6 @@ class StandardRetriever:  # todo gotta be a better name for this one
         Args:
             text_id:
                 ID of text to delete.
-
-        Raises:
-            DataError:
-                If delete operation fails.
         """
         self.storage.delete_text(text_id)
 
@@ -111,11 +102,11 @@ class StandardRetriever:  # todo gotta be a better name for this one
         return self.storage.list_texts()
 
     def store_text(
-        self,
-        text: str,
-        *,
-        text_id: str | None = None,
-        metadata: Mapping[str, Any] | None = None,
+            self,
+            text: str,
+            *,
+            text_id: str | None = None,
+            metadata: Mapping[str, Any] | None = None,
     ) -> str:
         """
         Store text in the storage backend.
@@ -127,12 +118,6 @@ class StandardRetriever:  # todo gotta be a better name for this one
                 Optional ID for the text.
             metadata:
                 Optional metadata dict.
-
-        Raises:
-            ValueError:
-                If text is empty.
-            DataError:
-                If storage operation fails.
 
         Returns:
             Assigned text ID.
