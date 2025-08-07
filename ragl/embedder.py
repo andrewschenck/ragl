@@ -1,0 +1,169 @@
+import gc
+import logging
+from contextlib import suppress
+from functools import lru_cache
+from pathlib import Path
+from typing import Any
+
+import psutil
+import numpy as np
+from sentence_transformers import SentenceTransformer
+
+from ragl.config import EmbedderConfig
+
+
+__all__ = ('HFEmbedder',)
+
+
+_LOG = logging.getLogger(__name__)
+
+
+class HFEmbedder:
+    """
+    Embed text using a Hugging Face model.
+
+    Attributes:
+        model:
+            Model to use for embedding.
+    """
+
+    model: SentenceTransformer
+    _cache_size: int
+    _memory_threshold: float
+    _auto_cleanup: bool
+
+    @property
+    def dimensions(self) -> int:
+        """Get the embedding dimension."""
+        dimensions = self.model.get_sentence_embedding_dimension()
+        assert isinstance(dimensions, int)
+        return dimensions
+
+    def __init__(self, config: EmbedderConfig) -> None:
+        """
+        Initialize the HFEmbedder with configuration.
+
+        Args:
+            config: Configuration object with model and cache settings
+        """
+        model_path = Path(config.model_name_or_path)
+        self.model = SentenceTransformer(str(model_path), device=config.device)
+        self._cache_size = config.cache_maxsize
+        self._memory_threshold = config.memory_threshold
+        self._auto_cleanup = config.auto_clear_cache
+        self._embed_cached = lru_cache(maxsize=self._cache_size)(self._embed_impl)  # todo
+
+    def cache_info(self):
+        """
+        Get cache statistics.
+
+        Returns:
+            Cache statistics including hits, misses, max size,
+            and current size.
+        """
+        return self._embed_cached.cache_info()
+
+    def clear_cache(self) -> None:
+        """Clear the embedding cache and force garbage collection."""
+        self._embed_cached.cache_clear()
+        gc.collect()
+
+    def embed(self, text: str) -> np.ndarray:
+        """
+        Embed text into a vector.
+
+        Args:
+            text:
+                Text to embed.
+
+        Returns:
+            Embedding as a numpy array.
+        """
+        if self._auto_cleanup and self._should_clear_cache():
+            _LOG.info('%s: clearing embedder cache due to memory threshold',
+                       self.__class__.__name__)
+            self.clear_cache()
+        return self._embed_cached(text)
+
+    def _embed_impl(self, text: str) -> np.ndarray:
+        """
+        Internal implementation for embedding without cache exposure.
+
+        Args:
+            text:
+                Text to embed.
+        """
+        array = self.model.encode(text)
+        assert isinstance(array, np.ndarray)
+        return array.astype(np.float32)
+
+    def get_memory_usage(self) -> dict[str, Any]:
+        """
+        Get detailed memory usage information.
+
+        Returns:
+            Dictionary with cache and system memory statistics
+        """
+        cache_info = self.cache_info()
+        cache_total = cache_info.hits + cache_info.misses
+        if cache_total > 0:
+            cache_hit_rate = cache_info.hits / cache_total
+        else:
+            cache_hit_rate = 0.0
+
+        cache_hit_rate = round(cache_hit_rate, 2)
+
+        # Estimate cache memory usage (rough approximation).
+        #
+        # This is a rough estimate based on the number of cached
+        # embeddings and their dimensions.
+        #
+        # We assume 4 bytes per vector because self._embed_impl()
+        # explicitly returns float32 arrays.
+        #
+        # embedding count * dimensions per embedding * 4 bytes (float32)
+
+        estimated_cache_size = (
+            cache_info.currsize *     # Number of cached embeddings
+            self.dimensions *         # Dimensions per embedding (float32)
+            4 /                       # Bytes per float32
+            (1024 * 1024)             # Convert to MB
+        )
+        estimated_cache_size = round(estimated_cache_size, 2)
+
+        usage = {
+            'cache_hits':                   cache_info.hits,
+            'cache_misses':                 cache_info.misses,
+            'cache_size':                   cache_info.currsize,
+            'cache_maxsize':                cache_info.maxsize,
+            'cache_hit_rate':               cache_hit_rate,
+            'estimated_cache_memory_mb':    estimated_cache_size,
+            'process_memory_mb':            None,
+            'system_memory_percent':        None,
+            'system_memory_threshold':      self._memory_threshold,
+            'auto_cleanup_enabled':         self._auto_cleanup,
+        }
+
+        with suppress(Exception):
+            process = psutil.Process()
+            memory_info = process.memory_info()
+            process_memory_mb = memory_info.rss / (1024 * 1024)
+            system_memory_percent = psutil.virtual_memory().percent
+            usage.update({
+                'process_memory_mb':        process_memory_mb,
+                'system_memory_percent':    system_memory_percent,
+            })
+
+        return usage
+
+    def _should_clear_cache(self) -> bool:
+        """
+        Check if cache should be cleared based on memory usage.
+
+        Returns:
+            True if cleanup is needed
+        """
+        with suppress(Exception):
+            memory_percent = psutil.virtual_memory().percent / 100.0
+            return memory_percent > self._memory_threshold
+        return False
