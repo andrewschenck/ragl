@@ -10,14 +10,15 @@
 from pprint import pprint
 import logging
 
-from ragli import RAGStore
-from ragli import HFEmbedder
-from ragli import StandardRetriever
-from ragli import TextUnit
-from ragli.storage.redis import RedisStorage
-# from ragli.tokenizer import TiktokenTokenizer
+from ragl import RAGEngine
+from ragl import HFEmbedder
+from ragl import StandardRetriever
+from ragl import TextUnit
+from ragl.storage.redis import RedisStorage
+from ragl.exceptions import ValidationError
+# from ragl.tokenizer import TiktokenTokenizer
 
-from ragli.config import EmbedderConfig, RAGConfig, RedisConfig
+from ragl.config import EmbedderConfig, RAGConfig, RedisConfig
 
 
 _LOG = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ if __name__ == "__main__":
 
     redis_config = RedisConfig(host='localhost', port=6379, db=0)
     embedder_config = EmbedderConfig(cache_maxsize=20)
-    rag_config = RAGConfig(chunk_size=100, overlap=20, index_name='rag_00')
+    rag_config = RAGConfig(chunk_size=100, overlap=20, index_name='rag_00')  # todo rename EngineConfig
 
     # embedder = HFEmbedder(model_name_or_path='all-MiniLM-L6-v2')
     embedder = HFEmbedder(config=embedder_config)
@@ -42,7 +43,7 @@ if __name__ == "__main__":
         index_name=rag_config.index_name,
     )
     redis_retriever = StandardRetriever(embedder=embedder, storage=redis_storage)
-    ragstore = RAGStore(
+    ragstore = RAGEngine(
         config=rag_config,
         retriever=redis_retriever,
         # tokenizer=TiktokenTokenizer(encoding_name='cl100k_base'),
@@ -140,7 +141,7 @@ if __name__ == "__main__":
     try:
         ragstore.add_text("")
         assert False, "Empty string should raise ValueError"
-    except ValueError:
+    except ValidationError:
         pass
     docs = ragstore.add_text("Test reset", base_id="doc:reset_redis")
     ragstore.reset(reset_metrics=False)
@@ -261,6 +262,8 @@ if __name__ == "__main__":
 
 
 
+    embedding = embedder.embed('This is a test sentence')
+    redis_storage.store_text('foo', embedding)
     _LOG.info("All tests completed successfully!")
     pprint(ragstore.get_performance_metrics())
     pprint(ragstore.get_health_status())
