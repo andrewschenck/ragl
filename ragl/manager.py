@@ -16,8 +16,8 @@ from ragl.tokenizer import TiktokenTokenizer
 
 
 __all__ = (
-    'RAGTelemetry',
     'RAGManager',
+    'RAGTelemetry',
 )
 
 

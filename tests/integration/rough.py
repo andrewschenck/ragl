@@ -14,11 +14,11 @@ from ragl.manager import RAGManager
 from ragl.embed.sentencetransformer import SentenceTransformerEmbedder
 from ragl.ragstore import RAGStore
 from ragl.textunit import TextUnit
-from ragl.store.redis import RedisStore
+from ragl.store.redis import RedisVectorStore
 from ragl.exceptions import ValidationError
 # from ragl.tokenizer import TiktokenTokenizer
 
-from ragl.config import SentencetransformerConfig, ManagerConfig, RedisConfig
+from ragl.config import SentenceTransformerConfig, ManagerConfig, RedisConfig
 
 
 _LOG = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
     redis_config = RedisConfig(host='localhost', port=6379, db=0)
-    embedder_config = SentencetransformerConfig(cache_maxsize=20)
+    embedder_config = SentenceTransformerConfig(cache_maxsize=20)
     manager_config = ManagerConfig(chunk_size=100, overlap=20, index_name='rag_00')  # todo rename EngineConfig
 
     # embed = HFEmbedder(model_name_or_path='all-MiniLM-L6-v2')
@@ -37,7 +37,7 @@ if __name__ == "__main__":
     # embed = HFEmbedder('sentence-transformers/all-MiniLM-L12-v2')
 
     # todo combine dataclasses somehow so we only pass in one param? give it embed and rag_config
-    storage = RedisStore(
+    storage = RedisVectorStore(
         redis_config=redis_config,
         dimensions=embedder.dimensions,
         index_name=manager_config.index_name,

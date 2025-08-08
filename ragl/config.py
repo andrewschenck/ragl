@@ -2,25 +2,42 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from transformers import RagConfig
+
 from ragl.exceptions import ConfigurationError
 
 
 __all__ = (
     'EmbedderConfig',
-    'SentencetransformerConfig',
     'ManagerConfig',
+    'RagConfig',
     'RedisConfig',
+    'SentenceTransformerConfig',
     'StorageConfig',
 )
 
 
 @dataclass
-class EmbedderConfig:
-    """Base configuration for text embedding."""
+class RaglConfig:
+    """
+    Base configuration class for ragl.
+
+    This class serves as a base for all configuration classes in ragl.
+    """
 
 
 @dataclass
-class SentencetransformerConfig(EmbedderConfig):
+class EmbedderConfig(RaglConfig):
+    """Base configuration for EmbedderProtocol implementations."""
+
+
+@dataclass
+class StorageConfig(RaglConfig):
+    """Base configuration for VectorStore implementations."""
+
+
+@dataclass
+class SentenceTransformerConfig(EmbedderConfig):
     """
         Attributes:
             model_name_or_path:
@@ -72,11 +89,6 @@ class SentencetransformerConfig(EmbedderConfig):
         if not 0.0 <= self.memory_threshold <= 1.0:
             raise ConfigurationError(f'{self.memory_threshold=} must be '
                                      'between 0.0 and 1.0')
-
-
-@dataclass
-class StorageConfig:
-    """Base configuration for store backends."""
 
 
 @dataclass

@@ -32,10 +32,10 @@ from ragl.schema import SchemaField, sanitize_metadata
 _LOG = logging.getLogger(__name__)
 
 
-__all__ = ('RedisStore',)
+__all__ = ('RedisVectorStore',)
 
 
-class RedisStore:
+class RedisVectorStore:
     """
     Store and retrieve vectors in Redis.
 
@@ -255,7 +255,7 @@ class RedisStore:
     def get_relevant(
             self,
             embedding: np.ndarray,
-            top_k: int = 1,  # todo drop default value
+            top_k: int,
             *,
             min_time: int | None = None,
             max_time: int | None = None,
@@ -277,7 +277,6 @@ class RedisStore:
             List of result dicts, may be fewer than top_k.
         """
         self._validate_embedding_dimensions(embedding)
-        self._validate_top_k(top_k)
 
         vector_query = self._build_vector_query(
             embedding=embedding,
@@ -695,8 +694,8 @@ class RedisStore:
 
         return [_build_doc_dict(doc) for doc in results.docs]
 
-    @staticmethod
     def _build_vector_query(
+            self,
             embedding: np.ndarray,
             top_k: int,
             min_time: int | None,
@@ -722,8 +721,7 @@ class RedisStore:
         Returns:
             Configured VectorQuery object.
         """
-        if top_k < 1:
-            raise ValidationError('top_k must be positive')
+        self._validate_top_k(top_k)
 
         _min_time: int | str | None = min_time
         _max_time: int | str | None = max_time

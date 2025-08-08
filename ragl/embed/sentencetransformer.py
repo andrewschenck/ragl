@@ -9,7 +9,7 @@ import psutil
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from ragl.config import SentencetransformerConfig
+from ragl.config import SentenceTransformerConfig
 
 
 __all__ = ('SentenceTransformerEmbedder',)
@@ -39,7 +39,7 @@ class SentenceTransformerEmbedder:
         assert isinstance(dimensions, int)
         return dimensions
 
-    def __init__(self, config: SentencetransformerConfig) -> None:
+    def __init__(self, config: SentenceTransformerConfig) -> None:
         """
         Initialize the SentenceTransformerEmbedder.
 

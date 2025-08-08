@@ -1,7 +1,7 @@
 from ragl.config import (
     ManagerConfig,
     RedisConfig,
-    SentencetransformerConfig,
+    SentenceTransformerConfig,
 )
 from ragl.textunit import TextUnit
 from ragl.util import create_rag_manager
@@ -12,7 +12,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
     storage_config = RedisConfig()
-    embedder_config = SentencetransformerConfig()
+    embedder_config = SentenceTransformerConfig()
     manager_config = ManagerConfig(chunk_size=50, overlap=20)
     manager = create_rag_manager(
         index_name='rag_index',

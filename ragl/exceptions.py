@@ -2,7 +2,7 @@ __all__ = (
     'ConfigurationError',
     'DataError',
     'QueryError',
-    'RAGLException',
+    'RaglException',
     'StorageCapacityError',
     'StorageConnectionError',
     'StorageError',
@@ -10,15 +10,15 @@ __all__ = (
 )
 
 
-class RAGLException(Exception):
+class RaglException(Exception):
     """Base exception for all ragl errors."""
 
 
-class ConfigurationError(RAGLException):
+class ConfigurationError(RaglException):
     """Raised when setup fails."""
 
 
-class StorageError(RAGLException):
+class StorageError(RaglException):
     """Base exception for vector store errors."""
 
 
@@ -30,7 +30,7 @@ class StorageConnectionError(StorageError):
     """Raised when a vector store connection fails."""
 
 
-class DataError(RAGLException):
+class DataError(RaglException):
     """Raised when data operations fail due to invalid data."""
 
 
@@ -38,5 +38,5 @@ class QueryError(DataError):
     """Raised when a retrieval operation fails."""
 
 
-class ValidationError(RAGLException):
+class ValidationError(RaglException):
     """Raised when input validation fails."""
