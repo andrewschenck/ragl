@@ -2,36 +2,41 @@ __all__ = (
     'ConfigurationError',
     'DataError',
     'QueryError',
-    'RedisCapacityError',
+    'RAGLException',
+    'StorageCapacityError',
     'StorageConnectionError',
     'StorageError',
     'ValidationError',
 )
 
 
-class StorageError(Exception):  # todo exception hierarchy / taxonomy
-    """Base exception for all StorageStrategy errors."""
+class RAGLException(Exception):
+    """Base exception for all ragl errors."""
 
 
-class ConfigurationError(StorageError):
-    """Raised when storage backend setup fails."""
+class ConfigurationError(RAGLException):
+    """Raised when setup fails."""
 
 
-class DataError(StorageError):
-    """Raised when data operations fail due to invalid data."""
+class StorageError(RAGLException):
+    """Base exception for vector store errors."""
 
 
-class QueryError(StorageError):
-    """Raised when a retrieval operation fails."""
-
-
-class RedisCapacityError(StorageError):
-    """Raised when Redis storage capacity is exceeded."""
+class StorageCapacityError(StorageError):
+    """Raised when vector store capacity is exceeded."""
 
 
 class StorageConnectionError(StorageError):
-    """Raised when a storage backend connection fails."""
+    """Raised when a vector store connection fails."""
 
 
-class ValidationError(StorageError):
+class DataError(RAGLException):
+    """Raised when data operations fail due to invalid data."""
+
+
+class QueryError(DataError):
+    """Raised when a retrieval operation fails."""
+
+
+class ValidationError(RAGLException):
     """Raised when input validation fails."""

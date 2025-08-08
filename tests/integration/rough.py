@@ -11,10 +11,10 @@ from pprint import pprint
 import logging
 
 from ragl.manager import RAGManager
-from ragl.embedder import SentenceTransformerEmbedder
+from ragl.embed.sentencetransformer import SentenceTransformerEmbedder
 from ragl.ragstore import RAGStore
 from ragl.textunit import TextUnit
-from ragl.storage.redis import RedisStorage
+from ragl.store.redis import RedisStore
 from ragl.exceptions import ValidationError
 # from ragl.tokenizer import TiktokenTokenizer
 
@@ -31,13 +31,13 @@ if __name__ == "__main__":
     embedder_config = SentencetransformerConfig(cache_maxsize=20)
     manager_config = ManagerConfig(chunk_size=100, overlap=20, index_name='rag_00')  # todo rename EngineConfig
 
-    # embedder = HFEmbedder(model_name_or_path='all-MiniLM-L6-v2')
+    # embed = HFEmbedder(model_name_or_path='all-MiniLM-L6-v2')
     embedder = SentenceTransformerEmbedder(config=embedder_config)
-    # embedder = HFEmbedder(model_name_or_path='all-mpnet-base-v2')
-    # embedder = HFEmbedder('sentence-transformers/all-MiniLM-L12-v2')
+    # embed = HFEmbedder(model_name_or_path='all-mpnet-base-v2')
+    # embed = HFEmbedder('sentence-transformers/all-MiniLM-L12-v2')
 
-    # todo combine dataclasses somehow so we only pass in one param? give it embedder and rag_config
-    storage = RedisStorage(
+    # todo combine dataclasses somehow so we only pass in one param? give it embed and rag_config
+    storage = RedisStore(
         redis_config=redis_config,
         dimensions=embedder.dimensions,
         index_name=manager_config.index_name,
@@ -201,7 +201,7 @@ if __name__ == "__main__":
     #     "Artificial neural networks mimic biological neurons",
     # ]
     #
-    # batch_embeddings = [embedder.embed(text) for text in batch_texts]
+    # batch_embeddings = [embed.embed(text) for text in batch_texts]
     # batch_ids = ["txt:batch-1", "txt:batch-2", "txt:batch-3",
     #              "txt:batch-4", "txt:batch-5", "txt:batch-6"]
     # batch_metadata = [
@@ -213,7 +213,7 @@ if __name__ == "__main__":
     #     {"tags": ["deep", "layers"], "confidence": 0.95},
     # ]
     #
-    # # Store texts in batch using the storage layer directly
+    # # Store texts in batch using the store layer directly
     # stored_ids = redis_storage.store_texts(
     #     texts=batch_texts,
     #     embeddings=batch_embeddings,
@@ -280,7 +280,7 @@ if __name__ == "__main__":
     # pprint(new_embedder.cache_info())
     # pprint(new_embedder.get_memory_info())
     #
-    # # Create embedder once
+    # # Create embed once
     # text = "This is a test sentence"
     # new_embedder = HFEmbedder(config=embedder_config)
     #

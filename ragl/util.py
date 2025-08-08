@@ -16,10 +16,10 @@ __all__ = ('create_rag_manager',)
 def _create_hf_embedder(config: SentencetransformerConfig):
     try:
         # pylint: disable=import-outside-toplevel
-        from ragl.embedder import SentenceTransformerEmbedder
+        from ragl.embed.sentencetransformer import SentenceTransformerEmbedder
         return SentenceTransformerEmbedder(config=config)
-    except ImportError:
-        raise ConfigurationError('SentenceTransformer embedder not available')
+    except ImportError as e:
+        raise ConfigurationError('SentenceTransformer not available') from e
 
 
 def _create_redis_storage(
@@ -29,14 +29,14 @@ def _create_redis_storage(
 ):
     try:
         # pylint: disable=import-outside-toplevel
-        from ragl.storage.redis import RedisStorage
-        return RedisStorage(
+        from ragl.store.redis import RedisStore
+        return RedisStore(
             redis_config=config,
             dimensions=dimensions,
             index_name=index_name,
         )
-    except ImportError:
-        raise ConfigurationError('Redis storage not available')
+    except ImportError as e:
+        raise ConfigurationError('Redis not available') from e
 
 
 def create_rag_manager(
@@ -44,19 +44,19 @@ def create_rag_manager(
         index_name: str,
         storage_config: StorageConfig,
         embedder_config: EmbedderConfig,
-        manager_config: ManagerConfig = ManagerConfig(),
+        manager_config: ManagerConfig,
 ) -> RAGManager:
     """
-    Convenience function to create a RAGManager with a default embedder.
+    Convenience function to create a RAGManager with a default embed.
 
     Args:
         index_name:
-            Name of the vector storage index.
+            Name of the vector store index.
         storage_config:
             Redis configuration, represented by
             ragl.config.RedisConfig
         embedder_config:
-            Configuration for the embedder, represented by
+            Configuration for the embed, represented by
             ragl.config.EmbedderConfig
         manager_config:
             Configuration for the RAGManager, represented by

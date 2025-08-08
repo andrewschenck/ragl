@@ -80,8 +80,8 @@ class SentenceTransformerEmbedder:
             Embedding as a numpy array.
         """
         if self._auto_cleanup and self._should_clear_cache():
-            _LOG.info('%s: clearing embedder cache due to memory threshold',
-                       self.__class__.__name__)
+            _LOG.info('%s: clearing embed cache due to memory threshold',
+                      self.__class__.__name__)
             self.clear_cache()
         return self._embed_cached(text)
 

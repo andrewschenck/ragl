@@ -30,7 +30,7 @@ def sanitize_metadata(
         schema: Mapping[str, SchemaField] | None = None,
 ) -> dict[str, Any]:
     """
-    Sanitize metadata for storage.
+    Sanitize metadata for store.
 
     Process raw metadata according to an optional schema, ensuring
     fields match expected types, applying conversions if specified,

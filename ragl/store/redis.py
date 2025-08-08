@@ -22,7 +22,7 @@ from ragl.exceptions import (
     ConfigurationError,
     DataError,
     QueryError,
-    RedisCapacityError,
+    StorageCapacityError,
     StorageConnectionError,
     ValidationError,
 )
@@ -32,10 +32,10 @@ from ragl.schema import SchemaField, sanitize_metadata
 _LOG = logging.getLogger(__name__)
 
 
-__all__ = ('RedisStorage',)
+__all__ = ('RedisStore',)
 
 
-class RedisStorage:
+class RedisStore:
     """
     Store and retrieve vectors in Redis.
 
@@ -107,7 +107,7 @@ class RedisStorage:
             index_name: str,
     ):
         """
-        Initialize Redis storage.
+        Initialize Redis store.
 
         Args:
             redis_client:
@@ -255,7 +255,7 @@ class RedisStorage:
     def get_relevant(
             self,
             embedding: np.ndarray,
-            top_k: int = 1,
+            top_k: int = 1,  # todo drop default value
             *,
             min_time: int | None = None,
             max_time: int | None = None,
@@ -349,7 +349,7 @@ class RedisStorage:
             error_msg = str(e).lower()
             if 'oom' in error_msg or 'memory' in error_msg:
                 _LOG.error('Redis out of memory: %s', e)
-                raise RedisCapacityError(f'Redis out of memory: {e}') from e
+                raise StorageCapacityError(f'Redis out of memory: {e}') from e
             _LOG.error('Redis operation failed: %s', e)
             raise DataError(f'Redis operation failed: {e}') from e
 
@@ -413,7 +413,7 @@ class RedisStorage:
         Create a Redis-specific schema for the vector search index.
 
         Configures fields like text, tags, and embeddings for Redis
-        storage and retrieval using the provided index name and
+        store and retrieval using the provided index name and
         dimensions.
 
         Args:
@@ -595,7 +595,7 @@ class RedisStorage:
 
     def _prepare_tags(self, tags: Any) -> str:
         """
-        Convert tags to a string for Redis storage.
+        Convert tags to a string for Redis store.
 
         Args:
             tags:
@@ -635,7 +635,7 @@ class RedisStorage:
             error_msg = str(e).lower()
             if 'oom' in error_msg or 'memory' in error_msg:
                 _LOG.error('Redis out of memory during search: %s', e)
-                raise RedisCapacityError(
+                raise StorageCapacityError(
                     f'Redis out of memory during search: {e}') from e
 
             _LOG.error('Redis search failed: %s', e)
@@ -754,7 +754,7 @@ class RedisStorage:
             metadata: dict[str, Any],
     ) -> dict[str, Any]:
         """
-        Prepare data dict for Redis storage.
+        Prepare data dict for Redis store.
 
         Args:
             text:

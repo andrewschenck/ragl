@@ -12,7 +12,7 @@ __all__ = (
     'EmbedderProtocol',
     'RAGStoreProtocol',
     'TokenizerProtocol',
-    'StorageProtocol',
+    'VectorStoreProtocol',
 )
 
 
@@ -35,9 +35,9 @@ class EmbedderProtocol(Protocol):
 
 
 @runtime_checkable
-class StorageProtocol(Protocol):
+class VectorStoreProtocol(Protocol):
     """
-    Protocol for vector storage operations.
+    Protocol for vector store operations.
 
     Defines methods for storing and retrieving vectors.
     """
@@ -90,7 +90,7 @@ class RAGStoreProtocol(Protocol):
     """
 
     embedder: EmbedderProtocol
-    storage: StorageProtocol
+    storage: VectorStoreProtocol
 
     def clear(self) -> None:  # noqa: D102
         # pylint: disable=missing-function-docstring

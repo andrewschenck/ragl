@@ -112,7 +112,7 @@ class RAGManager:
     """
     Manage text chunks for retrieval-augmented generation.
 
-    Handles storage and retrieval of text chunks with a retriever
+    Handles store and retrieval of text chunks with a retriever
     and tokenizer. Splits text, stores with metadata, and retrieves
     relevant chunks for queries.
 
@@ -125,7 +125,7 @@ class RAGManager:
 
     Attributes:
         ragstore:
-            RagstoreProtocol-conforming object for storage
+            RagstoreProtocol-conforming object for store
             operations.
         tokenizer:
             TokenizerProtocol-conforming object for text splitting.
@@ -160,7 +160,7 @@ class RAGManager:
             config:
                 Configuration object with RAG parameters. # todo
             ragstore:
-                Manages embedding for storage and retrieval.
+                Manages embedding for store and retrieval.
             tokenizer:
                 Tokenizer for text splitting.
         """
@@ -278,7 +278,7 @@ class RAGManager:
     def get_context(
             self,
             query: str,
-            top_k: int = 1,
+            top_k: int = 10,
             *,
             min_time: int | None = None,
             max_time: int | None = None,
@@ -329,7 +329,7 @@ class RAGManager:
 
     def get_health_status(self) -> dict[str, Any]:
         """
-        Get health status of the storage backend.
+        Get health status of the store backend.
 
         Returns:
             Health status dictionary.
@@ -407,7 +407,7 @@ class RAGManager:
             operation_name: Name of the operation being tracked.
         """
         start = time.time()
-        _LOG.info('starting operation: %s', operation_name)  # todo permit other log level
+        _LOG.info('starting operation: %s', operation_name)
 
         try:
             yield
@@ -585,7 +585,7 @@ class RAGManager:
             parent_id: str,
     ) -> dict[str, Any]:
         """
-        Prepare base metadata for storage.
+        Prepare base metadata for store.
 
         Args:
             text_or_doc:

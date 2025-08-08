@@ -29,10 +29,6 @@ name = "ragl"
 version = "0.1.0"
 dependencies = [
     "numpy",
-    "psutil",
-    "redis",
-    "redisvl",
-    "sentence-transformers",
     "tiktoken",
 ]
 requires-python = ">=3.11"
@@ -53,4 +49,16 @@ test = [
     "pylint",
     "pytest",
     "pytest-cov",
+]
+redis = [
+    "redis",
+    "redisvl",
+]
+transformers = [
+    "psutil",
+    "sentence-transformers",
+]
+all = [
+    "ragl[redis]",
+    "ragl[transformers]",
 ]

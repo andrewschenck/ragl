@@ -1,29 +1,33 @@
 from typing import Mapping, Any
 
-from ragl.protocols import EmbedderProtocol, StorageProtocol
+from ragl.protocols import EmbedderProtocol, VectorStoreProtocol
 
 
-__all__ =  ('RAGStore',)
+__all__ = ('RAGStore',)
 
 
 class RAGStore:
     """
-    Store and retrieve text using an embedder.
+    Store and retrieve text using an embed.
 
     Attributes:
         embedder:
             EmbedderProtocol-conforming object for vectorization.
         storage:
             StorageProtocol-conforming object for backend data
-            storage and retrieval.
+            store and retrieval.
     """
 
     embedder: EmbedderProtocol
-    storage: StorageProtocol
+    storage: VectorStoreProtocol
 
-    def __init__(self, embedder: EmbedderProtocol, storage: StorageProtocol):
+    def __init__(
+            self,
+            embedder: EmbedderProtocol,
+            storage: VectorStoreProtocol,
+    ):
         """
-        Initialize with embedder and storage.
+        Initialize with embed and store.
 
         Args:
             embedder:
@@ -31,25 +35,25 @@ class RAGStore:
                 of text.
             storage:
                 StorageProtocol-conforming object for backend data
-                storage and retrieval.
+                store and retrieval.
 
         Raises:
             TypeError: If args don’t implement protocols.
         """
         if not isinstance(embedder, EmbedderProtocol):
-            raise TypeError('embedder must implement EmbedderProtocol')
-        if not isinstance(storage, StorageProtocol):
-            raise TypeError('storage must implement StorageProtocol')
+            raise TypeError('embed must implement EmbedderProtocol')
+        if not isinstance(storage, VectorStoreProtocol):
+            raise TypeError('store must implement StorageProtocol')
         self.embedder = embedder
         self.storage = storage
 
     def clear(self) -> None:
-        """Clear all data from storage."""
+        """Clear all data from store."""
         self.storage.clear()
 
     def delete_text(self, text_id: str) -> bool:
         """
-        Delete a text from storage.
+        Delete a text from store.
 
         Args:
             text_id:
@@ -90,7 +94,7 @@ class RAGStore:
 
     def list_texts(self) -> list[str]:
         """
-        List all text IDs in storage.
+        List all text IDs in store.
 
         Returns:
             Sorted list of text IDs.
@@ -105,7 +109,7 @@ class RAGStore:
             metadata: Mapping[str, Any] | None = None,
     ) -> str:
         """
-        Store text in the storage backend.
+        Store text in the store backend.
 
         Args:
             text:

@@ -69,18 +69,19 @@ class SentencetransformerConfig(EmbedderConfig):
             raise ConfigurationError(f'{self.cache_maxsize} must be '
                                      'non-negative')
 
-        if not (0.0 <= self.memory_threshold <= 1.0):
+        if not 0.0 <= self.memory_threshold <= 1.0:
             raise ConfigurationError(f'{self.memory_threshold=} must be '
                                      'between 0.0 and 1.0')
 
 
 @dataclass
 class StorageConfig:
-    """Base configuration for storage backends."""
+    """Base configuration for store backends."""
 
 
 @dataclass
 class RedisConfig(StorageConfig):
+    # pylint: disable=too-many-instance-attributes
     """
     Configuration for Redis connection.
 
@@ -118,6 +119,15 @@ class RedisConfig(StorageConfig):
     retry_on_timeout: bool = True
 
     def to_dict(self) -> dict[str, Any]:
+        """
+        Convert the Redis configuration to a dictionary.
+
+        This is useful for passing the configuration to a Redis
+        client or for serialization.
+
+        Returns:
+            A dictionary representation of the Redis configuration.
+        """
         return {
             'host':                     self.host,
             'port':                     self.port,
@@ -140,7 +150,7 @@ class RedisConfig(StorageConfig):
         if not self.host or not self.host.strip():
             raise ConfigurationError('host cannot be empty')
 
-        if not isinstance(self.port, int) or not (1 <= self.port <= 65535):
+        if not isinstance(self.port, int) or not 1 <= self.port <= 65535:
             raise ConfigurationError(f'{self.port=} must be between 1-65535')
 
         if not isinstance(self.db, int) or self.db < 0:
@@ -168,7 +178,7 @@ class ManagerConfig:
 
     Attributes:
         index_name:
-            Name of the index in the vector storage.
+            Name of the index in the vector store.
         chunk_size:
             Size of text chunks to create from documents.
         overlap:
@@ -176,7 +186,7 @@ class ManagerConfig:
         max_query_length:
             Maximum length of queries for the retriever.
         max_input_length:
-            Maximum length of input text for the embedder.
+            Maximum length of input text for the embed.
         default_base_id:
             Default base ID for documents in the index.
         paranoid:
@@ -206,8 +216,8 @@ class ManagerConfig:
             raise ConfigurationError(f'{self.overlap=} must be non-negative')
 
         if self.overlap >= self.chunk_size:
-            raise ConfigurationError( f'({self.overlap=}) must be less than '
-                                      f'({self.chunk_size=})')
+            raise ConfigurationError(f'({self.overlap=}) must be less than '
+                                     f'({self.chunk_size=})')
 
     def _validate_limits(self) -> None:
         if self.max_query_length < 1:
