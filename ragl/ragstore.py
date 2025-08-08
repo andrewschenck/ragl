@@ -8,15 +8,14 @@ __all__ =  ('RAGStore',)
 
 class RAGStore:
     """
-    Retrieve text using an embedder and storage.
+    Store and retrieve text using an embedder.
 
     Attributes:
         embedder:
-            EmbedderProtocol-conforming object for
-            vectorization.
+            EmbedderProtocol-conforming object for vectorization.
         storage:
-            StorageProtocol-conforming object for
-            backend data storage and retrieval.
+            StorageProtocol-conforming object for backend data
+            storage and retrieval.
     """
 
     embedder: EmbedderProtocol
@@ -28,9 +27,11 @@ class RAGStore:
 
         Args:
             embedder:
-                Embedder for text vectorization.
+                EmbedderProtocol-conforming object for vectorization
+                of text.
             storage:
-                Storage backend for data storage and retrieval.
+                StorageProtocol-conforming object for backend data
+                storage and retrieval.
 
         Raises:
             TypeError: If args don’t implement protocols.

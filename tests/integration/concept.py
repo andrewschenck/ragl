@@ -1,4 +1,8 @@
-from ragl.config import ManagerConfig
+from ragl.config import (
+    ManagerConfig,
+    RedisConfig,
+    SentencetransformerConfig,
+)
 from ragl.textunit import TextUnit
 from ragl.util import create_rag_manager
 
@@ -7,9 +11,13 @@ if __name__ == "__main__":
     import logging
     logging.basicConfig(level=logging.INFO)
 
+    storage_config = RedisConfig()
+    embedder_config = SentencetransformerConfig()
     manager_config = ManagerConfig(chunk_size=50, overlap=20)
     manager = create_rag_manager(
         index_name='rag_index',
+        storage_config=storage_config,
+        embedder_config=embedder_config,
         manager_config=manager_config,
     )
 

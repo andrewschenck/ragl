@@ -9,18 +9,18 @@ import psutil
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from ragl.config import HFConfig
+from ragl.config import SentencetransformerConfig
 
 
-__all__ = ('HFEmbedder',)
+__all__ = ('SentenceTransformerEmbedder',)
 
 
 _LOG = logging.getLogger(__name__)
 
 
-class HFEmbedder:
+class SentenceTransformerEmbedder:
     """
-    Embed text using a Hugging Face model.
+    Embed text using the SentenceTransformer model.
 
     Attributes:
         model:
@@ -39,9 +39,9 @@ class HFEmbedder:
         assert isinstance(dimensions, int)
         return dimensions
 
-    def __init__(self, config: HFConfig) -> None:
+    def __init__(self, config: SentencetransformerConfig) -> None:
         """
-        Initialize the HFEmbedder with configuration.
+        Initialize the SentenceTransformerEmbedder.
 
         Args:
             config: Configuration object with model and cache settings

@@ -10,15 +10,15 @@
 from pprint import pprint
 import logging
 
-from ragl import RAGManager
-from ragl import HFEmbedder
-from ragl import RAGStore
-from ragl import TextUnit
+from ragl.manager import RAGManager
+from ragl.embedder import SentenceTransformerEmbedder
+from ragl.ragstore import RAGStore
+from ragl.textunit import TextUnit
 from ragl.storage.redis import RedisStorage
 from ragl.exceptions import ValidationError
 # from ragl.tokenizer import TiktokenTokenizer
 
-from ragl.config import HFConfig, ManagerConfig, RedisConfig
+from ragl.config import SentencetransformerConfig, ManagerConfig, RedisConfig
 
 
 _LOG = logging.getLogger(__name__)
@@ -28,11 +28,11 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
     redis_config = RedisConfig(host='localhost', port=6379, db=0)
-    embedder_config = HFConfig(cache_maxsize=20)
+    embedder_config = SentencetransformerConfig(cache_maxsize=20)
     manager_config = ManagerConfig(chunk_size=100, overlap=20, index_name='rag_00')  # todo rename EngineConfig
 
     # embedder = HFEmbedder(model_name_or_path='all-MiniLM-L6-v2')
-    embedder = HFEmbedder(config=embedder_config)
+    embedder = SentenceTransformerEmbedder(config=embedder_config)
     # embedder = HFEmbedder(model_name_or_path='all-mpnet-base-v2')
     # embedder = HFEmbedder('sentence-transformers/all-MiniLM-L12-v2')
 

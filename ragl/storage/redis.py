@@ -350,7 +350,6 @@ class RedisStorage:
             if 'oom' in error_msg or 'memory' in error_msg:
                 _LOG.error('Redis out of memory: %s', e)
                 raise RedisCapacityError(f'Redis out of memory: {e}') from e
-
             _LOG.error('Redis operation failed: %s', e)
             raise DataError(f'Redis operation failed: {e}') from e
 

@@ -1,17 +1,9 @@
 import logging
 
-from ragl.embedder import HFEmbedder
-from ragl.manager import RAGManager
-from ragl.ragstore import RAGStore
-from ragl.textunit import TextUnit
+from ragl.util import create_rag_manager
 
 
-__all__ = (
-    'HFEmbedder',
-    'RAGManager',
-    'RAGStore',
-    'TextUnit',
-)
+__all__ = ('create_rag_manager',)
 
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())

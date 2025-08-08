@@ -4,9 +4,10 @@ from typing import Any
 
 from ragl.exceptions import ConfigurationError
 
+
 __all__ = (
-    'HFConfig',
     'EmbedderConfig',
+    'SentencetransformerConfig',
     'ManagerConfig',
     'RedisConfig',
     'StorageConfig',
@@ -19,13 +20,13 @@ class EmbedderConfig:
 
 
 @dataclass
-class HFConfig(EmbedderConfig):
+class SentencetransformerConfig(EmbedderConfig):
     """
         Attributes:
             model_name_or_path:
                 Name of the Hugging Face model to use for embedding.
                 This parameter is passed directly to the underlying
-                SentenceTransformer model and can be any compatible
+                SentenceTransformer class and can be any compatible
                 model name from Hugging Face's model hub or a path
                 to a model on disk.
 
@@ -47,7 +48,7 @@ class HFConfig(EmbedderConfig):
                 100% memory usage.
     """
     model_name_or_path: str = 'all-MiniLM-L6-v2'
-    cache_maxsize: int = 10_000
+    cache_maxsize: int = 10_000  # set this to 0 to disable caching
     device: str | None = None
     auto_clear_cache: bool = True
     memory_threshold: float = 0.9

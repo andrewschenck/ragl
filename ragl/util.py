@@ -1,19 +1,49 @@
-from ragl import RAGManager, HFEmbedder, RAGStore
+from ragl.manager import RAGManager
+from ragl.ragstore import RAGStore
 from ragl.config import (
     EmbedderConfig,
-    HFConfig,
+    SentencetransformerConfig,
     ManagerConfig,
     RedisConfig,
     StorageConfig,
 )
-from ragl.storage.redis import RedisStorage
+from ragl.exceptions import ConfigurationError
+
+
+__all__ = ('create_rag_manager',)
+
+
+def _create_hf_embedder(config: SentencetransformerConfig):
+    try:
+        # pylint: disable=import-outside-toplevel
+        from ragl.embedder import SentenceTransformerEmbedder
+        return SentenceTransformerEmbedder(config=config)
+    except ImportError:
+        raise ConfigurationError('SentenceTransformer embedder not available')
+
+
+def _create_redis_storage(
+        config: RedisConfig,
+        dimensions: int,
+        index_name: str,
+):
+    try:
+        # pylint: disable=import-outside-toplevel
+        from ragl.storage.redis import RedisStorage
+        return RedisStorage(
+            redis_config=config,
+            dimensions=dimensions,
+            index_name=index_name,
+        )
+    except ImportError:
+        raise ConfigurationError('Redis storage not available')
 
 
 def create_rag_manager(
-        index_name: str,
         *,
-        storage_config: RedisConfig = RedisConfig(),   # todo use base types?
-        embedder_config: HFConfig = HFConfig(),
+        index_name: str,
+        storage_config: StorageConfig,
+        embedder_config: EmbedderConfig,
         manager_config: ManagerConfig = ManagerConfig(),
 ) -> RAGManager:
     """
@@ -35,15 +65,30 @@ def create_rag_manager(
     Returns:
         A new RAGManager instance.
     """
-    embedder = HFEmbedder(config=embedder_config)
-    storage = RedisStorage(
-        redis_config=storage_config,
-        dimensions= embedder.dimensions,
-        index_name=index_name,
-    )
+    if isinstance(embedder_config, SentencetransformerConfig):
+        embedder = _create_hf_embedder(embedder_config)
+    else:
+        embedder = None
+
+    if embedder is None:
+        raise ConfigurationError('no Embedder / configuration.')
+
+    if isinstance(storage_config, RedisConfig):
+        storage = _create_redis_storage(
+            config=storage_config,
+            dimensions=embedder.dimensions,
+            index_name=index_name,
+        )
+    else:
+        storage = None
+
+    if storage is None:
+        raise ConfigurationError('no Storage / configuration.')
+
     ragstore = RAGStore(embedder=embedder, storage=storage)
     manager = RAGManager(
         config=manager_config,
         ragstore=ragstore,
     )
+
     return manager
