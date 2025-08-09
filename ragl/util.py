@@ -1,9 +1,11 @@
-from typing import Callable
+from contextlib import suppress
+from typing import Any, Callable, Self
 
 from ragl.exceptions import ConfigurationError
 from ragl.manager import RAGManager
 from ragl.ragstore import RAGStore
 from ragl.config import (
+    RaglConfig,
     EmbedderConfig,
     ManagerConfig,
     RedisConfig,
@@ -13,6 +15,99 @@ from ragl.config import (
 
 
 __all__ = ('create_rag_manager',)
+
+
+class AbstractFactory:
+
+    _config_cls: type[RaglConfig] = RaglConfig
+    _factory_map: dict[str, type[Self]] = {}
+
+    @classmethod
+    def __init_subclass__(cls, **kwargs):
+        config_cls = kwargs.pop('config_cls', cls._config_cls)
+        super().__init_subclass__(**kwargs)
+
+        if cls._should_create_new_factory_map():
+            print('Creating new factory map for', cls.__name__)  # todo log
+            cls._factory_map = {}
+
+        cls.register_cls(config_cls=config_cls, factory=cls)
+
+    @classmethod
+    def register_cls(cls, config_cls: type[RaglConfig], factory) -> None:
+        if not issubclass(config_cls, RaglConfig):
+            raise TypeError('config_cls must be a subclass of '
+                            f'RaglConfig, got {config_cls.__name__}')
+
+        if not issubclass(cls, AbstractFactory):
+            raise TypeError('cls must be a subclass of '
+                            f'EmbedderFactory, got {config_cls.__name__}')
+
+        cls._factory_map[config_cls.__name__] = factory
+
+    @classmethod
+    def unregister_cls(cls, config_cls: type[RaglConfig]) -> None:
+        with suppress(KeyError):
+            del cls._factory_map[config_cls.__name__]
+
+    def __call__(self, *args, **kwargs) -> Any:
+        config = kwargs.get('config', RaglConfig())
+        try:
+            factory_cls = self._factory_map[config.__class__.__name__]
+        except KeyError as e:
+            raise ConfigurationError('No factory registered for this '
+                                     f'configuration type: {e}') from e
+        factory = factory_cls()
+        return factory(*args, **kwargs)
+
+    @classmethod
+    def _should_create_new_factory_map(cls) -> bool:
+        """Check if this class should get its own factory map."""
+        # Return True only if this is a direct subclass of AbstractFactory
+        return AbstractFactory in cls.__bases__
+
+
+class EmbedderFactory(AbstractFactory):
+    pass
+
+
+class SentenceTransformerFactory(EmbedderFactory):
+
+    _config_cls = SentenceTransformerConfig
+
+    def __call__(self, *args, **kwargs) -> Any:
+        config = kwargs.get('config', SentenceTransformerConfig())  # todo raise if config not set?
+        try:
+            # pylint: disable=import-outside-toplevel
+            from ragl.embed.sentencetransformer import SentenceTransformerEmbedder  # noqa: E501
+            return SentenceTransformerEmbedder(config=config)
+        except ImportError as e:
+            raise ConfigurationError('SentenceTransformerEmbedder '
+                                     'not available') from e
+
+
+class VectorStoreFactory(AbstractFactory):
+    pass
+
+
+class RedisVectorStoreFactory(VectorStoreFactory):
+
+    _config_cls = RedisConfig
+
+    def __call__(self, *args, **kwargs) -> Any:
+        config = kwargs.get('config', RedisConfig())  # todo raise if config not set?
+        dimensions = kwargs.get('dimensions', 0)  # todo raise if dimensions not set
+        index_name = kwargs.get('index_name', 'default_index')  # todo raise if index_name not set
+        try:
+            # pylint: disable=import-outside-toplevel
+            from ragl.store.redis import RedisVectorStore
+            return RedisVectorStore(
+                redis_config=config,
+                dimensions=dimensions,
+                index_name=index_name,
+            )
+        except ImportError as e:
+            raise ConfigurationError('RedisVectorStore not available') from e
 
 
 def _create_hf_embedder(*, config: SentenceTransformerConfig):
@@ -67,7 +162,6 @@ def create_rag_manager(
     Returns:
         A new RAGManager instance.
     """
-    # todo turn this into a full blown factory with (auto?)-registration
 
     embedder_map: dict[type[EmbedderConfig], Callable] = {
         SentenceTransformerConfig: _create_hf_embedder,
@@ -82,7 +176,11 @@ def create_rag_manager(
     except KeyError:
         raise ConfigurationError('no Embedder / configuration.')
 
-    embedder = embedder_init(config=embedder_config)
+    # embedder = embedder_init(config=embedder_config)
+
+    # todo experimental
+    embedder_factory = EmbedderFactory()
+    embedder = embedder_factory(config=embedder_config)
 
     # if isinstance(embedder_config, SentencetransformerConfig):
     #     embedder = _create_hf_embedder(embedder_config)
@@ -98,7 +196,15 @@ def create_rag_manager(
     except KeyError:
         raise ConfigurationError('no VectorStore / configuration.')
 
-    storage = storage_init(
+    # storage = storage_init(
+    #     config=storage_config,
+    #     dimensions=embedder.dimensions,
+    #     index_name=index_name,
+    # )
+
+    # todo experimental
+    storage_factory = VectorStoreFactory()
+    storage = storage_factory(
         config=storage_config,
         dimensions=embedder.dimensions,
         index_name=index_name,

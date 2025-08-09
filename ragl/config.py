@@ -2,15 +2,13 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from transformers import RagConfig
-
 from ragl.exceptions import ConfigurationError
 
 
 __all__ = (
     'EmbedderConfig',
     'ManagerConfig',
-    'RagConfig',
+    'RaglConfig',
     'RedisConfig',
     'SentenceTransformerConfig',
     'StorageConfig',
