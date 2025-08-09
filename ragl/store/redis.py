@@ -17,7 +17,7 @@ from redisvl.query import VectorQuery  # type: ignore[import-untyped]
 from redisvl.schema import IndexSchema  # type: ignore[import-untyped]
 
 from ragl.config import RedisConfig
-from ragl.constants import MAX_TEXT_ID_LENGTH, TEXT_ID_PREFIX
+from ragl.constants import TEXT_ID_PREFIX
 from ragl.exceptions import (
     ConfigurationError,
     DataError,
@@ -60,6 +60,7 @@ class RedisVectorStore:
     MAX_FIELD_SIZE = (1024 * 1024) * 32
     MAX_METADATA_SIZE = (1024 * 1024) * 64
     MAX_TEXT_SIZE = (1024 * 1024) * 512
+    MAX_TEXT_ID_LENGTH = 256
 
     POOL_DEFAULTS = {
         'socket_timeout':           5,
@@ -820,8 +821,7 @@ class RedisVectorStore:
                 raise ValidationError('Total metadata too large: '
                                       f'{total_metadata_size} bytes')
 
-    @staticmethod
-    def _validate_text_id(text_id: str) -> None:
+    def _validate_text_id(self, text_id: str) -> None:
         """
         Validate text ID format and length.
 
@@ -836,9 +836,9 @@ class RedisVectorStore:
         if not text_id or not text_id.strip():
             raise ValidationError('text_id cannot be empty')
 
-        if len(text_id) > MAX_TEXT_ID_LENGTH:
-            raise ValidationError('text_id too long: '
-                                  f'{len(text_id)} > {MAX_TEXT_ID_LENGTH}')
+        if len(text_id) > self.MAX_TEXT_ID_LENGTH:
+            raise ValidationError(f'text_id too long: {len(text_id)} > '
+                                  f'{self.MAX_TEXT_ID_LENGTH}')
 
         if not text_id.startswith(TEXT_ID_PREFIX):
             raise ValidationError('text_id must start with '

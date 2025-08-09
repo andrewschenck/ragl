@@ -1,6 +1,6 @@
 import logging
 
-from ragl.util import create_rag_manager
+from ragl.registry import create_rag_manager
 
 
 __all__ = ('create_rag_manager',)

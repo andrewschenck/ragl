@@ -4,7 +4,7 @@ from ragl.config import (
     SentenceTransformerConfig,
 )
 from ragl.textunit import TextUnit
-from ragl.util import create_rag_manager
+from ragl.registry import create_rag_manager
 
 
 if __name__ == "__main__":
@@ -20,6 +20,11 @@ if __name__ == "__main__":
         embedder_config=embedder_config,
         manager_config=manager_config,
     )
+    from ragl.registry import AbstractFactory, EmbedderFactory, VectorStoreFactory
+    print(AbstractFactory._factory_map.items())
+    print(EmbedderFactory._factory_map.items())
+    print(VectorStoreFactory._factory_map.items())
+    print('*******************************************')
 
     def print_context(query: str, contexts: list[TextUnit]):
         print(f"\nContext for '{query}':")
