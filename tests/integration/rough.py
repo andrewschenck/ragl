@@ -1,9 +1,12 @@
 # TODO:
 #  - method ordering
+#  - docstring audit
 #  - object names
 #  - attribute names / ordering / docs
 #  - str/repr
 #  - More Logging / levels sanity check
+#  - RAGManager calls validate_chunking during init, but validate_chunking
+#     raises ValidationError not ConfigurationError
 #  - release package
 
 
@@ -29,14 +32,13 @@ if __name__ == "__main__":
 
     redis_config = RedisConfig(host='localhost', port=6379, db=0)
     embedder_config = SentenceTransformerConfig(cache_maxsize=20)
-    manager_config = ManagerConfig(chunk_size=100, overlap=20, index_name='rag_00')  # todo rename EngineConfig
+    manager_config = ManagerConfig(chunk_size=100, overlap=20, index_name='rag_00')
 
     # embed = HFEmbedder(model_name_or_path='all-MiniLM-L6-v2')
     embedder = SentenceTransformerEmbedder(config=embedder_config)
     # embed = HFEmbedder(model_name_or_path='all-mpnet-base-v2')
     # embed = HFEmbedder('sentence-transformers/all-MiniLM-L12-v2')
 
-    # todo combine dataclasses somehow so we only pass in one param? give it embed and rag_config
     storage = RedisVectorStore(
         redis_config=redis_config,
         dimensions=embedder.dimensions,
@@ -48,8 +50,6 @@ if __name__ == "__main__":
         ragstore=ragstore,
         # tokenizer=TiktokenTokenizer(encoding_name='cl100k_base'),
     )
-    # todo convenience function that takes a RedisConfig and builds everything
-    #  else from defaults, returns the manager
 
     def print_context(query: str, contexts: list[TextUnit]):
         print(f"\nContext for '{query}':")

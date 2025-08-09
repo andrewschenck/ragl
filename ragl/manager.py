@@ -1,3 +1,24 @@
+"""
+Core RAG management functionality for text storage and retrieval.
+
+This module provides the primary interface for managing text chunks in
+a retrieval-augmented generation system. It handles text splitting,
+storage with metadata, and semantic retrieval operations.
+
+Key Components:
+    RAGManager: Main class for managing text chunks and retrieval
+        operations
+    RAGTelemetry: Performance monitoring and metrics collection
+
+Features:
+    - Text chunking with configurable size and overlap
+    - Metadata-rich storage (source, timestamp, tags, etc.)
+    - Semantic similarity retrieval
+    - Performance metrics and health monitoring
+    - Configurable text sanitization and validation
+    - Parent-child document relationships
+"""
+
 import logging
 import re
 import statistics
@@ -26,7 +47,38 @@ _LOG = logging.getLogger(__name__)
 
 @dataclass
 class RAGTelemetry:
-    """Telemetry for RAG operations."""
+    """
+    Telemetry for RAG operations.
+
+    This class is used internally by RAGManager to record the
+    performance of text chunking and retrieval operations.
+
+    It maintains statistics such as total calls, average duration,
+    minimum and maximum durations, and failure counts.
+
+    It provides methods to record both successful and failed
+    operations, updating the relevant metrics accordingly. It also
+    includes a method to compute and return all metrics as a dictionary
+    for easy access and logging.
+
+
+    Attributes:
+        total_calls:
+            Total number of calls made to the operation.
+        total_duration:
+            Total duration of all calls in seconds.
+        avg_duration:
+            Average duration of calls in seconds.
+        min_duration:
+            Minimum duration of a single call in seconds.
+        max_duration:
+            Maximum duration of a single call in seconds.
+        failure_count:
+            Number of failed calls.
+        recent_durations:
+            A deque to store the most recent durations for
+            calculating average and median durations.
+    """
 
     total_calls: int = 0
     total_duration: float = 0.0
@@ -39,6 +91,13 @@ class RAGTelemetry:
     def record_failure(self, duration: float) -> None:
         """
         Record a failed operation.
+
+        Updates the telemetry with the duration of a failed
+        operation, incrementing the failure count and updating
+        the total duration and other metrics.
+
+        Records the duration in the recent durations deque for
+        calculating recent average and median durations.
 
         Args:
             duration:
@@ -56,6 +115,13 @@ class RAGTelemetry:
         """
         Record a successful operation.
 
+        Updates the telemetry with the duration of a successful
+        operation, incrementing the total calls and updating the
+        total duration, average, minimum, and maximum durations.
+
+        Records the duration in the recent durations deque for
+        calculating recent average and median durations.
+
         Args:
             duration:
                 Duration of the operation in seconds.
@@ -69,7 +135,19 @@ class RAGTelemetry:
 
     def compute_metrics(self) -> dict[str, Any]:
         """
-        Calculate metrics and dump as a dictionary.
+        Calculate and return metrics as a dictionary.
+
+        Computes the operational metrics including total calls,
+        failure count, success rate, minimum, maximum, and average
+        durations, as well as recent average and median durations.
+
+        Aggregates the recorded data and formats it into
+        a dictionary for easy access and logging.
+
+        If no calls have been made, it returns default values.
+
+        If no durations have been recorded, it returns zero for
+        minimum and average durations.
 
         Returns:
             A dictionary containing operational metrics.
@@ -112,9 +190,15 @@ class RAGManager:
     """
     Manage text chunks for retrieval-augmented generation.
 
-    Handles store and retrieval of text chunks with a retriever
-    and tokenizer. Splits text, stores with metadata, and retrieves
-    relevant chunks for queries.
+    RAGManager user the user-facing orchestrator which
+    handles vector-based storage and retrieval of text chunks.
+    It provides an interface to basic operations like adding
+    text, deleting text, and retrieving context based on queries
+    and interfaces with a RAGStoreProtocol-compliant backend.
+
+    RAGManager supports both string text and TextUnit objects,
+    automatically generating unique identifiers and maintaining
+    relationships between chunks and their parent documents.
 
     Metadata includes optional fields like source, timestamp, tags,
     confidence, language, section, author, and parent_id.
@@ -122,6 +206,19 @@ class RAGManager:
     The parent_id groups chunks and is auto-generated if base_id
     is unset. For heavy deletion use cases relying on unique
     parent_id, always specify base_id to avoid collisions.
+
+    RAGManager requires a class which implements RAGStoreProtocol
+    for storage and retrieval operations, and a tokenizer
+    implementing TokenizerProtocol for text splitting.
+
+    Example:
+        >>> from ragl.manager import RAGManager
+        >>> from ragl.config import ManagerConfig
+        >>>
+        >>> config = ManagerConfig(chunk_size=512, overlap=50)
+        >>> manager = RAGManager(config, ragstore)
+        >>> chunks = manager.add_text('Your text here')
+        >>> results = manager.get_context('query text', top_k=5)
 
     Attributes:
         ragstore:
@@ -133,6 +230,12 @@ class RAGManager:
             Size of text chunks.
         overlap:
             Overlap between chunks.
+        paranoid:
+            Take extra measures when sanitizing text input, aimed
+            at preventing injection attacks.
+        _metrics:
+            Dictionary of operation names to RAGTelemetry instances
+            for performance tracking.
     """
 
     DEFAULT_BASE_ID = 'doc'
@@ -169,13 +272,12 @@ class RAGManager:
         if not isinstance(tokenizer, TokenizerProtocol):
             raise TypeError('tokenizer must implement TokenizerProtocol')
 
-        chunk_size, overlap = self._validate_params(config.chunk_size,
-                                                    config.overlap)
+        self._validate_chunking(config.chunk_size, config.overlap)
 
         self.ragstore = ragstore
         self.tokenizer = tokenizer
-        self.chunk_size = chunk_size
-        self.overlap = overlap
+        self.chunk_size = config.chunk_size
+        self.overlap = config.overlap
         self.paranoid = config.paranoid
         self._metrics = defaultdict(RAGTelemetry)
 
@@ -192,6 +294,9 @@ class RAGManager:
         # pylint: disable=too-many-locals
         """
         Add text to the store.
+
+        Splits text into chunks, stores with metadata, and
+        returns stored TextUnit instances.
 
         Args:
             text_or_doc:
@@ -220,8 +325,7 @@ class RAGManager:
         with self.track_operation('add_text'):
             cs = chunk_size if chunk_size is not None else self.chunk_size
             ov = overlap if overlap is not None else self.overlap
-
-            cs, ov = self._validate_params(cs, ov)
+            self._validate_chunking(cs, ov)
 
             if isinstance(text_or_doc, str):
                 if not text_or_doc.strip():
@@ -237,12 +341,10 @@ class RAGManager:
                 current_text_count = len(self.ragstore.list_texts())
                 parent_id = f'{TEXT_ID_PREFIX}{current_text_count + 1}'
 
-            # parent_id = base_id or default_id
-            stored_docs: list[TextUnit] = []
-
             chunks = self._get_chunks(text_or_doc, cs, ov, split)
             base_data = self._prepare_base_data(text_or_doc, parent_id)
 
+            stored_docs: list[TextUnit] = []
             for i, chunk in enumerate(chunks):
                 _base = base_id or self.DEFAULT_BASE_ID
                 text_id = f'{TEXT_ID_PREFIX}{_base}-{i}'
@@ -269,6 +371,9 @@ class RAGManager:
         """
         Delete a text from the store.
 
+        Deletes a text chunk by its ID, removing it and any
+        associated metadata from the store.
+
         Args:
             text_id: ID of text to delete.
         """
@@ -286,7 +391,10 @@ class RAGManager:
     ) -> list[TextUnit]:
         # pylint: disable=too-many-arguments
         """
-        Get relevant text chunks for a query.
+        Retrieve relevant text chunks for a query.
+
+        Retrieves text chunks based on semantic similarity
+        to the query, optionally filtering by time range and sorting.
 
         Args:
             query:
@@ -329,7 +437,13 @@ class RAGManager:
 
     def get_health_status(self) -> dict[str, Any]:
         """
-        Get health status of the store backend.
+        Return the health status of the backend, if available.
+
+        Determines whether the storage backend supports health checks
+        and returns the health check response.
+
+        If not supported, returns a default message indicating
+        health checks are not available.
 
         Returns:
             Health status dictionary.
@@ -344,7 +458,10 @@ class RAGManager:
             operation_name: str | None = None,
     ) -> dict[str, dict[str, Any]]:
         """
-        Get performance metrics for operations.
+        Return performance metrics for methods which are tracked.
+
+        Retrieves performance metrics for specific operations or
+        all operations if no specific name is provided.
 
         Args:
             operation_name:
@@ -368,7 +485,10 @@ class RAGManager:
 
     def list_texts(self) -> list[str]:
         """
-        List all text IDs in the store.
+        Return a list of all text IDs in the store.
+
+        Retrieves all text IDs stored in the backend. This is useful
+        for tracking stored texts and managing deletions.
 
         Returns:
             Sorted list of text IDs.
@@ -381,17 +501,29 @@ class RAGManager:
     def reset(self, *, reset_metrics: bool = True) -> None:
         """
         Reset the store to empty state.
+
+        Clears all stored texts and metadata, optionally resetting
+        performance metrics.
+
+        Args:
+            reset_metrics:
+                Whether to reset performance metrics as well.
         """
         with self.track_operation('reset'):
             self.ragstore.clear()
 
-        if reset_metrics:
-            self.reset_metrics()
+            if reset_metrics:
+                self.reset_metrics()
 
         _LOG.info('store reset successfully')
 
     def reset_metrics(self) -> None:
-        """Clear all collected metrics."""
+        """
+        Clear all collected metrics.
+
+        Resets the performance metrics for all tracked operations.
+        This is useful for starting fresh without historical data.
+        """
         self._metrics.clear()
         _LOG.info('metrics reset')
 
@@ -401,16 +533,26 @@ class RAGManager:
             operation_name: str,
     ) -> Iterator[None]:
         """
-        A context manager to track operation performance metrics.
+        Return a context manager which tracks RAG performance metrics.
+
+        Uses the RAGTelemetry class to track the performance of RAG
+        operations within a context. It allows for easy tracking of
+        operation duration and success/failure rates.
 
         Args:
-            operation_name: Name of the operation being tracked.
+            operation_name:
+                Name of the operation being tracked.
         """
         start = time.time()
-        _LOG.info('starting operation: %s', operation_name)
+        _LOG.debug('starting operation: %s', operation_name)
 
         try:
             yield
+            duration = time.time() - start
+            record_success = self._metrics[operation_name].record_success
+            record_success(duration)
+            _LOG.debug('operation completed: %s (%.3fs)',
+                       operation_name, duration)
 
         except Exception as e:  # pylint: disable=broad-except
             duration = time.time() - start
@@ -420,18 +562,17 @@ class RAGManager:
                        duration, e)
             raise
 
-        duration = time.time() - start
-        record_success = self._metrics[operation_name].record_success
-        record_success(duration)
-        _LOG.info('operation completed: %s (%.3fs)', operation_name, duration)
-
     @staticmethod
     def _format_context(
-        chunks: list[TextUnit],
-        separator: str = '\n\n',
+            chunks: list[TextUnit],
+            separator: str = '\n\n',
     ) -> str:
         """
         Format text chunks into a string.
+
+        Formats a list of TextUnit instances into a single string
+        with a specified separator between chunks. This is useful
+        for preparing context for queries or responses.
 
         Args:
             chunks:
@@ -477,7 +618,10 @@ class RAGManager:
 
     def _sanitize_text_input(self, text: str) -> str:
         """
-        Sanitize text input to prevent injection attacks.
+        Validate and sanitize text input to prevent injection attacks.
+
+        Validate the input text by ensuring it does not exceed the
+        maximum length and sanitize it by removing dangerous characters.
 
         Args:
             text:
@@ -508,6 +652,10 @@ class RAGManager:
     ) -> list[str]:
         """
         Split text into chunks.
+
+        Splits the input text into smaller chunks of specified size
+        with a defined overlap. This is useful for processing large
+        texts in manageable pieces for storage and retrieval.
 
         Args:
             text:
@@ -543,6 +691,8 @@ class RAGManager:
         """
         Store a single text chunk.
 
+        Stores a text chunk with metadata in the RAG store.
+
         Args:
             chunk:
                 Text chunk to store.
@@ -575,8 +725,8 @@ class RAGManager:
             text_id=text_id,
             metadata=metadata
         )
-
         chunk_data['text_id'] = text_id
+
         return TextUnit.from_dict(chunk_data)
 
     @staticmethod
@@ -586,6 +736,10 @@ class RAGManager:
     ) -> dict[str, Any]:
         """
         Prepare base metadata for store.
+
+        Creates a base metadata dictionary for a text or TextUnit,
+        including source, timestamp, tags, and other fields.
+
 
         Args:
             text_or_doc:
@@ -611,12 +765,15 @@ class RAGManager:
         }
 
     @staticmethod
-    def _validate_params(
+    def _validate_chunking(
             chunk_size: int,
             overlap: int,
-    ) -> tuple[int, int]:
+    ) -> None:
         """
         Validate chunk size and overlap.
+
+        Validates the chunk size and overlap parameters to ensure
+        they're logically consistent and within acceptable limits.
 
         Args:
             chunk_size:
@@ -627,9 +784,6 @@ class RAGManager:
         Raises:
             ValidationError:
                 If params are invalid.
-
-        Returns:
-            Tuple of validated chunk_size and overlap.
         """
         cs = chunk_size
         ov = overlap
@@ -641,11 +795,14 @@ class RAGManager:
         if ov >= cs:
             raise ValidationError('overlap must be less than chunk_size')
 
-        return cs, ov
-
     def _validate_query(self, query: str) -> None:
         """
-        Validate query string.
+        Validate the query string.
+
+        Validates the query string to ensure it is not empty and does
+        not exceed the maximum allowed length. This is important to
+        prevent unnecessary load on the system and ensure meaningful
+        queries.
 
         Args:
             query:

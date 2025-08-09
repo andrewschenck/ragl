@@ -3,9 +3,9 @@ from contextlib import suppress
 from typing import Any, Self
 
 from ragl.config import (
-    RaglConfig,
     EmbedderConfig,
     ManagerConfig,
+    RaglConfig,
     RedisConfig,
     SentenceTransformerConfig,
     StorageConfig,
@@ -15,7 +15,14 @@ from ragl.manager import RAGManager
 from ragl.ragstore import RAGStore
 
 
-__all__ = ('create_rag_manager',)
+__all__ = (
+    'AbstractFactory',
+    'EmbedderFactory',
+    'RedisVectorStoreFactory',
+    'SentenceTransformerFactory',
+    'VectorStoreFactory',
+    'create_rag_manager',
+)
 
 
 _LOG = logging.getLogger(__name__)
@@ -23,7 +30,7 @@ _LOG = logging.getLogger(__name__)
 
 class AbstractFactory:
 
-    _config_cls: type[RaglConfig] = RaglConfig
+    _config_cls: type[RaglConfig] | None = None
     _factory_map: dict[str, type[Self]] = {}
 
     @classmethod
@@ -35,7 +42,8 @@ class AbstractFactory:
             _LOG.info('Creating new factory map for %s', cls.__name__)
             cls._factory_map = {}
 
-        cls.register_cls(config_cls=config_cls, factory=cls)
+        if config_cls is not None:
+            cls.register_cls(config_cls=config_cls, factory=cls)
 
     @classmethod
     def register_cls(cls, config_cls: type[RaglConfig], factory) -> None:
@@ -61,7 +69,7 @@ class AbstractFactory:
         try:
             factory_cls = self._factory_map[config.__class__.__name__]
         except KeyError as e:
-            raise ConfigurationError('No factory registered for this '
+            raise ConfigurationError('No factory found for '
                                      f'configuration type: {e}') from e
         factory = factory_cls()
         return factory(*args, **kwargs)
