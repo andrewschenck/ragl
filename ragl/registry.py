@@ -86,6 +86,7 @@ class AbstractFactory:
         TypeError:
             When invalid types are passed to registration methods
     """
+    can_call_abstract__call__ = ['EmbedderFactory', 'VectorStoreFactory']
 
     _config_cls: type[RaglConfig] | None = None
     _factory_map: dict[str, type[Self]] = {}
@@ -187,7 +188,15 @@ class AbstractFactory:
             ConfigurationError:
                 When no factory found for configuration type.
         """
-        config = kwargs.get('config', RaglConfig())
+        if self.__class__.__name__ not in self.can_call_abstract__call__:
+            raise TypeError(f'{self.__class__.__name__} cannot be called '
+                            'directly; call a subclass.')
+
+        try:
+            config = kwargs['config']
+        except KeyError as e:
+            raise ConfigurationError('config must be provided') from e
+
         try:
             factory_cls = self._factory_map[config.__class__.__name__]
         except KeyError as e:

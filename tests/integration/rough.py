@@ -1,11 +1,5 @@
 # TODO:
-#  - guard AbstractFactory.__call__ against being called by all but
-#     VectorStoreFactory, EmbedderFactory, etc.
-#     - Use class attribute to designate permitted callers so that it can be extended by callers
-#      - name attribute something that makes sure it's clear it's just for the base class
-#      - list or set so it can be added / appended/extended
 #  - More Logging / audit levels
-#  - private interface -- private modules?
 #  - reorder textunit metadata fields in as_dict / signature
 #  - str/repr
 #  - Unit / functional tests
