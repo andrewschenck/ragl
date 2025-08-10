@@ -135,3 +135,19 @@ class TextUnit:
             Text content as a string.
         """
         return self.text
+
+    def __repr__(self) -> str:
+        """
+        Return a detailed string representation of the TextUnit instance.
+
+        Returns:
+            A string representation showing key attributes.
+        """
+        sep = '...' if len(self.text) > 50 else ''
+        return (
+            f'TextUnit(text_id={self.text_id!r}, '
+            f'text={self.text[:50]!r}{sep}, '
+            f'distance={self.distance}, '
+            f'chunk_position={self.chunk_position}, '
+            f'parent_id={self.parent_id!r})'
+        )

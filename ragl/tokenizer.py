@@ -78,3 +78,21 @@ class TiktokenTokenizer:
         """
         _LOG.debug('Encoding text: %s', text)
         return self.encoding.encode(text)
+
+    def __repr__(self) -> str:
+        """
+        Return a detailed string representation of the tokenizer.
+
+        Returns:
+            String representation suitable for debugging.
+        """
+        return f'TiktokenTokenizer(encoding_name="{self.encoding.name}")'
+
+    def __str__(self) -> str:
+        """
+        Return a human-readable string representation of the tokenizer.
+
+        Returns:
+            Human-readable string representation.
+        """
+        return f'TiktokenTokenizer using {self.encoding.name} encoding'

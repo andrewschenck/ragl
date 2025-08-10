@@ -884,3 +884,22 @@ class RAGManager:
             msg = 'top_k must be a positive integer'
             _LOG.critical(msg)
             raise ValidationError(msg)
+
+    def __str__(self) -> str:
+        """Human-readable summary showing current state."""
+        text_count = len(self.ragstore.list_texts())
+        return (
+            f'RAGManager(texts={text_count}, '
+            f'chunk_size={self.chunk_size}, '
+            f'overlap={self.overlap})'
+        )
+
+    def __repr__(self) -> str:
+        """Developer representation showing object construction."""
+        return (
+            f'RAGManager('
+            f'config=ManagerConfig(chunk_size={self.chunk_size}, '
+            f'overlap={self.overlap}, paranoid={self.paranoid}), '
+            f'ragstore={self.ragstore!r}, '
+            f'tokenizer={self.tokenizer!r})'
+        )

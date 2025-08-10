@@ -200,3 +200,15 @@ class RAGStore:
             metadata=metadata,
         )
         return text_id
+
+    def __repr__(self) -> str:
+        """Return a detailed string representation of the RAGStore."""
+        return (f'RAGStore(embedder={self.embedder!r}, '
+                f'storage={self.storage!r})')
+
+    def __str__(self) -> str:
+        """Return a user-friendly string representation of the RAGStore."""
+        embedder_name = type(self.embedder).__name__
+        storage_name = type(self.storage).__name__
+        return (f'RAGStore with {embedder_name} embedder '
+                f'and {storage_name} storage')

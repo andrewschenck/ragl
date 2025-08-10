@@ -246,3 +246,21 @@ class SentenceTransformerEmbedder:
             memory_percent = psutil.virtual_memory().percent / 100.0
             return memory_percent > self._memory_threshold
         return False
+
+    def __repr__(self) -> str:
+        """Return detailed string representation for debugging."""
+        return (
+            f'{self.__class__.__name__}('
+            f'dims={self.dimensions}, '
+            f'cache={self._cache_size}, '
+            f'device="{self.model.device}"'
+            f')'
+        )
+
+    def __str__(self) -> str:
+        """Return user-friendly string representation."""
+        cache_info = self.cache_info()
+        return (
+            f'SentenceTransformerEmbedder({self.dimensions}D, '
+            f'cache: {cache_info.currsize}/{cache_info.maxsize})'
+        )

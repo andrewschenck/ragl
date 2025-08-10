@@ -46,6 +46,23 @@ class RaglConfig:
     This class serves as a base for all configuration classes in ragl.
     """
 
+    def __str__(self) -> str:
+        """Return a string representation of the configuration."""
+        class_name = self.__class__.__name__
+        fields = []
+
+        for field_name, field_value in self.__dict__.items():
+            if isinstance(field_value, str):
+                fields.append(f'{field_name}="{field_value}"')
+            else:
+                fields.append(f'{field_name}={field_value}')
+
+        return f'{class_name}({", ".join(fields)})'
+
+    def __repr__(self) -> str:
+        """Return a detailed string representation of the configuration."""
+        return self.__str__()
+
 
 @dataclass
 class EmbedderConfig(RaglConfig):

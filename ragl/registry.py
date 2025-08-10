@@ -232,6 +232,34 @@ class AbstractFactory:
         # Return True only if this is a direct subclass of AbstractFactory
         return AbstractFactory in cls.__bases__
 
+    def __str__(self) -> str:
+        """
+        Return a human-readable string representation of the factory.
+
+        Returns:
+            A string showing the factory class name and registered
+            configurations.
+        """
+        registered = list(self._factory_map.keys())
+        return f'{self.__class__.__name__}(registered_configs={registered})'
+
+    def __repr__(self) -> str:
+        """
+        Return a detailed string representation of the factory.
+
+        Returns:
+            A string showing the factory class name, config class, and
+            factory map.
+        """
+        if self._config_cls:
+            config_cls_name = self._config_cls.__name__
+        else:
+            config_cls_name = None
+
+        return (f'{self.__class__.__name__}('
+                f'config_cls={config_cls_name}, '
+                f'factory_map={self._factory_map})')
+
 
 class EmbedderFactory(AbstractFactory):
     """
