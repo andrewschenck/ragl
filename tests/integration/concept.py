@@ -24,6 +24,8 @@ if __name__ == "__main__":
     print(AbstractFactory._factory_map.items())
     print(EmbedderFactory._factory_map.items())
     print(VectorStoreFactory._factory_map.items())
+    for k,v in VectorStoreFactory._factory_map.items():
+        print(type(k), type(v))
     print('*******************************************')
 
     def print_context(query: str, contexts: list[TextUnit]):

@@ -1,3 +1,22 @@
+"""
+Factory registry system for creating ragl components.
+
+This module provides an abstract factory pattern implementation for
+creating embedders, vector stores, and RAG managers based on
+configuration objects. The registry system allows for dynamic
+registration and instantiation of different implementation classes.
+
+Key Components:
+- AbstractFactory:
+    Base factory class with automatic registration mechanism
+- EmbedderFactory:
+    Factory for creating text embedding implementations
+- VectorStoreFactory:
+    Factory for creating vector storage implementations
+- create_rag_manager:
+    Convenience function for complete ragl setup
+"""
+
 import logging
 from contextlib import suppress
 from typing import Any, Self
@@ -8,7 +27,7 @@ from ragl.config import (
     RaglConfig,
     RedisConfig,
     SentenceTransformerConfig,
-    StorageConfig,
+    VectorStoreConfig,
 )
 from ragl.exceptions import ConfigurationError
 from ragl.manager import RAGManager
@@ -29,12 +48,56 @@ _LOG = logging.getLogger(__name__)
 
 
 class AbstractFactory:
+    """
+    Base factory class implementing registration and factory pattern.
+
+    This abstract factory provides a registration mechanism where
+    subclasses automatically register themselves with their associated
+    configuration classes. Each direct subclass of AbstractFactory
+    maintains its own factory map for type-safe instantiation of
+    concrete implementations.
+
+    Attributes:
+        _config_cls:
+            Configuration class type associated with this factory
+        _factory_map:
+            Dictionary mapping config class names to factory instances
+
+    Class Methods:
+        register_cls:
+            Manually register a configuration class with a factory
+        unregister_cls:
+            Remove a configuration class from the factory registry
+
+    The factory uses configuration class names as keys to determine
+    which concrete implementation to instantiate. Subclasses should set
+    _config_cls or pass config_cls in __init_subclass__ to enable
+    automatic registration.
+
+    Raises:
+        ConfigurationError:
+            When no factory is found for a configuration type
+        TypeError:
+            When invalid types are passed to registration methods
+    """
 
     _config_cls: type[RaglConfig] | None = None
     _factory_map: dict[str, type[Self]] = {}
 
     @classmethod
     def __init_subclass__(cls, **kwargs):
+        """
+        Initialize the subclass and set up factory map.
+
+        Args:
+            *args:
+                Positional arguments (not used).
+            **kwargs:
+                Keyword arguments. Must include 'config_cls' if the
+                'config_cls' attribute is not set on the subclass. Other
+                keyword arguments are ignored and passed to the parent
+                class's __init_subclass__ method.
+        """
         config_cls = kwargs.pop('config_cls', cls._config_cls)
         super().__init_subclass__(**kwargs)
 
@@ -47,24 +110,77 @@ class AbstractFactory:
 
     @classmethod
     def register_cls(cls, config_cls: type[RaglConfig], factory) -> None:
+        """
+        Register a factory class with a configuration class.
+
+        Args:
+            config_cls:
+                The configuration class type to register with the
+                factory. Must be a subclass of RaglConfig.
+            factory:
+                The factory class to register. Must be a subclass of
+                AbstractFactory.
+
+        Raises:
+            TypeError:
+                If config_cls is not a subclass of RaglConfig or
+                if factory is not a subclass of AbstractFactory.
+        """
         if not issubclass(config_cls, RaglConfig):
             raise TypeError('config_cls must be a subclass of '
                             f'RaglConfig, got {config_cls.__name__}')
 
         if not issubclass(cls, AbstractFactory):
             raise TypeError('cls must be a subclass of '
-                            f'EmbedderFactory, got {config_cls.__name__}')
+                            f'AbstractFactory, got {config_cls.__name__}')
 
         _LOG.info('Registering factory class %s', cls.__name__)
         cls._factory_map[config_cls.__name__] = factory
 
     @classmethod
     def unregister_cls(cls, config_cls: type[RaglConfig]) -> None:
+        """
+        Unregister a factory class from the configuration class.
+
+        Args:
+            config_cls:
+                The configuration class type to unregister from the
+                factory.
+        """
         _LOG.info('Unregistering factory class %s', cls.__name__)
         with suppress(KeyError):
             del cls._factory_map[config_cls.__name__]
 
     def __call__(self, *args, **kwargs) -> Any:
+        """
+        Create a concrete implementation based on configuration.
+
+        Looks up the appropriate factory using the configuration class
+        name and delegates instantiation to that factory.
+
+        Subclasses should implement this method to instantiate
+        and return specific classes based on the provided args and
+        kwargs.
+
+        Concrete implementations should not call this method directly;
+        they should override it without calling `super().__call__` and
+        implement the instantiation logic specific to their concrete
+        type.
+
+        Args:
+            *args:
+                Positional arguments for instantiation.
+            **kwargs:
+                Keyword arguments. Must include 'config' with a
+                RaglConfig instance.
+
+        Returns:
+            Instance created by the appropriate concrete factory.
+
+        Raises:
+            ConfigurationError:
+                When no factory found for configuration type.
+        """
         config = kwargs.get('config', RaglConfig())
         try:
             factory_cls = self._factory_map[config.__class__.__name__]
@@ -76,20 +192,58 @@ class AbstractFactory:
 
     @classmethod
     def _should_create_new_factory_map(cls) -> bool:
-        """Check if this class should get its own factory map."""
+        """
+        Check whether this class should get its own factory map.
+
+        This method indicates whether the class is a direct subclass of
+        AbstractFactory.
+
+        Returns:
+            bool:
+                True if this class is a direct subclass of
+                AbstractFactory, False otherwise.
+        """
         # Return True only if this is a direct subclass of AbstractFactory
         return AbstractFactory in cls.__bases__
 
 
 class EmbedderFactory(AbstractFactory):
-    pass
+    """
+    Factory for creating text embedding implementations.
+
+    This is the base factory for all text embedding
+    classes which implement the EmbedderProtocol.
+
+    This class provides a common namespace for all EmbedderFactory
+    subclasses, allowing them to be registered and instantiated
+    as part of the same registry mapping.
+
+    Subclasses should implement the __call__ method to
+    instantiate specific embedder classes based on the provided
+    parameters.
+    """
 
 
 class SentenceTransformerFactory(EmbedderFactory):
+    """Factory for creating SentenceTransformer embedder instances."""
 
     _config_cls = SentenceTransformerConfig
 
     def __call__(self, *args, **kwargs) -> Any:
+        """
+        Create a SentenceTransformerEmbedder instance.
+
+        This method expects a 'config' keyword argument of type
+        SentenceTransformerConfig. It raises a ConfigurationError if
+        the config is not provided or if the SentenceTransformerEmbedder
+        class is not available.
+
+        Args:
+            *args:
+                Positional arguments (not used).
+            **kwargs:
+                Keyword arguments containing 'config'.
+        """
         try:
             config = kwargs['config']
         except KeyError as e:
@@ -104,14 +258,42 @@ class SentenceTransformerFactory(EmbedderFactory):
 
 
 class VectorStoreFactory(AbstractFactory):
-    pass
+    """
+    Factory for creating VectorStore implementations.
+
+    This is the base factory for all vector storage
+    classes which implement the VectorStoreProtocol.
+
+    This class provides a common namespace for all VectorStoreFactory
+    subclasses, allowing them to be registered and instantiated
+    as part of the same registry mapping.
+
+    Subclasses should implement the __call__ method to instantiate
+    specific storage classes based on the provided parameters.
+    """
 
 
 class RedisVectorStoreFactory(VectorStoreFactory):
+    """Factory for creating RedisVectorStore instances."""
 
     _config_cls = RedisConfig
 
     def __call__(self, *args, **kwargs) -> Any:
+        """
+        Create a RedisVectorStore instance.
+
+        This method expects 'config', 'dimensions', and 'index_name'
+        keyword arguments. It raises a ConfigurationError if any of
+        these are not provided or if the RedisVectorStore class is
+        not available.
+
+        Args:
+            *args:
+                Positional arguments (not used).
+            **kwargs:
+                Keyword arguments containing 'config', 'dimensions',
+                and 'index_name'.
+        """
         try:
             config = kwargs['config']
             dimensions = kwargs['dimensions']
@@ -135,20 +317,22 @@ class RedisVectorStoreFactory(VectorStoreFactory):
 def create_rag_manager(
         *,
         index_name: str,
-        storage_config: StorageConfig,
+        storage_config: VectorStoreConfig,
         embedder_config: EmbedderConfig,
         manager_config: ManagerConfig,
 ) -> RAGManager:
     """
-    Convenience function to create a RAGManager instance
-    with Embedder and VectorStore implementations which are
-    derived from the provided configurations.
+    Create a RAGManager instance with injected components.
+
+    Create a complete RAG system by instantiating Embedder and
+    VectorStore components based on configurations, then assembling them
+    and injecting into a RAGManager.
 
     Args:
         index_name:
             Name of the vector store index.
         storage_config:
-            VectorStore configuration, represented by StorageConfig.
+            VectorStore configuration, represented by VectorStoreConfig.
         embedder_config:
             Embedder configuration, represented by EmbedderConfig.
         manager_config:

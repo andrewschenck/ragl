@@ -11,7 +11,7 @@ Classes:
         Base class for all RAGL configurations.
     EmbedderConfig:
         Base Embedder configuration
-    StorageConfig:
+    VectorStoreConfig:
         Base VectorStore configuration
     SentenceTransformerConfig:
         SentenceTransformer concrete embedder config
@@ -34,7 +34,7 @@ __all__ = (
     'RaglConfig',
     'RedisConfig',
     'SentenceTransformerConfig',
-    'StorageConfig',
+    'VectorStoreConfig',
 )
 
 
@@ -53,7 +53,7 @@ class EmbedderConfig(RaglConfig):
 
 
 @dataclass
-class StorageConfig(RaglConfig):
+class VectorStoreConfig(RaglConfig):
     """Base configuration for VectorStore implementations."""
 
 
@@ -135,7 +135,7 @@ class SentenceTransformerConfig(EmbedderConfig):
 
 
 @dataclass
-class RedisConfig(StorageConfig):
+class RedisConfig(VectorStoreConfig):
     # pylint: disable=too-many-instance-attributes
     """
     Configuration for RedisVectorStore.

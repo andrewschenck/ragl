@@ -1,8 +1,10 @@
 # TODO:
+#  - rename _should_create_new_factory_map?
 #  - SentenceTransformer default model? which is best? What are most common?
 #  - to_dict vs as_dict -- pick one and stick with it
+#  - RAGStore.get_relevant top_k drop default
 #  - method ordering
-#  - docstring audit
+#  - `backticks` in docstrings or no?
 #  - object names
 #  - attribute names / ordering / docs
 #  - str/repr
