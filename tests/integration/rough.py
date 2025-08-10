@@ -1,14 +1,23 @@
 # TODO:
+#  - guard AbstractFactory.__call__ against being called by all but
+#     VectorStoreFactory, EmbedderFactory, etc.
+#     - Use class attribute to designate permitted callers so that it can be extended by callers
+#      - name attribute something that makes sure it's clear it's just for the base class
 #  - rename _should_create_new_factory_map?
 #  - SentenceTransformer default model? which is best? What are most common?
 #  - to_dict vs as_dict -- pick one and stick with it
 #  - RAGStore.get_relevant top_k drop default
-#  - method ordering
-#  - `backticks` in docstrings or no?
-#  - object names
-#  - attribute names / ordering / docs
-#  - str/repr
 #  - More Logging / levels sanity check
+#  - private interface -- private modules?
+#  - attribute names / ordering
+#  - method ordering
+#  - reorder textunit metadata fields in as_dict / signature
+#  - str/repr
+#  - Unit / functional tests
+#  - integration tests
+#  - license
+#  - `backticks` in docstrings or no?
+#  - README
 #  - RAGManager calls validate_chunking during init, but validate_chunking
 #     raises ValidationError not ConfigurationError
 #  - release package

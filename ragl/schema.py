@@ -1,3 +1,17 @@
+"""
+Metadata schema validation and sanitization utilities.
+
+This module provides tools for defining and enforcing schemas on
+metadata dictionaries, ensuring data consistency and type safety
+for metadata fields used throughout the library.
+
+The module includes:
+- SchemaField:
+    TypedDict for defining field validation rules
+- sanitize_metadata:
+    Function to validate and clean metadata according to schema
+"""
+
 from typing import (
     Any,
     Callable,
@@ -18,6 +32,16 @@ class SchemaField(TypedDict, total=False):
 
     Defines expected type, default, and optional conversion for
     fields.
+
+    Attributes:
+        type:
+            Expected type of the field value (e.g., int, str, list).
+        default:
+            Default value to use if the field is missing or invalid.
+        convert:
+            Optional callable to convert the field value to the
+            expected type. If not provided, the value must match
+            the expected type directly.
     """
 
     type: type

@@ -1,3 +1,14 @@
+"""
+Text unit data structures and utilities.
+
+This module defines the core TextUnit class for representing stored
+text chunks with associated metadata.
+
+The module includes:
+- TextUnit:
+    Dataclass for representing text chunks with metadata
+"""
+
 import time
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Self
@@ -10,6 +21,10 @@ __all__ = ('TextUnit',)
 class TextUnit:
     """
     Represent a stored text chunk.
+
+    Various optional metadata fields are included to provide context
+    and facilitate retrieval.
+
 
     Attributes:
         text_id:
@@ -61,7 +76,8 @@ class TextUnit:
         timestamp, tags, etc., using defaults for missing values.
 
         Args:
-            data: Dictionary containing text unit data.
+            data:
+                Dictionary containing text unit data.
 
         Returns:
             New TextUnit instance populated with provided data.

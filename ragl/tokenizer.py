@@ -1,3 +1,16 @@
+"""
+Text tokenization utilities using tiktoken.
+
+This module provides an interface to the tiktoken library for encoding
+and decoding text into tokens. The tokenizer is used for text processing
+tasks that require token-level operations, such as chunking text by
+token count or calculating token-based similarity metrics.
+
+The module includes:
+- TiktokenTokenizer:
+    Encoding/decoding text using tiktoken
+"""
+
 import tiktoken
 
 
@@ -18,7 +31,14 @@ class TiktokenTokenizer:
     encoding: tiktoken.Encoding
 
     def __init__(self, encoding_name: str = _DEFAULT_ENCODING):
-        """Initialize with an encoding name."""
+        """
+        Create a tokenizer with the specified encoding.
+
+        Args:
+            encoding_name:
+                Name of the tiktoken encoding to use. Defaults to
+                'cl100k_base'.
+        """
         self.encoding = tiktoken.get_encoding(encoding_name)
 
     def decode(self, tokens: list[int]) -> str:
