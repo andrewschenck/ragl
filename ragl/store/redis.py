@@ -243,24 +243,28 @@ class RedisVectorStore:
                 if schema version mismatch occurs.
         """
         if redis_client is None and redis_config is None:
-            raise ConfigurationError('either redis_client or redis_config '
-                                     'must be provided')
+            msg = 'Either redis_client or redis_config must be provided'
+            _LOG.critical(msg)
+            raise ConfigurationError(msg)
 
         if redis_client is not None and redis_config is not None:
-            raise ConfigurationError('both redis_client and redis_config '
-                                     'were provided; only one is permitted')
+            msg = 'Both redis_client and redis_config were provided'
+            _LOG.critical(msg)
+            raise ConfigurationError(msg)
 
         if dimensions is None:
-            raise ConfigurationError('dimensions required for schema creation')
+            msg = 'Dimensions required for schema creation'
+            _LOG.critical(msg)
+            raise ConfigurationError(msg)
 
         if redis_client is not None:
             self.redis_client = redis_client
             try:
                 self.redis_client.ping()
-                _LOG.info('successfully connected to injected Redis client')
+                _LOG.info('Successfully connected to injected Redis client')
             except redis.ConnectionError as e:
-                msg = f'injected Redis client connection failed: {e}'
-                _LOG.error(msg)
+                msg = f'Injected Redis client connection failed: {e}'
+                _LOG.critical(msg)
                 raise StorageConnectionError(msg) from e
         else:
             assert redis_config is not None
@@ -270,10 +274,10 @@ class RedisVectorStore:
                 pool = redis.BlockingConnectionPool(**pool_config)
                 self.redis_client = redis.Redis(connection_pool=pool)
                 self.redis_client.ping()
-                _LOG.info('successfully connected to Redis')
+                _LOG.info('Successfully connected to Redis')
 
             except redis.ConnectionError as e:
-                msg = f'failed to connect to Redis: {e}'
+                msg = f'Failed to connect to Redis: {e}'
                 _LOG.error(msg)
                 raise StorageConnectionError(msg) from e
 
@@ -341,10 +345,10 @@ class RedisVectorStore:
         with self.redis_context() as client:
             self.index.delete(drop=True)
             self.index.create()
-            _LOG.info('index cleared successfully')
+            _LOG.info('Index cleared successfully')
             version_key = f"schema_version:{self.index_name}"
             client.set(version_key, self.SCHEMA_VERSION)
-            _LOG.info('reset schema version to %s for index %s',
+            _LOG.info('Reset schema version to %s for index %s',
                       self.SCHEMA_VERSION, self.index_name)
 
     def delete_text(self, text_id: str) -> bool:
@@ -646,7 +650,7 @@ class RedisVectorStore:
             if stored_version is None:
 
                 client.set(version_key, self.SCHEMA_VERSION)
-                _LOG.info('set schema version to %s for index %s',
+                _LOG.info('Set schema version to %s for index %s',
                           self.SCHEMA_VERSION, self.index_name)
             else:
                 if isinstance(stored_version, str):
@@ -658,7 +662,7 @@ class RedisVectorStore:
                         f'{stored_version=}, expected={self.SCHEMA_VERSION}. '
                         f'Clear the index or update schema version.'
                     )
-                _LOG.debug('schema version %s confirmed for index %s',
+                _LOG.debug('Schema version %s confirmed for index %s',
                            self.SCHEMA_VERSION, self.index_name)
 
     @staticmethod
@@ -728,6 +732,7 @@ class RedisVectorStore:
         Returns:
             List of tag strings.
         """
+        _LOG.debug('Parsing tags from Redis retrieval')
         if tags is None:
             return []
 
@@ -777,6 +782,7 @@ class RedisVectorStore:
         Returns:
             Comma-separated string of tags.
         """
+        _LOG.debug('Preparing tags for Redis storage')
         if isinstance(tags, list):
             return self.TAG_SEPARATOR.join(str(t).strip() for t in tags)
         return str(tags)
@@ -812,12 +818,13 @@ class RedisVectorStore:
         except redisvl.exceptions.RedisVLError as e:
             error_msg = str(e).lower()
             if 'oom' in error_msg or 'memory' in error_msg:
-                _LOG.error('Redis out of memory during search: %s', e)
-                raise StorageCapacityError(
-                    f'Redis out of memory during search: {e}') from e
+                msg = f'Redis out of memory during search: {e}'
+                _LOG.error(msg)
+                raise StorageCapacityError(msg)
 
-            _LOG.error('Redis search failed: %s', e)
-            raise QueryError(f'Redis search failed: {e}') from e
+            msg = f'Redis search failed: {e}'
+            _LOG.error(msg)
+            raise QueryError(msg) from e
 
         except redis.ResponseError as e:
             msg = f'Redis operation failed: {e}'
@@ -863,6 +870,7 @@ class RedisVectorStore:
         Returns:
             List of result dicts.
         """
+        _LOG.debug('Transforming Redis results')
         def _build_doc_dict(doc):
             return {
                 'text_id':          doc.id,
@@ -913,6 +921,7 @@ class RedisVectorStore:
         Returns:
             Configured VectorQuery object.
         """
+        _LOG.debug('Building vector query')
         self._validate_top_k(top_k)
 
         _min_time: int | str | None = min_time
@@ -1083,6 +1092,7 @@ class RedisVectorStore:
 
     def __del__(self):
         """Destructor to ensure Redis connection is closed."""
+        _LOG.debug('Deleting Redis connection')
         self.close()
 
     def __enter__(self):
@@ -1092,6 +1102,7 @@ class RedisVectorStore:
         Returns:
             Self instance for use in a with statement.
         """
+        _LOG.debug('Entering Redis context manager')
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -1100,4 +1111,5 @@ class RedisVectorStore:
 
         Cleans up the Redis connection when exiting the context.
         """
+        _LOG.debug('Exiting Redis context manager')
         self.close()
