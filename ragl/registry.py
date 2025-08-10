@@ -86,6 +86,7 @@ class AbstractFactory:
         TypeError:
             When invalid types are passed to registration methods
     """
+
     can_call_abstract__call__ = ['EmbedderFactory', 'VectorStoreFactory']
 
     _config_cls: type[RaglConfig] | None = None
