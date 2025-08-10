@@ -107,7 +107,7 @@ class AbstractFactory:
         config_cls = kwargs.pop('config_cls', cls._config_cls)
         super().__init_subclass__(**kwargs)
 
-        if cls._should_create_new_factory_map():
+        if cls._is_direct_subclass():
             _LOG.info('Creating new factory map for %s', cls.__name__)
             cls._factory_map = {}
 
@@ -197,7 +197,7 @@ class AbstractFactory:
         return factory(*args, **kwargs)
 
     @classmethod
-    def _should_create_new_factory_map(cls) -> bool:
+    def _is_direct_subclass(cls) -> bool:
         """
         Check whether this class should get its own factory map.
 

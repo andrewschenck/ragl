@@ -103,7 +103,7 @@ class TextUnit:
             timestamp=data.get('timestamp', int(time.time())),
         )
 
-    def as_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert the TextUnit instance to a dictionary.
 

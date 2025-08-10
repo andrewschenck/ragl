@@ -3,21 +3,19 @@
 #     VectorStoreFactory, EmbedderFactory, etc.
 #     - Use class attribute to designate permitted callers so that it can be extended by callers
 #      - name attribute something that makes sure it's clear it's just for the base class
-#  - rename _should_create_new_factory_map?
-#  - to_dict vs as_dict -- pick one and stick with it
-#  - RAGStore.get_relevant top_k drop default
-#  - More Logging / levels sanity check
+#      - list or set so it can be added / appended/extended
+#  - More Logging / audit levels
 #  - private interface -- private modules?
-#  - attribute names / ordering
-#  - method ordering
 #  - reorder textunit metadata fields in as_dict / signature
 #  - str/repr
 #  - Unit / functional tests
 #  - license
-#  - `backticks` in docstrings or no? Types in docstrings or no?
 #  - pre release
 #  - integration tests
 #  - README
+#  - `backticks` in docstrings or no? Types in docstrings or no?
+#  - attribute names / ordering
+#  - method ordering
 #  - release package
 
 # todo known issues / upcoming features:

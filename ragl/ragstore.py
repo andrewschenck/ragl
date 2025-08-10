@@ -101,7 +101,7 @@ class RAGStore:
     def get_relevant(
             self,
             query: str,
-            top_k: int = 1,
+            top_k: int,
             *,
             min_time: int | None = None,
             max_time: int | None = None,

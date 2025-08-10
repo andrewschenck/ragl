@@ -751,7 +751,7 @@ class RAGManager:
             Base metadata dict.
         """
         if isinstance(text_or_doc, TextUnit):
-            return text_or_doc.as_dict()
+            return text_or_doc.to_dict()
 
         return {
             'source':           'unknown',
