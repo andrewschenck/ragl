@@ -1,3 +1,34 @@
+"""
+Exception classes for the ragl library.
+
+This module defines a hierarchy of custom exceptions used throughout
+the RAGL system. All exceptions inherit from RaglException, which serves
+as the base exception class for the library.
+
+The exception hierarchy is organized by functional area:
+- Configuration errors for setup and validation issues
+- Storage errors for vector store operations and connections
+- Data errors for invalid data and query operations
+
+Classes:
+    RaglException:
+        Base exception for all ragl errors
+    ConfigurationError:
+        Setup and configuration failures
+    StorageError:
+        Base exception for VectorStore errors
+    StorageCapacityError:
+        VectorStore capacity exceeded
+    StorageConnectionError:
+        VectorStore connection failures
+    DataError:
+        General data operation failures
+    QueryError:
+        Retrieval operation failures
+    ValidationError:
+        Input validation failures
+"""
+
 __all__ = (
     'ConfigurationError',
     'DataError',
@@ -19,15 +50,15 @@ class ConfigurationError(RaglException):
 
 
 class StorageError(RaglException):
-    """Base exception for vector store errors."""
+    """Base exception for VectorStore errors."""
 
 
 class StorageCapacityError(StorageError):
-    """Raised when vector store capacity is exceeded."""
+    """Raised when VectorStore capacity is exceeded."""
 
 
 class StorageConnectionError(StorageError):
-    """Raised when a vector store connection fails."""
+    """Raised when a VectorStore connection fails."""
 
 
 class DataError(RaglException):

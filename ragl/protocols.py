@@ -1,3 +1,12 @@
+"""
+Protocol definitions for ragl components.
+
+This module defines the core protocols that establish contracts
+for different components in the ragl system, including text
+embedding, vector storage, text retrieval, and tokenization
+operations.
+"""
+
 from typing import (
     Any,
     Mapping,
