@@ -15,6 +15,8 @@ Key Components:
     Factory for creating vector storage implementations
 - create_rag_manager:
     Convenience function for complete ragl setup
+
+
 """
 
 import logging
@@ -340,6 +342,14 @@ def create_rag_manager(
 
     Returns:
         A new RAGManager instance.
+
+    Example:
+        >>> create_rag_manager(
+        ...     index_name="my_index",
+        ...     storage_config=VectorStoreConfig(),
+        ...     embedder_config=EmbedderConfig(),
+        ...     manager_config=ManagerConfig(),
+        ... )
     """
     embedder_factory = EmbedderFactory()
     embedder = embedder_factory(config=embedder_config)
