@@ -104,7 +104,7 @@ class RAGTelemetry:
             duration:
                 Duration of the operation in seconds.
         """
-        _LOG.debug('recording failed operation')
+        _LOG.debug('Recording failed operation')
         self.total_calls += 1
         self.failure_count += 1
         self.total_duration += duration
@@ -128,7 +128,7 @@ class RAGTelemetry:
             duration:
                 Duration of the operation in seconds.
         """
-        _LOG.debug('recording successful operation')
+        _LOG.debug('Recording successful operation')
         self.total_calls += 1
         self.total_duration += duration
         self.avg_duration = self.total_duration / self.total_calls
@@ -155,7 +155,7 @@ class RAGTelemetry:
         Returns:
             A dictionary containing operational metrics.
         """
-        _LOG.debug('computing metrics')
+        _LOG.debug('Computing metrics')
         # Total / Failed / Successful Calls
         total_calls = self.total_calls
         failure_count = self.failure_count
@@ -277,11 +277,11 @@ class RAGManager:
         """
         if not isinstance(ragstore, RAGStoreProtocol):
             msg = 'ragstore must implement RAGStoreProtocol'
-            _LOG.error(msg)
+            _LOG.critical(msg)
             raise TypeError(msg)
         if not isinstance(tokenizer, TokenizerProtocol):
             msg = 'tokenizer must implement TokenizerProtocol'
-            _LOG.error(msg)
+            _LOG.critical(msg)
             raise TypeError(msg)
 
         self._validate_chunking(config.chunk_size, config.overlap)
@@ -334,7 +334,7 @@ class RAGManager:
         Returns:
             List of stored TextUnit instances.
         """
-        _LOG.debug('adding text: %s', text_or_doc)
+        _LOG.debug('Adding text: %s', text_or_doc)
         with self.track_operation('add_text'):
             cs = chunk_size if chunk_size is not None else self.chunk_size
             ov = overlap if overlap is not None else self.overlap
@@ -342,8 +342,8 @@ class RAGManager:
 
             if isinstance(text_or_doc, str):
                 if not text_or_doc.strip():
-                    msg = 'text cannot be empty'
-                    _LOG.error(msg)
+                    msg = 'Text cannot be empty'
+                    _LOG.critical(msg)
                     raise ValidationError(msg)
                 text_or_doc = self._sanitize_text_input(text_or_doc)
 
@@ -355,7 +355,7 @@ class RAGManager:
             else:
                 current_text_count = len(self.ragstore.list_texts())
                 parent_id = f'{TEXT_ID_PREFIX}{current_text_count + 1}'
-            _LOG.debug('using parent_id: %s', parent_id)
+            _LOG.debug('Using parent_id: %s', parent_id)
 
             chunks = self._get_chunks(text_or_doc, cs, ov, split)
             base_data = self._prepare_base_data(text_or_doc, parent_id)
@@ -373,16 +373,17 @@ class RAGManager:
                     parent_id=parent_id,
                 )
                 stored_docs.append(stored_doc)
-                _LOG.info('stored text chunk: %s, ID: %s',)
+                _LOG.info('Stored text chunk: %s, ID: %s',)
 
             if not stored_docs:
-                msg = 'no valid chunks stored'
+                msg = 'No valid chunks stored'
                 _LOG.critical(msg)
                 raise DataError(msg)
 
             _doc_count = len(stored_docs)
             _doc_id = [doc.text_id for doc in stored_docs]
-            _LOG.info('added %s text chunks with IDs: %s', _doc_count, _doc_id)
+            _LOG.debug('Added %s text chunks with IDs: %s',
+                       _doc_count, _doc_id)
 
             return stored_docs
 
@@ -396,7 +397,7 @@ class RAGManager:
         Args:
             text_id: ID of text to delete.
         """
-        _LOG.debug('deleting text %s', text_id)
+        _LOG.debug('Deleting text %s', text_id)
         with self.track_operation('delete_text'):
             self.ragstore.delete_text(text_id)
 
@@ -433,7 +434,7 @@ class RAGManager:
             if backend filtering reduces results. See relevant
             backend documentation for details.
         """
-        _LOG.debug('retrieving context for query: %s', query)
+        _LOG.debug('Retrieving context for query: %s', query)
         with self.track_operation('get_context'):
             self._sanitize_text_input(query)
             self._validate_query(query)
@@ -451,7 +452,7 @@ class RAGManager:
             else:
                 results = sorted(results, key=lambda x: x['distance'])
 
-            _LOG.info('retrieved %s contexts for query: %s',
+            _LOG.info('Retrieved %s contexts for query: %s',
                       len(results), query)
 
             return [TextUnit.from_dict(result) for result in results]
@@ -469,7 +470,7 @@ class RAGManager:
         Returns:
             Health status dictionary.
         """
-        _LOG.debug('retrieving health status')
+        _LOG.debug('Retrieving health status')
         with self.track_operation('health_check'):
             if hasattr(self.ragstore.storage, 'health_check'):
                 return self.ragstore.storage.health_check()
@@ -493,7 +494,7 @@ class RAGManager:
         Returns:
             Dictionary of operation metrics.
         """
-        _LOG.debug('retrieving performance metrics')
+        _LOG.debug('Retrieving performance metrics')
         if operation_name:
             if operation_name not in self._metrics:
                 return {}
@@ -516,7 +517,7 @@ class RAGManager:
         Returns:
             Sorted list of text IDs.
         """
-        _LOG.debug('listing texts')
+        _LOG.debug('Listing texts')
         with self.track_operation('list_texts'):
             text_ids = self.ragstore.list_texts()
             _LOG.debug('text count: %d', len(text_ids))
@@ -533,15 +534,15 @@ class RAGManager:
             reset_metrics:
                 Whether to reset performance metrics as well.
         """
-        _LOG.debug('resetting store')
+        _LOG.debug('Resetting store')
         with self.track_operation('reset'):
             self.ragstore.clear()
 
             if reset_metrics:
-                _LOG.debug('resetting metrics')
+                _LOG.debug('Resetting metrics')
                 self.reset_metrics()
 
-        _LOG.info('store reset')
+        _LOG.info('Store reset')
 
     def reset_metrics(self) -> None:
         """
@@ -550,9 +551,9 @@ class RAGManager:
         Resets the performance metrics for all tracked operations.
         This is useful for starting fresh without historical data.
         """
-        _LOG.debug('resetting metrics')
+        _LOG.debug('Resetting metrics')
         self._metrics.clear()
-        _LOG.info('metrics reset')
+        _LOG.info('Metrics reset')
 
     @contextmanager
     def track_operation(
@@ -571,22 +572,22 @@ class RAGManager:
                 Name of the operation being tracked.
         """
         start = time.time()
-        _LOG.debug('starting operation: %s', operation_name)
+        _LOG.debug('Starting operation: %s', operation_name)
 
         try:
             yield
             duration = time.time() - start
             record_success = self._metrics[operation_name].record_success
             record_success(duration)
-            _LOG.debug('operation completed: %s (%.3fs)',
+            _LOG.debug('Operation completed: %s (%.3fs)',
                        operation_name, duration)
 
         except Exception as e:  # pylint: disable=broad-except
             duration = time.time() - start
             record_failure = self._metrics[operation_name].record_failure
             record_failure(duration)
-            _LOG.error('operation failed: %s (%.3fs) - %s', operation_name,
-                       duration, e)
+            _LOG.critical('Operation failed: %s (%.3fs) - %s', operation_name,
+                          duration, e)
             raise
 
     @staticmethod
@@ -610,7 +611,7 @@ class RAGManager:
         Returns:
             Formatted context string.
         """
-        _LOG.debug('formatting chunks')
+        _LOG.debug('Formatting chunks')
         return separator.join(str(chunk) for chunk in chunks)
 
     def _get_chunks(
@@ -635,7 +636,7 @@ class RAGManager:
         Returns:
             List of text chunks.
         """
-        _LOG.debug('getting chunks')
+        _LOG.debug('Getting chunks')
         if split:
             if isinstance(text_or_doc, TextUnit):
                 return self._split_text(text_or_doc.text, cs, ov)
@@ -663,11 +664,11 @@ class RAGManager:
         Returns:
             Sanitized text string.
         """
-        _LOG.debug('sanitizing text')
+        _LOG.debug('Sanitizing text')
         limit = self.MAX_INPUT_LENGTH
         if len(text.encode('utf-8')) > limit:
             msg = 'text too long'
-            _LOG.error(msg)
+            _LOG.critical(msg)
             raise ValidationError(msg)
 
         # Remove potentially dangerous characters
@@ -700,7 +701,7 @@ class RAGManager:
         Returns:
             List of text chunks.
         """
-        _LOG.debug('splitting text')
+        _LOG.debug('Splitting text')
         tokens = self.tokenizer.encode(text)
         chunks = []
         step = chunk_size - overlap
@@ -741,7 +742,7 @@ class RAGManager:
         Returns:
             Stored TextUnit instance.
         """
-        _LOG.debug('storing chunk')
+        _LOG.debug('Storing chunk')
         chunk_data = base_data.copy()
         chunk_data.update({
             'text_id':          text_id,
@@ -784,7 +785,7 @@ class RAGManager:
         Returns:
             Base metadata dict.
         """
-        _LOG.debug('preparing base metadata')
+        _LOG.debug('Preparing base metadata')
         if isinstance(text_or_doc, TextUnit):
             return text_or_doc.to_dict()
 
@@ -820,21 +821,21 @@ class RAGManager:
             ValidationError:
                 If params are invalid.
         """
-        _LOG.debug('validating chunking parameters')
+        _LOG.debug('Validating chunking parameters')
         cs = chunk_size
         ov = overlap
 
         if cs <= 0:
-            msg = 'chunk_size must be positive'
-            _LOG.error(msg)
+            msg = 'Chunk_size must be positive'
+            _LOG.critical(msg)
             raise ValidationError(msg)
         if ov < 0:
-            msg = 'overlap must be non-negative'
-            _LOG.error(msg)
+            msg = 'Overlap must be non-negative'
+            _LOG.critical(msg)
             raise ValidationError(msg)
         if ov >= cs:
-            msg = 'overlap must be less than chunk_size'
-            _LOG.error(msg)
+            msg = 'Overlap must be less than chunk_size'
+            _LOG.critical(msg)
             raise ValidationError(msg)
 
     def _validate_query(self, query: str) -> None:
@@ -854,15 +855,15 @@ class RAGManager:
             ValidationError:
                 If query is invalid.
         """
-        _LOG.debug('validating query')
+        _LOG.debug('Validating query')
         if not query or not query.strip():
-            msg = 'query cannot be empty'
-            _LOG.error(msg)
+            msg = 'Query cannot be empty'
+            _LOG.critical(msg)
             raise ValidationError(msg)
 
         if len(query) > self.MAX_QUERY_LENGTH:
-            msg = f'query too long: {len(query)} > {self.MAX_QUERY_LENGTH}'
-            _LOG.error(msg)
+            msg = f'Query too long: {len(query)} > {self.MAX_QUERY_LENGTH}'
+            _LOG.critical(msg)
             raise ValidationError(msg)
 
     @staticmethod
@@ -878,8 +879,8 @@ class RAGManager:
             ValidationError:
                 If top_k is invalid.
         """
-        _LOG.debug('validating top_k parameter')
+        _LOG.debug('Validating top_k parameter')
         if not isinstance(top_k, int) or top_k < 1:
             msg = 'top_k must be a positive integer'
-            _LOG.error(msg)
+            _LOG.critical(msg)
             raise ValidationError(msg)

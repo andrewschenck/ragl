@@ -141,8 +141,9 @@ class SentenceTransformerEmbedder:
         Returns:
             Embedding as a numpy array.
         """
+        _LOG.debug('Embedding text: %s', text)
         if self._auto_cleanup and self._should_clear_cache():
-            _LOG.info('%s: clearing embed cache due to memory threshold',
+            _LOG.info('%s: Clearing embed cache due to memory threshold',
                       self.__class__.__name__)
             self.clear_cache()
         return self._embed_cached(text)
@@ -176,6 +177,7 @@ class SentenceTransformerEmbedder:
         Returns:
             Dictionary with cache and system memory statistics
         """
+        _LOG.debug('Retrieving memory usage statistics')
         cache_info = self.cache_info()
         cache_total = cache_info.hits + cache_info.misses
         if cache_total > 0:
@@ -239,6 +241,7 @@ class SentenceTransformerEmbedder:
         Returns:
             True if cleanup is needed
         """
+        _LOG.debug('Checking if cache should be cleared')
         with suppress(Exception):
             memory_percent = psutil.virtual_memory().percent / 100.0
             return memory_percent > self._memory_threshold

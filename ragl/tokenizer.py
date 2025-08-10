@@ -11,10 +11,15 @@ Classes:
     Encoding/decoding text using tiktoken.
 """
 
+import logging
+
 import tiktoken
 
 
 __all__ = ('TiktokenTokenizer',)
+
+
+_LOG = logging.getLogger(__name__)
 
 
 class TiktokenTokenizer:
@@ -39,6 +44,8 @@ class TiktokenTokenizer:
                 Name of the tiktoken encoding to use. Defaults to
                 'cl100k_base'.
         """
+        _LOG.debug('Initializing TiktokenTokenizer with encoding: %s',
+                   encoding_name)
         self.encoding = tiktoken.get_encoding(encoding_name)
 
     def decode(self, tokens: list[int]) -> str:
@@ -52,6 +59,10 @@ class TiktokenTokenizer:
         Returns:
             Decoded text string.
         """
+        _LOG.debug('Decoding tokens: %s', tokens)
+        if not tokens:
+            _LOG.warning('Attempted to decode empty token list')
+            return ''
         return self.encoding.decode(tokens)
 
     def encode(self, text: str) -> list[int]:
@@ -65,4 +76,5 @@ class TiktokenTokenizer:
         Returns:
             List of token IDs.
         """
+        _LOG.debug('Encoding text: %s', text)
         return self.encoding.encode(text)

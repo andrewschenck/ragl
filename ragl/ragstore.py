@@ -14,12 +14,16 @@ Classes:
         Store and retrieve text using an embedder and vector store.
 """
 
+import logging
 from typing import Mapping, Any
 
 from ragl.protocols import EmbedderProtocol, VectorStoreProtocol
 
 
 __all__ = ('RAGStore',)
+
+
+_LOG = logging.getLogger(__name__)
 
 
 class RAGStore:
@@ -73,9 +77,13 @@ class RAGStore:
             TypeError: If args don’t implement protocols.
         """
         if not isinstance(embedder, EmbedderProtocol):
-            raise TypeError('embedder must implement EmbedderProtocol')
+            msg = 'embedder must implement EmbedderProtocol'
+            _LOG.critical(msg)
+            raise TypeError(msg)
         if not isinstance(storage, VectorStoreProtocol):
-            raise TypeError('store must implement VectorStoreProtocol')
+            msg = 'store must implement VectorStoreProtocol'
+            _LOG.critical(msg)
+            raise TypeError(msg)
         self.embedder = embedder
         self.storage = storage
 
@@ -96,6 +104,7 @@ class RAGStore:
         Returns:
             True if text was deleted, False if it did not exist.
         """
+        _LOG.debug('Deleting text %s', text_id)
         return self.storage.delete_text(text_id)
 
     def get_relevant(
@@ -132,6 +141,7 @@ class RAGStore:
         Returns:
             List of result dicts.
         """
+        _LOG.debug('Retrieving relevant texts for query %s', query)
         return self.storage.get_relevant(
             embedding=self.embedder.embed(query),
             top_k=top_k,
@@ -146,6 +156,7 @@ class RAGStore:
         Returns:
             List of text IDs.
         """
+        _LOG.debug('Listing all texts in store')
         return self.storage.list_texts()
 
     def store_text(
@@ -181,6 +192,7 @@ class RAGStore:
                 The text ID (generated if not provided, or the provided
                 text_id).
         """
+        _LOG.debug('Storing text %s', text)
         text_id = self.storage.store_text(
             text=text,
             embedding=self.embedder.embed(text),

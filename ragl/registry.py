@@ -110,7 +110,7 @@ class AbstractFactory:
         super().__init_subclass__(**kwargs)
 
         if cls._is_direct_subclass():
-            _LOG.info('Creating new factory map for %s', cls.__name__)
+            _LOG.debug('Creating new factory map for %s', cls.__name__)
             cls._factory_map = {}
 
         if config_cls is not None:
@@ -134,15 +134,17 @@ class AbstractFactory:
                 If config_cls is not a subclass of RaglConfig or
                 if factory is not a subclass of AbstractFactory.
         """
+        _LOG.info('Registering factory class %s', cls.__name__)
         if not issubclass(config_cls, RaglConfig):
-            raise TypeError('config_cls must be a subclass of '
-                            f'RaglConfig, got {config_cls.__name__}')
+            msg = 'config_cls must be a subclass of RaglConfig'
+            _LOG.critical(msg)
+            raise TypeError(msg)
 
         if not issubclass(cls, AbstractFactory):
-            raise TypeError('cls must be a subclass of '
-                            f'AbstractFactory, got {config_cls.__name__}')
+            msg = 'cls must be a subclass of AbstractFactory'
+            _LOG.critical(msg)
+            raise TypeError(msg)
 
-        _LOG.info('Registering factory class %s', cls.__name__)
         cls._factory_map[config_cls.__name__] = factory
 
     @classmethod
@@ -189,20 +191,26 @@ class AbstractFactory:
             ConfigurationError:
                 When no factory found for configuration type.
         """
+        _LOG.debug('Calling factory %s with args: %s, kwargs: %s',)
         if self.__class__.__name__ not in self.can_call_abstract__call__:
-            raise TypeError(f'{self.__class__.__name__} cannot be called '
-                            'directly; call a subclass.')
+            msg = f'{self.__class__.__name__} cannot be called directly'
+            _LOG.critical(msg)
+            raise TypeError(msg)
 
         try:
             config = kwargs['config']
         except KeyError as e:
-            raise ConfigurationError('config must be provided') from e
+            msg = 'config must be provided'
+            _LOG.critical(msg)
+            raise ConfigurationError(msg) from e
 
         try:
             factory_cls = self._factory_map[config.__class__.__name__]
         except KeyError as e:
-            raise ConfigurationError('No factory found for '
-                                     f'configuration type: {e}') from e
+            msg = f'No factory found for configuration type: {e}'
+            _LOG.critical(msg)
+            raise ConfigurationError(msg) from e
+
         factory = factory_cls()
         return factory(*args, **kwargs)
 
@@ -219,6 +227,8 @@ class AbstractFactory:
                 True if this class is a direct subclass of
                 AbstractFactory, False otherwise.
         """
+        _LOG.debug('Checking whether this class is a direct subclass of '
+                   'AbstractFactory: %s', cls.__name__)
         # Return True only if this is a direct subclass of AbstractFactory
         return AbstractFactory in cls.__bases__
 
@@ -263,14 +273,17 @@ class SentenceTransformerFactory(EmbedderFactory):
         try:
             config = kwargs['config']
         except KeyError as e:
-            raise ConfigurationError('config must be provided') from e
+            msg = 'config parameter must be provided'
+            _LOG.critical(msg)
+            raise ConfigurationError(msg) from e
         try:
             # pylint: disable=import-outside-toplevel
             from ragl.embed.sentencetransformer import SentenceTransformerEmbedder  # noqa: E501
             return SentenceTransformerEmbedder(config=config)
         except ImportError as e:
-            raise ConfigurationError('SentenceTransformerEmbedder '
-                                     'not available') from e
+            msg = 'SentenceTransformerEmbedder not available'
+            _LOG.critical(msg)
+            raise ConfigurationError(msg) from e
 
 
 class VectorStoreFactory(AbstractFactory):
@@ -310,13 +323,15 @@ class RedisVectorStoreFactory(VectorStoreFactory):
                 Keyword arguments containing 'config', 'dimensions',
                 and 'index_name'.
         """
+        _LOG.debug('Calling RedisVectorStore %s with args: %s, kwargs: %s',)
         try:
             config = kwargs['config']
             dimensions = kwargs['dimensions']
             index_name = kwargs['index_name']
         except KeyError as e:
-            raise ConfigurationError('config, dimensions, and index_name '
-                                     'must be provided') from e
+            msg = 'config, dimensions, and index_name must be provided'
+            _LOG.critical(msg)
+            raise ConfigurationError(msg) from e
 
         try:
             # pylint: disable=import-outside-toplevel
@@ -327,7 +342,9 @@ class RedisVectorStoreFactory(VectorStoreFactory):
                 index_name=index_name,
             )
         except ImportError as e:
-            raise ConfigurationError('RedisVectorStore not available') from e
+            msg = 'RedisVectorStore not available'
+            _LOG.critical(msg)
+            raise ConfigurationError(msg) from e
 
 
 def create_rag_manager(
@@ -365,9 +382,11 @@ def create_rag_manager(
         ...     manager_config=ManagerConfig(),
         ... )
     """
+    _LOG.info('Creating RAG manager')
     embedder_factory = EmbedderFactory()
     embedder = embedder_factory(config=embedder_config)
 
+    _LOG.info('Creating embedder')
     storage_factory = VectorStoreFactory()
     storage = storage_factory(
         config=storage_config,
@@ -375,14 +394,22 @@ def create_rag_manager(
         index_name=index_name,
     )
 
+    _LOG.info('Creating vector store')
     ragstore = RAGStore(
         embedder=embedder,
         storage=storage,
     )
 
+    _LOG.info('Creating RAG store')
     manager = RAGManager(
         config=manager_config,
         ragstore=ragstore,
     )
+
+    _LOG.debug('%s created with embedder: %s, storage: %s',
+               manager.__class__.__name__,
+               embedder.__class__.__name__,
+               storage.__class__.__name__,
+               )
 
     return manager

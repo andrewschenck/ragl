@@ -1,5 +1,5 @@
 # TODO:
-#  - More Logging / audit levels
+#  - More Logging / audit levels --  redis
 #  - reorder textunit metadata fields in as_dict / signature
 #  - str/repr
 #  - Unit / functional tests

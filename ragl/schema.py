@@ -14,6 +14,7 @@ Functions:
     Function to validate and clean metadata according to schema.
 """
 
+import logging
 from typing import (
     Any,
     Callable,
@@ -26,6 +27,9 @@ __all__ = (
     'SchemaField',
     'sanitize_metadata',
 )
+
+
+_LOG = logging.getLogger(__name__)
 
 
 class SchemaField(TypedDict, total=False):
@@ -72,6 +76,7 @@ def sanitize_metadata(
     Returns:
         Sanitized metadata as a dictionary.
     """
+    _LOG.debug('Sanitizing metadata')
     if not metadata:
         return {}
 
