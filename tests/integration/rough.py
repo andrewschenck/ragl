@@ -15,15 +15,18 @@
 #  - str/repr
 #  - Unit / functional tests
 #  - license
-#  - `backticks` in docstrings or no?
-#  - initial release
+#  - `backticks` in docstrings or no? Types in docstrings or no?
+#  - pre release
 #  - integration tests
 #  - README
 #  - release package
 
-# todo known issues:
+# todo known issues / upcoming features:
 #  - RAGManager calls validate_chunking during init, but validate_chunking
 #     raises ValidationError not ConfigurationError
+#  - Additional storage backends
+#  - Batch store and delete features
+#  - Companion MCP library
 
 
 from pprint import pprint

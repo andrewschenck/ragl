@@ -213,7 +213,6 @@ class RAGManager:
     implementing TokenizerProtocol for text splitting.
 
     Example:
-        >>> from ragl.manager import RAGManager
         >>> from ragl.config import ManagerConfig
         >>>
         >>> config = ManagerConfig(chunk_size=512, overlap=50)

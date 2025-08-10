@@ -32,6 +32,13 @@ class RAGStore:
         storage:
             VectorStoreProtocol-conforming object for backend data
             store and retrieval.
+
+    Example:
+        >>> rag_store = RAGStore(embedder=embedder, storage=storage)
+        >>> text = "Hello, world!"
+        >>> metadata = {"author": "John Doe", 'title': "Sample Document"}
+        >>> text_id = rag_store.store_text(text, metadata=metadata)
+        >>> results = rag_store.get_relevant("Hello", top_k=5)
     """
 
     embedder: EmbedderProtocol

@@ -1,3 +1,33 @@
+# pylint: disable=too-many-lines
+"""
+Redis-based vector storage implementation for ragl.
+
+This module provides a Redis-backed vector store that enables efficient
+storage and retrieval of text embeddings with associated metadata. It
+leverages RedisVL (Redis Vector Library) for vector similarity search
+operations.
+
+Key Features:
+    - Vector similarity search using HNSW algorithm with cosine distance
+    - Metadata storage and filtering (timestamps, tags, source info)
+    - Schema validation and versioning
+    - Connection pooling and error handling
+    - Memory usage monitoring and health checks
+    - Automatic text ID generation
+    - Tag-based categorization with comma-separated storage
+
+The store supports various metadata fields including chunk position,
+timestamps, confidence scores, tags, parent IDs, source information,
+language, section, and author details. All metadata is sanitized
+according to a predefined schema before storage.
+
+Storage Limits:
+    - Text content: 512 MB
+    - Total metadata: 64 MB
+    - Individual metadata fields: 32 MB
+    - Text ID length: 256 characters
+"""
+
 import logging
 import time
 from contextlib import contextmanager
@@ -39,13 +69,38 @@ class RedisVectorStore:
     """
     Store and retrieve vectors in Redis.
 
+    This class provides methods to store text and its vector embeddings
+    in a Redis database, allowing for efficient similarity search and
+    retrieval of relevant texts based on vector queries. It supports
+    metadata storage, schema validation, and automatic text ID
+    generation.
+
+    It uses RedisVL for vector operations and Redis SearchIndex
+    for indexing and querying. The store is designed to handle
+    large volumes of text and metadata while enforcing limits on
+    text size, metadata size, and individual field sizes.
+
+    It also includes health checks for Redis connection and index
+    status, ensuring the store is operational and can handle queries.
+
+    It supports a flexible metadata schema that can be extended
+    as needed, while providing default values for common fields.
+
+    It also includes methods for clearing the index, deleting texts,
+    and listing all stored texts.
+
+    The store is designed to be robust, with error handling for
+    connection issues, query failures, and validation errors.
+    It uses a context manager for Redis connections
+    to ensure proper resource management and error handling.
+
     Attributes:
         index:
             Redis SearchIndex instance.
         redis_client:
             Redis client instance.
         dimensions:
-            Embedding dimension size.
+            Size of embedding vectors.
         metadata_schema:
             Schema for metadata sanitization.
 
@@ -54,7 +109,23 @@ class RedisVectorStore:
         (e.g., comma-separated for `tags`), but are returned as their
         expected types (e.g., list for `tags`) in method results,
         such as `get_relevant`.
+
+    Example:
+        >>> from ragl.config import RedisConfig
+        >>> config = RedisConfig(host='localhost', port=6379)
+        >>> store = RedisVectorStore(
+        ...     redis_config=config,
+        ...     dimensions=768,
+        ...     index_name='documents'
+        ... )
+        >>> text_id = store.store_text(
+        ...     text="Sample document",
+        ...     embedding=embedding_vector,
+        ...     metadata={'tags': ['important'], 'source': 'docs'}
+        ... )
+        >>> results = store.get_relevant(query_embedding, top_k=5)
     """
+
     SCHEMA_VERSION = 1
 
     MAX_FIELD_SIZE = (1024 * 1024) * 32
@@ -87,7 +158,24 @@ class RedisVectorStore:
             dimensions: int | None,
             index_name: str,
     ) -> None:
-        ...  # pragma: no cover
+        """
+        Initialize Redis store with an existing Redis client.
+
+        Args:
+            redis_client:
+                Redis client instance to use for connection.
+            dimensions:
+                Size of embedding vectors, required for schema creation.
+            index_name:
+                Name of the Redis search index.
+
+        Raises:
+            ConfigurationError:
+                If dimensions are not provided or if both redis_client
+                and redis_config are provided.
+            StorageConnectionError:
+                If Redis connection fails.
+        """
 
     @overload
     def __init__(
@@ -97,7 +185,24 @@ class RedisVectorStore:
             dimensions: int | None,
             index_name: str,
     ) -> None:
-        ...  # pragma: no cover
+        """
+        Initialize Redis store with a Redis configuration.
+
+        Args:
+            redis_config:
+                Redis configuration object for connection details.
+            dimensions:
+                Size of embedding vectors, required for schema creation.
+            index_name:
+                Name of the Redis search index.
+
+        Raises:
+            ConfigurationError:
+                If dimensions are not provided or if both redis_client
+                and redis_config are provided.
+            StorageConnectionError:
+                If Redis connection fails.
+        """
 
     def __init__(
             self,
@@ -108,18 +213,22 @@ class RedisVectorStore:
             index_name: str,
     ):
         """
-        Initialize Redis store.
+        Initialize Redis store with existing client or configuration.
+
+        Connects to Redis using either a provided client instance or
+        configuration. Sets up the vector search index with the
+        specified dimensions and index name. Validates the connection
+        and schema version. Creates the index if it does not already
+        exist.
 
         Args:
             redis_client:
-                Optional Redis client instance. If provided,
-                config is ignored.
+                Redis client instance. If provided, config is ignored.
             redis_config:
-                Optional Redis configuration object. If provided,
-                redis_client is ignored.
+                Redis configuration object. If provided, redis_client is
+                ignored.
             dimensions:
-                Size of embedding vectors, required for schema
-                creation.
+                Size of embedding vectors, required for schema creation.
             index_name:
                 Name of the Redis search index.
 
@@ -127,8 +236,8 @@ class RedisVectorStore:
             StorageConnectionError:
                 If Redis connection or index creation fails.
             ConfigurationError:
-                If both redis_client and redis_config are provided,
-                or if schema version mismatch occurs.
+                If both redis_client and redis_config are provided, or
+                if schema version mismatch occurs.
         """
         if redis_client is None and redis_config is None:
             raise ConfigurationError('either redis_client or redis_config '
@@ -239,17 +348,20 @@ class RedisVectorStore:
         """
         Delete a text from Redis.
 
+        Deletes the specified text ID from Redis. If the text ID does
+        not exist, it returns False. If the deletion is successful,
+        it returns True.
+
         Args:
             text_id:
                 ID of text to delete.
+
+        Returns:
+            True if text was deleted, False if it did not exist.
         """
         self._validate_text_id(text_id)
         with self.redis_context() as client:
-            deleted = client.delete(text_id)
-            deleted = True
-
-        if deleted == 0:
-            deleted = False
+            deleted = bool(client.delete(text_id))
 
         return deleted
 
@@ -263,6 +375,10 @@ class RedisVectorStore:
     ) -> list[dict[str, Any]]:
         """
         Retrieve relevant texts from Redis.
+
+        Performs a vector search in Redis using the provided embedding
+        and returns the top_k most relevant results. It applies optional
+        timestamp filters to limit results to a specific time range.
 
         Args:
             embedding:
@@ -291,6 +407,12 @@ class RedisVectorStore:
     def health_check(self) -> dict[str, Any]:
         """
         Check Redis connection and index health.
+
+        Performs a health check on the Redis connection and the vector
+        search index. It verifies if Redis is connected, verifies the
+        index exists, and retrieves memory usage information. It also
+        checks if the index is healthy by verifying the number of
+        documents.
 
         Returns:
             Dictionary with health status and diagnostics.
@@ -322,6 +444,10 @@ class RedisVectorStore:
         """
         List all text IDs in Redis.
 
+        Retrieves all text IDs stored in Redis by searching for keys
+        that match the TEXT_ID_PREFIX. It returns a sorted list of
+        text IDs, which are used to identify stored texts.
+
         Returns:
             Sorted list of text IDs.
         """
@@ -331,7 +457,12 @@ class RedisVectorStore:
 
     @contextmanager
     def redis_context(self) -> Iterator[redis.Redis]:
-        """Context manager for Redis connection and error handling."""
+        """
+        Context manager for Redis connection and error handling.
+
+        This method ensures that Redis connections are properly managed
+        and that errors are caught and logged.
+        """
         try:
             self.redis_client.ping()
             yield self.redis_client
@@ -364,6 +495,12 @@ class RedisVectorStore:
         """
         Store text and embedding in Redis.
 
+        Stores the provided text and its vector embedding in Redis.
+        It generates a unique text ID if not provided, validates the
+        input sizes, sanitizes the metadata, and prepares the data
+        for storage. It then stores the data in Redis using the
+        RedisVL index. The text ID is returned after successful storage.
+
         Args:
             text:
                 Text to store.
@@ -373,6 +510,9 @@ class RedisVectorStore:
                 Optional ID for the text.
             metadata:
                 Optional metadata mapping.
+
+        Returns:
+            The text ID (generated if not provided.)
 
         Raises:
             ValidationError:
@@ -483,7 +623,19 @@ class RedisVectorStore:
         })
 
     def _enforce_schema_version(self) -> None:
-        """Check whether stored schema matches current version."""
+        """
+        Check whether stored schema matches current version.
+
+        This method checks the Redis store for the schema version
+        associated with the current index. If no version is found,
+        it sets the schema version to the current version. If a
+        version is found but does not match the current version,
+        it raises a ConfigurationError indicating a schema mismatch.
+
+        Raises:
+            ConfigurationError:
+                If schema version mismatch occurs.
+        """
         with self.redis_context() as client:
             version_key = f'schema_version:{self.index_name}'
             stored_version = client.get(version_key)
@@ -510,6 +662,10 @@ class RedisVectorStore:
     def _extract_memory_info(info: Mapping) -> dict[str, Any]:
         """
         Extract memory information from Redis meminfo.
+
+        Args:
+            info:
+                Redis memory info dictionary.
         """
         return {
             'used_memory':               info.get('used_memory', 0),
@@ -532,6 +688,10 @@ class RedisVectorStore:
         """
         Generate a unique text ID.
 
+        Generates a unique text ID if not provided. It uses a Redis
+        counter to ensure uniqueness. If a text ID is provided,
+        it validates the ID length and returns it as is.
+
         Args:
             text_id:
                 Optional provided ID.
@@ -553,6 +713,11 @@ class RedisVectorStore:
         # pylint: disable=too-many-nested-blocks
         """
         Parse tags from Redis retrieval into a clean list.
+
+        Cleans and splits tags from Redis retrieval into a list of
+        tag strings. It handles both string and list formats, removing
+        unnecessary characters and whitespace. If tags are None,
+        it returns an empty list.
 
         Args:
             tags: Tags from Redis.
@@ -597,6 +762,11 @@ class RedisVectorStore:
         """
         Convert tags to a string for Redis store.
 
+        Converts a list of tags or a single tag into a comma-separated
+        string for storage in Redis. It ensures that each tag is
+        stripped of whitespace and converted to a string. If tags
+        is not a list, it converts it to a string directly.
+
         Args:
             tags:
                 Tags to convert (list or other).
@@ -611,6 +781,11 @@ class RedisVectorStore:
     def _search_redis(self, vector_query: VectorQuery) -> Any:
         """
         Execute a vector search in Redis.
+
+        Executes a vector search using the provided VectorQuery object.
+        It handles various exceptions that may occur during the search
+        operation, including connection errors, query errors, and memory
+        issues. If the search is successful, it returns the results.
 
         Args:
             vector_query:
@@ -655,6 +830,10 @@ class RedisVectorStore:
         """
         Store text data in Redis using RedisVL.
 
+        Stores the provided text data in Redis under the specified
+        text ID. It uses the RedisVL index to load the data, which
+        includes the text, embedding, and metadata.
+
         Args:
             text_id:
                 ID for the text.
@@ -667,6 +846,12 @@ class RedisVectorStore:
     def _transform_redis_results(self, results: Any) -> list[dict[str, Any]]:
         """
         Transform Redis results into dicts.
+
+        Converts raw Redis search results into a list of dictionaries
+        with structured fields. It extracts relevant fields like text,
+        text ID, parent ID, source, language, section, author, distance,
+        tags, timestamp, confidence, and chunk position. It also handles
+        the conversion of tags from a string format to a list.
 
         Args:
             results:
@@ -704,6 +889,9 @@ class RedisVectorStore:
     ) -> VectorQuery:
         """
         Build a vector query for Redis search.
+
+        Constructs a VectorQuery object for searching Redis using the
+        provided embedding and optional timestamp filters.
 
         Args:
             embedding:
@@ -755,6 +943,11 @@ class RedisVectorStore:
         """
         Prepare data dict for Redis store.
 
+        Prepares a dictionary containing the text, embedding, and
+        sanitized metadata for storage in Redis. The embedding is
+        converted to bytes for Redis storage. The metadata is expected
+        to be sanitized according to the schema defined in the store.
+
         Args:
             text:
                 Text to store.
@@ -773,6 +966,17 @@ class RedisVectorStore:
         }
 
     def _validate_embedding_dimensions(self, embedding: np.ndarray) -> None:
+        """
+        Validate embedding dimensions against store dimensions.
+
+        Ensures that the provided embedding vector matches the
+        expected dimensions of the store. Raises a ConfigurationError
+        if the dimensions do not match.
+
+        Args:
+            embedding:
+                Embedding vector to validate.
+        """
         dim = embedding.shape[0]
         if dim != self.dimensions:
             raise ConfigurationError('Embedding dimension mismatch: '
@@ -785,6 +989,13 @@ class RedisVectorStore:
     ) -> None:
         """
         Validate input doesn't exceed Redis limits.
+
+        Validates the size of the text and metadata against Redis
+        limits. It checks that the text does not exceed the maximum
+        text size, that the total metadata size does not exceed the
+        maximum metadata size, and that individual metadata fields
+        do not exceed the maximum field size. Raises ValidationError
+        if any of these limits are exceeded.
 
         Args:
             text:
@@ -825,6 +1036,11 @@ class RedisVectorStore:
         """
         Validate text ID format and length.
 
+        Validates that the provided text ID is not empty, does not
+        exceed the maximum length, and starts with the required
+        TEXT_ID_PREFIX. Raises ValidationError if any of these
+        conditions are not met.
+
         Args:
             text_id:
                 Text ID to validate.
@@ -846,6 +1062,19 @@ class RedisVectorStore:
 
     @staticmethod
     def _validate_top_k(top_k: int) -> None:
+        """
+        Validate that top_k is a positive integer.
+
+        Ensures that the top_k parameter is a positive integer.
+
+        Args:
+            top_k:
+                Number of results to return.
+
+        Raises:
+            ValidationError:
+                If top_k is not a positive integer.
+        """
         if not isinstance(top_k, int) or top_k < 1:
             raise ValidationError('top_k must be a positive integer')
 
@@ -854,7 +1083,18 @@ class RedisVectorStore:
         self.close()
 
     def __enter__(self):
+        """
+        Context manager entry point for Redis store.
+
+        Returns:
+            Self instance for use in a with statement.
+        """
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        Context manager exit point for Redis store.
+
+        Cleans up the Redis connection when exiting the context.
+        """
         self.close()
