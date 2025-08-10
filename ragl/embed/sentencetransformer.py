@@ -1,3 +1,24 @@
+"""
+SentenceTransformer-based text embedding.
+
+This module provides an interface to the SentenceTransformer library for
+converting text into high-dimensional vector embeddings. It includes
+intelligent caching to improve performance and automatic memory management
+to prevent resource exhaustion.
+
+Key Features:
+    - Text-to-vector embedding using pre-trained transformer models.
+    - LRU caching for repeated embeddings with configurable cache size.
+    - Automatic cache cleanup based on system memory thresholds.
+    - Memory usage monitoring and reporting.
+    - Support for custom device placement (CPU/GPU).
+
+Classes:
+    SentenceTransformerEmbedder:
+        Main embedding class with caching and memory management
+        capabilities.
+"""
+
 import gc
 import logging
 from contextlib import suppress
@@ -22,9 +43,40 @@ class SentenceTransformerEmbedder:
     """
     Embed text using the SentenceTransformer model.
 
+    This class provides methods to embed text into high-dimensional
+    vector representations using pre-trained transformer models.
+
+    It includes intelligent caching to improve performance and
+    automatic memory management to prevent resource exhaustion.
+
+    It supports configurable cache size and memory thresholds,
+    allowing for efficient embedding of large datasets without
+    overwhelming system resources.
+
+    It also provides methods to monitor cache statistics and
+    memory usage, making it suitable for production environments
+    where resource management is critical.
+
     Attributes:
         model:
             Model to use for embedding.
+        _cache_size:
+            Maximum size of the embedding cache.
+        _memory_threshold:
+            Memory usage threshold for automatic cache cleanup.
+        _auto_cleanup:
+            Whether to automatically clear the cache based on
+            memory usage.
+
+    Example:
+        >>> from ragl.config import SentenceTransformerConfig
+        >>> config = SentenceTransformerConfig(
+        ...     model_name_or_path="all-MiniLM-L6-v2",
+        ...     cache_maxsize=1000
+        ... )
+        >>> embedder = SentenceTransformerEmbedder(config)
+        >>> embedding = embedder.embed("Hello, world!")
+        >>> print(embedding.shape)
     """
 
     model: SentenceTransformer
@@ -34,7 +86,7 @@ class SentenceTransformerEmbedder:
 
     @property
     def dimensions(self) -> int:
-        """Get the embedding dimension."""
+        """Retrieve the embedding dimension count."""
         dimensions = self.model.get_sentence_embedding_dimension()
         assert isinstance(dimensions, int)
         return dimensions
@@ -42,6 +94,10 @@ class SentenceTransformerEmbedder:
     def __init__(self, config: SentenceTransformerConfig) -> None:
         """
         Initialize the SentenceTransformerEmbedder.
+
+        This constructor sets up the embedding model and configures
+        caching and memory management based on the provided
+        configuration.
 
         Args:
             config: Configuration object with model and cache settings
@@ -55,7 +111,7 @@ class SentenceTransformerEmbedder:
 
     def cache_info(self):
         """
-        Get cache statistics.
+        Retrieve cache statistics.
 
         Returns:
             Cache statistics including hits, misses, max size,
@@ -70,7 +126,14 @@ class SentenceTransformerEmbedder:
 
     def embed(self, text: str) -> np.ndarray:
         """
-        Embed text into a vector.
+        Embed text into a high-dimensional vector representation.
+
+        This method uses caching to improve performance for repeated
+        embeddings. If the cache exceeds the configured size or if
+        memory usage exceeds the threshold, it will automatically clear
+        the cache to free up resources.
+
+        It returns the embedding as a numpy array of float32 type.
 
         Args:
             text:
@@ -87,11 +150,16 @@ class SentenceTransformerEmbedder:
 
     def _embed_impl(self, text: str) -> np.ndarray:
         """
-        Internal implementation for embedding without cache exposure.
+        Embed text into a high-dimensional vector representation.
+
+        (Internal implementation for embedding without cache exposure.)
 
         Args:
             text:
                 Text to embed.
+
+        Returns:
+            Embedding as a numpy array of float32 type.
         """
         array = self.model.encode(text)
         assert isinstance(array, np.ndarray)
@@ -99,7 +167,12 @@ class SentenceTransformerEmbedder:
 
     def get_memory_usage(self) -> dict[str, Any]:
         """
-        Get detailed memory usage information.
+        Retrieve detailed memory usage information.
+
+        This method provides statistics about the embedding cache,
+        including hits, misses, size, and estimated memory usage.
+        It also retrieves system memory usage statistics, such as
+        process memory and system memory percentage.
 
         Returns:
             Dictionary with cache and system memory statistics

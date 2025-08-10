@@ -14,13 +14,16 @@
 #  - reorder textunit metadata fields in as_dict / signature
 #  - str/repr
 #  - Unit / functional tests
-#  - integration tests
 #  - license
 #  - `backticks` in docstrings or no?
+#  - initial release
+#  - integration tests
 #  - README
+#  - release package
+
+# todo known issues:
 #  - RAGManager calls validate_chunking during init, but validate_chunking
 #     raises ValidationError not ConfigurationError
-#  - release package
 
 
 from pprint import pprint

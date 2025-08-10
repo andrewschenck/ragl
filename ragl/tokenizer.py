@@ -8,7 +8,7 @@ token count or calculating token-based similarity metrics.
 
 The module includes:
 - TiktokenTokenizer:
-    Encoding/decoding text using tiktoken
+    Encoding/decoding text using tiktoken.
 """
 
 import tiktoken

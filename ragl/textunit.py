@@ -6,7 +6,7 @@ text chunks with associated metadata.
 
 The module includes:
 - TextUnit:
-    Dataclass for representing text chunks with metadata
+    Dataclass for representing text chunks with metadata.
 """
 
 import time

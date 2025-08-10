@@ -2,8 +2,7 @@
 Exception classes for the ragl library.
 
 This module defines a hierarchy of custom exceptions used throughout
-the RAGL system. All exceptions inherit from RaglException, which serves
-as the base exception class for the library.
+the ragl library. All exceptions inherit from RaglException.
 
 The exception hierarchy is organized by functional area:
 - Configuration errors for setup and validation issues

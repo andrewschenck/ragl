@@ -7,9 +7,9 @@ for metadata fields used throughout the library.
 
 The module includes:
 - SchemaField:
-    TypedDict for defining field validation rules
+    TypedDict for defining field validation rules.
 - sanitize_metadata:
-    Function to validate and clean metadata according to schema
+    Function to validate and clean metadata according to schema.
 """
 
 from typing import (

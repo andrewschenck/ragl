@@ -1,14 +1,14 @@
 """
 Configuration classes for the ragl library.
 
-This module defines dataclass-based configuration objects for RAGL
+This module defines dataclass-based configuration objects for ragl
 system components including embedders, vector stores, and the RAG
 manager. All configurations inherit from RaglConfig and include
 validation.
 
 Classes:
     RaglConfig:
-        Base class for all RAGL configurations.
+        Base class for all ragl configurations.
     EmbedderConfig:
         Base Embedder configuration
     VectorStoreConfig:
