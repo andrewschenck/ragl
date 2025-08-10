@@ -1,4 +1,6 @@
 # TODO:
+#  - SentenceTransformer default model? which is best? What are most common?
+#  - to_dict vs as_dict -- pick one and stick with it
 #  - method ordering
 #  - docstring audit
 #  - object names

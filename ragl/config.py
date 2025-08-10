@@ -1,3 +1,26 @@
+"""
+Configuration classes for the ragl library.
+
+This module defines dataclass-based configuration objects for RAGL
+system components including embedders, vector stores, and the RAG
+manager. All configurations inherit from RaglConfig and include
+validation.
+
+Classes:
+    RaglConfig:
+        Base class for all RAGL configurations.
+    EmbedderConfig:
+        Base Embedder configuration
+    StorageConfig:
+        Base VectorStore configuration
+    SentenceTransformerConfig:
+        SentenceTransformer concrete embedder config
+    RedisConfig:
+        RedisVectorStore concrete VectorStore configuration
+    ManagerConfig:
+        RAGManager configuration
+"""
+
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -37,31 +60,41 @@ class StorageConfig(RaglConfig):
 @dataclass
 class SentenceTransformerConfig(EmbedderConfig):
     """
-        Attributes:
-            model_name_or_path:
-                Name of the Hugging Face model to use for embedding.
-                This parameter is passed directly to the underlying
-                SentenceTransformer class and can be any compatible
-                model name from Hugging Face's model hub or a path
-                to a model on disk.
+    Configuration for SentenceTransformer.
 
-                Common values include:
-                    - `all-MiniLM-L6-v2`
-                    - `all-mpnet-base-v2`
-                    - `all-distilroberta-v1`
-                    - `sentence-transformers/all-MiniLM-L12-v2`
-            cache_maxsize:
-                Maximum number of embeddings to cache in memory.
-            device:
-                Device to use for embedding.
-            auto_clear_cache:
-                Whether to automatically clean up the cache when
-                memory usage exceeds the threshold.
-            memory_threshold:
-                Threshold for memory usage before cleaning up cache.
-                This is a float between 0.0 and 1.0, where 1.0 means
-                100% memory usage.
+    This class provides configuration options for the
+    SentenceTransformer embedder used in the ragl system.
+
+    It exposes parameters which are injected into the
+    SentenceTransformer class, allowing for flexible
+    configuration of the embedding model used in the ragl
+    system.
+
+    Parameters are validated during initialization to ensure
+    that they meet the requirements for the underlying
+    SentenceTransformer class.
+
+    Attributes:
+        model_name_or_path:
+            Name of the Hugging Face model to use for embedding.
+            This parameter is passed directly to the underlying
+            SentenceTransformer class and can be any compatible
+            model name from Hugging Face's model hub or a path
+            to a model on disk.
+
+        cache_maxsize:
+            Maximum number of embeddings to cache in memory.
+        device:
+            Device to use for embedding.
+        auto_clear_cache:
+            Whether to automatically clean up the cache when
+            memory usage exceeds the threshold.
+        memory_threshold:
+            Threshold for memory usage before cleaning up cache.
+            This is a float between 0.0 and 1.0, where 1.0 means
+            100% memory usage.
     """
+
     model_name_or_path: str = 'all-MiniLM-L6-v2'
     cache_maxsize: int = 10_000  # set this to 0 to disable caching
     device: str | None = None
@@ -74,12 +107,24 @@ class SentenceTransformerConfig(EmbedderConfig):
         self._validate_cache_settings()
 
     def _validate_model_name(self) -> None:
-        """Validate the model name or path."""
+        """
+        Validate model name.
+
+        Raises:
+            ConfigurationError:
+                If model_name_or_path is empty.
+        """
         if not self.model_name_or_path or not self.model_name_or_path.strip():
             raise ConfigurationError('model_name_or_path cannot be empty')
 
     def _validate_cache_settings(self) -> None:
-        """Validate the cache settings."""
+        """
+        Validate cache settings.
+
+        Raises:
+            ConfigurationError:
+                If cache_maxsize is not a non-negative integer,
+        """
         if not isinstance(self.cache_maxsize, int) or self.cache_maxsize < 0:
             raise ConfigurationError(f'{self.cache_maxsize} must be '
                                      'non-negative')
@@ -93,7 +138,14 @@ class SentenceTransformerConfig(EmbedderConfig):
 class RedisConfig(StorageConfig):
     # pylint: disable=too-many-instance-attributes
     """
-    Configuration for Redis connection.
+    Configuration for RedisVectorStore.
+
+    This class provides configuration options for the
+    RedisVectorStore backend. Various parameters are exposed to permit
+    configuration of the Redis connection and behavior.
+
+    Parameters are validated during initialization to ensure
+    that they meet basic functional requirements.
 
     Attributes:
         host:
@@ -156,7 +208,13 @@ class RedisConfig(StorageConfig):
         self._validate_timeouts()
 
     def _validate_connection_settings(self) -> None:
-        """Validate Redis connection settings."""
+        """
+        Validate Redis connection settings.
+
+        Raises:
+            ConfigurationError:
+                If host is empty, port is not in the range 1-65535,
+        """
         if not self.host or not self.host.strip():
             raise ConfigurationError('host cannot be empty')
 
@@ -167,7 +225,14 @@ class RedisConfig(StorageConfig):
             raise ConfigurationError(f'{self.db=} must be non-negative')
 
     def _validate_timeouts(self) -> None:
-        """Validate timeout settings."""
+        """
+        Validate timeout settings.
+
+        Raises:
+            ConfigurationError:
+                If socket_timeout, socket_connect_timeout, or
+                health_check_interval are not positive integers.
+        """
         if self.socket_timeout < 1:
             raise ConfigurationError(f'{self.socket_timeout=} must be '
                                      'positive')
@@ -185,6 +250,13 @@ class RedisConfig(StorageConfig):
 class ManagerConfig:
     """
     Configuration for RAGManager.
+
+    This class provides configuration options for the RAGManager,
+    which manages the RAG process. It includes settings which modify
+    document chunking behavior, query limits, and index management.
+
+    Parameters are validated during initialization to ensure
+    that they meet the requirements for the RAG system.
 
     Attributes:
         index_name:
@@ -219,6 +291,13 @@ class ManagerConfig:
         self._validate_names()
 
     def _validate_chunk_settings(self) -> None:
+        """
+        Validate chunking settings.
+
+        Raises:
+            ConfigurationError:
+                If chunk_size is not positive, overlap is negative,
+        """
         if self.chunk_size < 1:
             raise ConfigurationError(f'{self.chunk_size=} must be positive')
 
@@ -230,6 +309,15 @@ class ManagerConfig:
                                      f'({self.chunk_size=})')
 
     def _validate_limits(self) -> None:
+        """
+        Validate query and input length limits.
+
+        Raises:
+            ConfigurationError:
+                If max_query_length or max_input_length are not
+                positive, or if max_query_length exceeds
+                max_input_length.
+        """
         if self.max_query_length < 1:
             raise ConfigurationError(f'{self.max_query_length=} must be '
                                      'positive')
@@ -243,6 +331,14 @@ class ManagerConfig:
                                      f'{self.max_input_length=}')
 
     def _validate_names(self) -> None:
+        """
+        Validate index and base ID names.
+
+        Raises:
+            ConfigurationError:
+                If index_name is empty, contains invalid characters,
+                or if default_base_id is empty.
+        """
         if not self.index_name or not self.index_name.strip():
             raise ConfigurationError('index_name cannot be empty')
 

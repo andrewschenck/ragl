@@ -5,10 +5,11 @@ This module provides the primary interface for managing text chunks in
 a retrieval-augmented generation system. It handles text splitting,
 storage with metadata, and semantic retrieval operations.
 
-Key Components:
-    RAGManager: Main class for managing text chunks and retrieval
-        operations
-    RAGTelemetry: Performance monitoring and metrics collection
+Classes:
+    RAGManager:
+        Main class for managing RAG operations
+    RAGTelemetry:
+        Performance monitoring and metrics collection
 
 Features:
     - Text chunking with configurable size and overlap
