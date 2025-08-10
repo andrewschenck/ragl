@@ -6,17 +6,21 @@ creating embedders, vector stores, and RAG managers based on
 configuration objects. The registry system allows for dynamic
 registration and instantiation of different implementation classes.
 
-Key Components:
+Classes:
 - AbstractFactory:
     Base factory class with automatic registration mechanism
 - EmbedderFactory:
     Factory for creating text embedding implementations
 - VectorStoreFactory:
     Factory for creating vector storage implementations
+- SentenceTransformerFactory:
+    Factory for creating SentenceTransformer embedder instances
+- RedisVectorStoreFactory:
+    Factory for creating RedisVectorStore instances
+
+Functions:
 - create_rag_manager:
-    Convenience function for complete ragl setup
-
-
+    Convenience function for complete ragl setup from configurations
 """
 
 import logging

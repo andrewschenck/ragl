@@ -8,6 +8,10 @@ retrieval of text documents based on semantic similarity.
 The RAGStore acts as a high-level interface that coordinates between
 an Embedder (for converting text to vectors) and a VectorStore (for
 persistent storage and similarity search).
+
+Classes:
+    RAGStore:
+        Store and retrieve text using an embedder and vector store.
 """
 
 from typing import Mapping, Any

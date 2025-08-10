@@ -5,9 +5,11 @@ This module provides tools for defining and enforcing schemas on
 metadata dictionaries, ensuring data consistency and type safety
 for metadata fields used throughout the library.
 
-The module includes:
+Classes:
 - SchemaField:
     TypedDict for defining field validation rules.
+
+Functions:
 - sanitize_metadata:
     Function to validate and clean metadata according to schema.
 """

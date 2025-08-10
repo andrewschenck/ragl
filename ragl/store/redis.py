@@ -21,11 +21,8 @@ timestamps, confidence scores, tags, parent IDs, source information,
 language, section, and author details. All metadata is sanitized
 according to a predefined schema before storage.
 
-Storage Limits:
-    - Text content: 512 MB
-    - Total metadata: 64 MB
-    - Individual metadata fields: 32 MB
-    - Text ID length: 256 characters
+Classes:
+    - RedisVectorStore: Main class for managing Redis vector storage.
 """
 
 import logging
@@ -93,6 +90,12 @@ class RedisVectorStore:
     connection issues, query failures, and validation errors.
     It uses a context manager for Redis connections
     to ensure proper resource management and error handling.
+
+    Storage Limits:
+        - Text content: 512 MB
+        - Total metadata: 64 MB
+        - Individual metadata fields: 32 MB
+        - Text ID length: 256 characters
 
     Attributes:
         index:

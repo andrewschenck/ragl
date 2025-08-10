@@ -95,7 +95,7 @@ class SentenceTransformerConfig(EmbedderConfig):
             100% memory usage.
     """
 
-    model_name_or_path: str = 'all-MiniLM-L6-v2'
+    model_name_or_path: str = 'all-mpnet-base-v2'
     cache_maxsize: int = 10_000  # set this to 0 to disable caching
     device: str | None = None
     auto_clear_cache: bool = True

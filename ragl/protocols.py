@@ -5,6 +5,16 @@ This module defines the core protocols that establish contracts
 for different components in the ragl system, including text
 embedding, vector storage, text retrieval, and tokenization
 operations.
+
+Classes:
+    EmbedderProtocol:
+        Protocol for text embedding operations.
+    VectorStoreProtocol:
+        Protocol for vector storage operations.
+    RAGStoreProtocol:
+        Protocol for text retrieval and storage.
+    TokenizerProtocol:
+        Protocol for text tokenization operations.
 """
 
 from typing import (

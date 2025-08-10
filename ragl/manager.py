@@ -6,10 +6,10 @@ a retrieval-augmented generation system. It handles text splitting,
 storage with metadata, and semantic retrieval operations.
 
 Classes:
-    RAGManager:
-        Main class for managing RAG operations
     RAGTelemetry:
         Performance monitoring and metrics collection
+    RAGManager:
+        Main class for managing RAG operations
 
 Features:
     - Text chunking with configurable size and overlap

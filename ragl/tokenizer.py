@@ -6,7 +6,7 @@ and decoding text into tokens. The tokenizer is used for text processing
 tasks that require token-level operations, such as chunking text by
 token count or calculating token-based similarity metrics.
 
-The module includes:
+Classes:
 - TiktokenTokenizer:
     Encoding/decoding text using tiktoken.
 """

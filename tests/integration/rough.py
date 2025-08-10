@@ -4,7 +4,6 @@
 #     - Use class attribute to designate permitted callers so that it can be extended by callers
 #      - name attribute something that makes sure it's clear it's just for the base class
 #  - rename _should_create_new_factory_map?
-#  - SentenceTransformer default model? which is best? What are most common?
 #  - to_dict vs as_dict -- pick one and stick with it
 #  - RAGStore.get_relevant top_k drop default
 #  - More Logging / levels sanity check

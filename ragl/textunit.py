@@ -4,7 +4,7 @@ Text unit data structures and utilities.
 This module defines the core TextUnit class for representing stored
 text chunks with associated metadata.
 
-The module includes:
+Classes:
 - TextUnit:
     Dataclass for representing text chunks with metadata.
 """

@@ -70,11 +70,11 @@ class SentenceTransformerEmbedder:
 
     Example:
         >>> config = SentenceTransformerConfig(
-        ...     model_name_or_path="all-MiniLM-L6-v2",
+        ...     model_name_or_path='intfloat/e5-large-v2',
         ...     cache_maxsize=1000,
         ... )
         >>> embedder = SentenceTransformerEmbedder(config)
-        >>> embedding = embedder.embed("Hello, world!")
+        >>> embedding = embedder.embed('Hello, world!')
         >>> print(embedding.shape)
     """
 
