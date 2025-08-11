@@ -56,6 +56,7 @@ if __name__ == "__main__":
         ragstore=ragstore,
         # tokenizer=TiktokenTokenizer(encoding_name='cl100k_base'),
     )
+    print(repr(storage))
 
     def print_context(query: str, contexts: list[TextUnit]):
         print(f"\nContext for '{query}':")

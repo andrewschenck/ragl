@@ -242,6 +242,7 @@ class RedisVectorStore:
                 If both redis_client and redis_config are provided, or
                 if schema version mismatch occurs.
         """
+        # pylint: disable=too-many-statements
         if redis_client is None and redis_config is None:
             msg = 'Either redis_client or redis_config must be provided'
             _LOG.critical(msg)
@@ -267,21 +268,16 @@ class RedisVectorStore:
                 _LOG.critical(msg)
                 raise StorageConnectionError(msg) from e
         else:
-            assert redis_config is not None
+            if not isinstance(redis_config, RedisConfig):
+                msg = 'redis_config must be an instance of RedisConfig'
+                _LOG.critical(msg)
+                raise ConfigurationError(msg)
 
             pool_config = {**self.POOL_DEFAULTS, **redis_config.to_dict()}
-            try:
-                pool = redis.BlockingConnectionPool(**pool_config)
-                self.redis_client = redis.Redis(connection_pool=pool)
-                self.redis_client.ping()
-                _LOG.info('Successfully connected to Redis')
+            pool = redis.BlockingConnectionPool(**pool_config)
+            self.redis_client = redis.Redis(connection_pool=pool)
 
-            except redis.ConnectionError as e:
-                msg = f'Failed to connect to Redis: {e}'
-                _LOG.error(msg)
-                raise StorageConnectionError(msg) from e
-
-        self.dimensions = dimensions
+        self.dimensions = dimensions  # todo validate dimensions?
         self.index_name = index_name
 
         self.metadata_schema = {
@@ -323,17 +319,27 @@ class RedisVectorStore:
             },
         }
         self._enforce_schema_version()
-        schema = self._create_redis_schema(index_name)
+        schema = self._create_redis_schema(index_name)  # todo what about empty or None index name?
         self.index = SearchIndex(schema, self.redis_client)
 
         try:
-            self.index.create()
+            if not self.index.exists():  # todo test this change
+                self.index.create()
+                _LOG.info('Created new index: %s', index_name)
             _LOG.info('Connected to index: %s', index_name)
+
+        except redis.ResponseError as e:
+            msg = f'Failed to create Redis index: {e}'
+            _LOG.error(msg)
+            raise DataError(msg) from e
 
         except redis.ConnectionError as e:
             msg = f'Failed to connect to Redis: {e}'
             _LOG.error(msg)
             raise StorageConnectionError(msg) from e
+
+        except Exception as e:
+            raise DataError(f'Unexpected error creating index: {e}') from e
 
     def clear(self) -> None:
         """
@@ -346,7 +352,7 @@ class RedisVectorStore:
             self.index.delete(drop=True)
             self.index.create()
             _LOG.info('Index cleared successfully')
-            version_key = f"schema_version:{self.index_name}"
+            version_key = f'schema_version:{self.index_name}'
             client.set(version_key, self.SCHEMA_VERSION)
             _LOG.info('Reset schema version to %s for index %s',
                       self.SCHEMA_VERSION, self.index_name)
@@ -1116,70 +1122,73 @@ class RedisVectorStore:
         self.close()
 
 
-def __str__(self) -> str:
-    """
-    Return a human-readable string representation of the Redis store.
+    def __str__(self) -> str:
+        """
+        Return a human-readable string representation of the Redis store.
 
-    Returns:
-        Formatted string with key store information.
-    """
-    try:
-        connection_kwargs = getattr(
-            self.redis_client.connection_pool,
-            'connection_kwargs',
-            {},
-        )
-        host = connection_kwargs.get('host', 'unknown')
-        port = connection_kwargs.get('port', 'unknown')
-
+        Returns:
+            Formatted string with key store information.
+        """
         try:
-            self.redis_client.ping()
-            status = 'connected'
-        except redis.RedisError:
-            status = 'disconnected'
+            connection_kwargs = getattr(
+                self.redis_client.connection_pool,
+                'connection_kwargs',
+                {},
+            )
+            host = connection_kwargs.get('host', 'unknown')
+            port = connection_kwargs.get('port', 'unknown')
 
-    except AttributeError:
-        host = port = 'unknown'
-        status = 'unknown'
+            try:
+                self.redis_client.ping()
+                status = 'connected'
+            except redis.RedisError:
+                status = 'disconnected'
 
-    return (f"RedisVectorStore(index='{self.index_name}', "
-            f"dimensions={self.dimensions}, "
-            f"host={host}, "
-            f"port={port}, "
-            f"status={status})")
+        except AttributeError:
+            host = port = 'unknown'
+            status = 'unknown'
 
+        return (f"RedisVectorStore(index='{self.index_name}', "
+                f"dimensions={self.dimensions}, "
+                f"host={host}, "
+                f"port={port}, "
+                f"status={status})")
 
-def __repr__(self) -> str:
-    """
-    Return a detailed string representation for debugging.
+    def __repr__(self) -> str:
+        """
+        Return a detailed string representation for debugging.
 
-    Returns:
-        Detailed string representation including all key attributes.
-    """
-    try:
-        connection_kwargs = getattr(
-            self.redis_client.connection_pool,
-            'connection_kwargs',
-            {}
-        )
-        max_connections = getattr(
-            self.redis_client.connection_pool,
-            'max_connections',
-            'unknown'
-        )
+        Returns:
+            Detailed string representation including all key attributes.
+        """
+        try:
+            connection_pool = getattr(self.redis_client, 'connection_pool', None)
 
-        host = connection_kwargs.get('host', 'unknown')
-        port = connection_kwargs.get('port', 'unknown')
-        db = connection_kwargs.get('db', 0)
+            if connection_pool:
+                connection_kwargs = getattr(
+                    connection_pool,
+                    'connection_kwargs',
+                    {}
+                )
+                max_connections = getattr(
+                    connection_pool,
+                    'max_connections',
+                    'unknown'
+                )
+                host = connection_kwargs.get('host', 'unknown')
+                port = connection_kwargs.get('port', 'unknown')
+                db = connection_kwargs.get('db', 0)
+            else:
+                host = port = db = max_connections = 'unknown'
 
-    except AttributeError:
-        host = port = db = max_connections = 'unknown'
+        except (AttributeError, TypeError):
+            host = port = db = max_connections = 'unknown'
 
-    return (f"RedisVectorStore("
-            f"index_name='{self.index_name}', "
-            f"dimensions={self.dimensions}, "
-            f"host='{host}', "
-            f"port={port}, "
-            f"db={db}, "
-            f"schema_version={self.SCHEMA_VERSION}, "
-            f"max_connections={max_connections})")
+        return (f"RedisVectorStore("
+                f"index_name='{self.index_name}', "
+                f"dimensions={self.dimensions}, "
+                f"host='{host}', "
+                f"port={port}, "
+                f"db={db}, "
+                f"schema_version={self.SCHEMA_VERSION}, "
+                f"max_connections={max_connections})")
