@@ -24,8 +24,6 @@ class TestRedisVectorStore(unittest.TestCase):
 
     @patch('ragl.store.redis.SearchIndex')
     @patch('ragl.store.redis.IndexSchema')
-    # @patch('redis.Redis', spec_set=redis.Redis)
-    # @patch('ragl.store.redis.redis.Redis', spec_set=redis.Redis)
     @patch('ragl.store.redis.redis.Redis')
     @patch('redis.BlockingConnectionPool')
     @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
@@ -98,36 +96,6 @@ class TestRedisVectorStore(unittest.TestCase):
             dimensions=self.dimensions,
             index_name=self.index_name
         )
-
-    # def setUp(self):
-    #     """Set up test fixtures."""
-    #     self.redis_config = RedisConfig(
-    #         host='localhost',
-    #         port=6379,
-    #         db=0,
-    #     )
-    #     self.dimensions = 768
-    #     self.index_name = 'test_index'
-    #
-    #     # Mock dependencies
-    #     self.mock_redis_client = Mock(spec=redis.Redis)
-    #     self.mock_index = Mock(spec=SearchIndex)
-    #     self.mock_schema = Mock(spec=IndexSchema)
-    #
-    #     # Setup default mock behaviors
-    #     self.mock_redis_client.ping.return_value = True
-    #     self.mock_redis_client.info.return_value = {
-    #         'used_memory':               1000000,
-    #         'used_memory_human':         '1.0M',
-    #         'used_memory_peak':          2000000,
-    #         'used_memory_peak_human':    '2.0M',
-    #         'maxmemory':                 10000000,
-    #         'maxmemory_human':           '10.0M',
-    #         'maxmemory_policy':          'allkeys-lru',
-    #         'total_system_memory':       16000000000,
-    #         'total_system_memory_human': '16.0G'
-    #     }
-    #     self.mock_index.info.return_value = {'num_docs': 100}
 
     @patch('redis.Redis')
     @patch('redisvl.index.SearchIndex')
@@ -1005,7 +973,7 @@ class TestRedisVectorStore(unittest.TestCase):
             )
 
         embedding = np.random.rand(self.dimensions)
-        store._validate_embedding_dimensions(embedding)  # Should not raise
+        store._validate_dimensions_match(embedding)  # Should not raise
 
     @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
     def test_validate_embedding_dimensions_invalid(self, mock_validate_sync):
@@ -1020,7 +988,7 @@ class TestRedisVectorStore(unittest.TestCase):
         embedding = np.random.rand(512)  # Wrong dimensions
 
         with self.assertRaises(ConfigurationError):
-            store._validate_embedding_dimensions(embedding)
+            store._validate_dimensions_match(embedding)
 
     @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
     def test_validate_input_sizes_valid(self, mock_validate_sync):
@@ -1432,44 +1400,44 @@ class TestRedisVectorStore(unittest.TestCase):
 
         self.assertIn("Both redis_client and redis_config were provided", str(context.exception))
 
-    # @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
-    # def test_init_invalid_dimensions_zero(self, mock_validate):
-    #     """Test initialization with zero dimensions."""
-    #     with self.assertRaises(ConfigurationError) as context:
-    #         RedisVectorStore(
-    #             redis_config=self.redis_config,
-    #             dimensions=0,
-    #             index_name=self.index_name
-    #         )
-    #
-    #     self.assertIn("dimensions must be a positive integer",
-    #                   str(context.exception))
-    #
-    # @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
-    # def test_init_invalid_dimensions_negative(self, mock_validate):
-    #     """Test initialization with negative dimensions."""
-    #     with self.assertRaises(ConfigurationError) as context:
-    #         RedisVectorStore(
-    #             redis_config=self.redis_config,
-    #             dimensions=-100,
-    #             index_name=self.index_name
-    #         )
-    #
-    #     self.assertIn("dimensions must be a positive integer",
-    #                   str(context.exception))
-    #
-    # @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
-    # def test_init_invalid_dimensions_float(self, mock_validate):
-    #     """Test initialization with float dimensions."""
-    #     with self.assertRaises(ConfigurationError) as context:
-    #         RedisVectorStore(
-    #             redis_config=self.redis_config,
-    #             dimensions=768.5,
-    #             index_name=self.index_name
-    #         )
-    #
-    #     self.assertIn("dimensions must be a positive integer",
-    #                   str(context.exception))
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_init_invalid_dimensions_zero(self, mock_validate):
+        """Test initialization with zero dimensions."""
+        with self.assertRaises(ConfigurationError) as context:
+            RedisVectorStore(
+                redis_config=self.redis_config,
+                dimensions=0,
+                index_name=self.index_name
+            )
+
+        self.assertIn("Dimensions must be positive",
+                      str(context.exception))
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_init_invalid_dimensions_negative(self, mock_validate):
+        """Test initialization with negative dimensions."""
+        with self.assertRaises(ConfigurationError) as context:
+            RedisVectorStore(
+                redis_config=self.redis_config,
+                dimensions=-100,
+                index_name=self.index_name
+            )
+
+        self.assertIn("Dimensions must be positive",
+                      str(context.exception))
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_init_invalid_dimensions_float(self, mock_validate):
+        """Test initialization with float dimensions."""
+        with self.assertRaises(ConfigurationError) as context:
+            RedisVectorStore(
+                redis_config=self.redis_config,
+                dimensions=768.5,
+                index_name=self.index_name
+            )
+
+        self.assertIn("Dimensions must be positive",
+                      str(context.exception))
 
     @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
     def test_init_invalid_dimensions_none(self, mock_validate):
@@ -1481,44 +1449,57 @@ class TestRedisVectorStore(unittest.TestCase):
                 index_name=self.index_name
             )
 
-        self.assertIn("Dimensions required for schema creation",
+        self.assertIn("Dimensions required for Schema creation",
                       str(context.exception))
 
-    # @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
-    # def test_init_empty_index_name(self, mock_validate):
-    #     """Test initialization with empty index name."""
-    #     with self.assertRaises(ConfigurationError) as context:
-    #         RedisVectorStore(
-    #             redis_config=self.redis_config,
-    #             dimensions=self.dimensions,
-    #             index_name=""
-    #         )
-    #
-    #     self.assertIn("index_name cannot be empty", str(context.exception))
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_init_empty_index_name(self, mock_validate):
+        """Test initialization with empty index name."""
+        with self.assertRaises(ConfigurationError) as context:
+            RedisVectorStore(
+                redis_config=self.redis_config,
+                dimensions=self.dimensions,
+                index_name=""
+            )
 
-    # @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
-    # def test_init_whitespace_only_index_name(self, mock_validate):
-    #     """Test initialization with whitespace-only index name."""
-    #     with self.assertRaises(ConfigurationError) as context:
-    #         RedisVectorStore(
-    #             redis_config=self.redis_config,
-    #             dimensions=self.dimensions,
-    #             index_name="   \n\t   "
-    #         )
-    #
-    #     self.assertIn("index_name cannot be empty", str(context.exception))
+        self.assertIn("index_name cannot be empty", str(context.exception))
 
-    # @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
-    # def test_init_none_index_name(self, mock_validate):
-    #     """Test initialization with None index name."""
-    #     with self.assertRaises(ConfigurationError) as context:
-    #         RedisVectorStore(
-    #             redis_config=self.redis_config,
-    #             dimensions=self.dimensions,
-    #             index_name=None
-    #         )
-    #
-    #     self.assertIn("index_name cannot be empty", str(context.exception))
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_init_whitespace_only_index_name(self, mock_validate):
+        """Test initialization with whitespace-only index name."""
+        with self.assertRaises(ConfigurationError) as context:
+            RedisVectorStore(
+                redis_config=self.redis_config,
+                dimensions=self.dimensions,
+                index_name="   \n\t   "
+            )
+
+        self.assertIn("index_name cannot be empty", str(context.exception))
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_init_none_index_name(self, mock_validate):
+        """Test initialization with None index name."""
+        with self.assertRaises(ConfigurationError) as context:
+            RedisVectorStore(
+                redis_config=self.redis_config,
+                dimensions=self.dimensions,
+                index_name=None
+            )
+
+        self.assertIn("index_name cannot be empty", str(context.exception))
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_init_long_index_name(self, mock_validate):
+        """Test initialization with None index name."""
+        max_index_len = RedisVectorStore.MAX_TEXT_ID_LENGTH
+        with self.assertRaises(ConfigurationError) as context:
+            RedisVectorStore(
+                redis_config=self.redis_config,
+                dimensions=self.dimensions,
+                index_name=''.join(str(i % 10) for i in range(max_index_len + 1)),
+            )
+
+        self.assertIn("index_name too long: 257 > 256", str(context.exception))
 
     @patch('ragl.store.redis.redis.Redis')
     @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')

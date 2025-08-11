@@ -253,11 +253,6 @@ class RedisVectorStore:
             _LOG.critical(msg)
             raise ConfigurationError(msg)
 
-        if dimensions is None:
-            msg = 'Dimensions required for schema creation'
-            _LOG.critical(msg)
-            raise ConfigurationError(msg)
-
         if redis_client is not None:
             self.redis_client = redis_client
             try:
@@ -277,7 +272,12 @@ class RedisVectorStore:
             pool = redis.BlockingConnectionPool(**pool_config)
             self.redis_client = redis.Redis(connection_pool=pool)
 
-        self.dimensions = dimensions  # todo validate dimensions?
+        self._validate_dimensions(dimensions)
+        self._validate_index_name(index_name)
+
+        assert isinstance(dimensions, int)
+        assert isinstance(index_name, str)
+        self.dimensions = dimensions
         self.index_name = index_name
 
         self.metadata_schema = {
@@ -319,7 +319,7 @@ class RedisVectorStore:
             },
         }
         self._enforce_schema_version()
-        schema = self._create_redis_schema(index_name)  # todo what about empty or None index name?
+        schema = self._create_redis_schema(index_name)
         self.index = SearchIndex(schema, self.redis_client)
 
         try:
@@ -406,7 +406,7 @@ class RedisVectorStore:
         Returns:
             List of result dicts, may be fewer than top_k.
         """
-        self._validate_embedding_dimensions(embedding)
+        self._validate_dimensions_match(embedding)
 
         vector_query = self._build_vector_query(
             embedding=embedding,
@@ -540,7 +540,7 @@ class RedisVectorStore:
 
         self._validate_input_sizes(text, metadata)
         self._validate_text_id(text_id)
-        self._validate_embedding_dimensions(embedding)
+        self._validate_dimensions_match(embedding)
 
         sanitized = sanitize_metadata(
             metadata=metadata,
@@ -984,7 +984,30 @@ class RedisVectorStore:
             **metadata,
         }
 
-    def _validate_embedding_dimensions(self, embedding: np.ndarray) -> None:
+    @staticmethod
+    def _validate_dimensions(dimensions: int | None) -> None:
+        """
+        Validate dimensions for Redis schema creation.
+
+        Args:
+            dimensions:
+                Size of embedding vectors to validate.
+
+        Raises:
+            ValidationError:
+                If dimensions do not match the configured dimensions.
+        """
+        if dimensions is None:
+            msg = 'Dimensions required for Schema creation'
+            _LOG.critical(msg)
+            raise ConfigurationError(msg)
+
+        if not isinstance(dimensions, int) or dimensions <= 0:
+            msg = 'Dimensions must be positive'
+            _LOG.critical(msg)
+            raise ConfigurationError(msg)
+
+    def _validate_dimensions_match(self, embedding: np.ndarray) -> None:
         """
         Validate embedding dimensions against store dimensions.
 
@@ -1000,6 +1023,33 @@ class RedisVectorStore:
         if dim != self.dimensions:
             raise ConfigurationError('Embedding dimension mismatch: '
                                      f'{dim} != {self.dimensions}')
+
+    @staticmethod
+    def _validate_index_name(index_name: str) -> None:
+        """
+        Validate the index name format and length.
+
+        Ensures that the provided index name is not empty, does not
+        exceed the maximum length, and starts with the required
+        TEXT_ID_PREFIX. Raises ValidationError if any of these
+        conditions are not met.
+
+        Args:
+            index_name:
+                Index name to validate.
+
+        Raises:
+            ValidationError:
+                If index_name is invalid.
+        """
+        if not index_name or not index_name.strip():
+            raise ConfigurationError('index_name cannot be empty')
+
+        if len(index_name) > RedisVectorStore.MAX_TEXT_ID_LENGTH:
+            msg = (f'index_name too long: {len(index_name)} > '
+                   f'{RedisVectorStore.MAX_TEXT_ID_LENGTH}')
+            _LOG.critical(msg)
+            raise ConfigurationError(msg)
 
     def _validate_input_sizes(
             self,
