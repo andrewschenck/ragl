@@ -1121,7 +1121,6 @@ class RedisVectorStore:
         _LOG.debug('Exiting Redis context manager')
         self.close()
 
-
     def __str__(self) -> str:
         """
         Return a human-readable string representation of the Redis store.
@@ -1162,18 +1161,22 @@ class RedisVectorStore:
             Detailed string representation including all key attributes.
         """
         try:
-            connection_pool = getattr(self.redis_client, 'connection_pool', None)
+            connection_pool = getattr(
+                self.redis_client,
+                'connection_pool',
+                None,
+            )
 
             if connection_pool:
                 connection_kwargs = getattr(
                     connection_pool,
                     'connection_kwargs',
-                    {}
+                    {},
                 )
                 max_connections = getattr(
                     connection_pool,
                     'max_connections',
-                    'unknown'
+                    'unknown',
                 )
                 host = connection_kwargs.get('host', 'unknown')
                 port = connection_kwargs.get('port', 'unknown')
