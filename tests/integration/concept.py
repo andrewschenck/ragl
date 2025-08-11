@@ -20,6 +20,10 @@ if __name__ == "__main__":
         embedder_config=embedder_config,
         manager_config=manager_config,
     )
+    text = "Text with <script>alert('xss')</script> dangerous chars!"
+    result = manager._sanitize_text_input(text)
+    print(result)
+
     from ragl.registry import AbstractFactory, EmbedderFactory, VectorStoreFactory
     print(AbstractFactory._factory_map.items())
     print(EmbedderFactory._factory_map.items())

@@ -1115,40 +1115,71 @@ class RedisVectorStore:
         _LOG.debug('Exiting Redis context manager')
         self.close()
 
-    def __str__(self) -> str:
-        """
-        Return a human-readable string representation of the Redis store.
 
-        Returns:
-            Formatted string with key store information.
-        """
-        host = getattr(self.redis_client.connection_pool,
-                       'connection_kwargs', {}).get('host', 'unknown')
-        port = getattr(self.redis_client.connection_pool,
-                       'connection_kwargs', {}).get('port', 'unknown')
+def __str__(self) -> str:
+    """
+    Return a human-readable string representation of the Redis store.
 
-        return (f"RedisVectorStore(index='{self.index_name}', "
-                f"dimensions={self.dimensions}, "
-                f"host={host}, "
-                f"port={port})")
+    Returns:
+        Formatted string with key store information.
+    """
+    try:
+        connection_kwargs = getattr(
+            self.redis_client.connection_pool,
+            'connection_kwargs',
+            {},
+        )
+        host = connection_kwargs.get('host', 'unknown')
+        port = connection_kwargs.get('port', 'unknown')
 
-    def __repr__(self) -> str:
-        """
-        Return a detailed string representation for debugging.
+        try:
+            self.redis_client.ping()
+            status = 'connected'
+        except redis.RedisError:
+            status = 'disconnected'
 
-        Returns:
-            Detailed string representation including all key attributes.
-        """
-        connection_kwargs = getattr(self.redis_client.connection_pool,
-                                    'connection_kwargs', {})
-        max_connections = getattr(self.redis_client.connection_pool,
-                                  'max_connections', 'unknown')
+    except AttributeError:
+        host = port = 'unknown'
+        status = 'unknown'
 
-        return (f"RedisVectorStore("
-                f"index_name='{self.index_name}', "
-                f"dimensions={self.dimensions}, "
-                f"host='{connection_kwargs.get('host', 'unknown')}', "
-                f"port={connection_kwargs.get('port', 'unknown')}, "
-                f"db={connection_kwargs.get('db', 0)}, "
-                f"schema_version={self.SCHEMA_VERSION}, "
-                f"max_connections={max_connections})")
+    return (f"RedisVectorStore(index='{self.index_name}', "
+            f"dimensions={self.dimensions}, "
+            f"host={host}, "
+            f"port={port}, "
+            f"status={status})")
+
+
+def __repr__(self) -> str:
+    """
+    Return a detailed string representation for debugging.
+
+    Returns:
+        Detailed string representation including all key attributes.
+    """
+    try:
+        connection_kwargs = getattr(
+            self.redis_client.connection_pool,
+            'connection_kwargs',
+            {}
+        )
+        max_connections = getattr(
+            self.redis_client.connection_pool,
+            'max_connections',
+            'unknown'
+        )
+
+        host = connection_kwargs.get('host', 'unknown')
+        port = connection_kwargs.get('port', 'unknown')
+        db = connection_kwargs.get('db', 0)
+
+    except AttributeError:
+        host = port = db = max_connections = 'unknown'
+
+    return (f"RedisVectorStore("
+            f"index_name='{self.index_name}', "
+            f"dimensions={self.dimensions}, "
+            f"host='{host}', "
+            f"port={port}, "
+            f"db={db}, "
+            f"schema_version={self.SCHEMA_VERSION}, "
+            f"max_connections={max_connections})")

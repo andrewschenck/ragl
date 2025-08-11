@@ -251,16 +251,17 @@ class SentenceTransformerEmbedder:
         """Return detailed string representation for debugging."""
         return (
             f'{self.__class__.__name__}('
+            f'model="{self.model.model_name}", '
             f'dims={self.dimensions}, '
-            f'cache={self._cache_size}, '
-            f'device="{self.model.device}"'
-            f')'
+            f'cache_size={self._cache_size}, '
+            f'device="{self.model.device}", '
+            f'auto_cleanup={self._auto_cleanup})'
         )
 
     def __str__(self) -> str:
         """Return user-friendly string representation."""
-        cache_info = self.cache_info()
         return (
-            f'SentenceTransformerEmbedder({self.dimensions}D, '
-            f'cache: {cache_info.currsize}/{cache_info.maxsize})'
+            f'SentenceTransformerEmbedder('
+            f'{self.dimensions}D, '
+            f'cache_size={self._cache_size})'
         )

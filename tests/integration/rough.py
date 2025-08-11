@@ -1,5 +1,4 @@
 # TODO:
-#  - str/repr
 #  - Unit / functional tests
 #  - license
 #  - pre release
@@ -27,7 +26,6 @@ from ragl.ragstore import RAGStore
 from ragl.textunit import TextUnit
 from ragl.store.redis import RedisVectorStore
 from ragl.exceptions import ValidationError
-# from ragl.tokenizer import TiktokenTokenizer
 
 from ragl.config import SentenceTransformerConfig, ManagerConfig, RedisConfig
 

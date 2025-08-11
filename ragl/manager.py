@@ -535,12 +535,13 @@ class RAGManager:
                 Whether to reset performance metrics as well.
         """
         _LOG.debug('Resetting store')
-        with self.track_operation('reset'):
-            self.ragstore.clear()
 
-            if reset_metrics:
-                _LOG.debug('Resetting metrics')
-                self.reset_metrics()
+        if reset_metrics:
+            self.reset_metrics()
+            self.ragstore.clear()
+        else:
+            with self.track_operation('reset'):
+                self.ragstore.clear()
 
         _LOG.info('Store reset')
 
