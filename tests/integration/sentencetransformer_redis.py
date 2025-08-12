@@ -165,7 +165,7 @@ class TestRAGLIntegration:
             "that focuses on building systems that learn from data."
         )
 
-        docs = self.manager.add_text(
+        _ = self.manager.add_text(
             text_or_doc=reference_text,
             base_id="doc:ml_definition"
         )
@@ -217,19 +217,17 @@ class TestRAGLIntegration:
     def test_error_handling(self):
         """Test error handling for invalid operations."""
         # Test deletion of non-existent document
-        try:
-            self.manager.delete_text("non_existent_id")
-            # Should either succeed silently or raise specific exception
-        except Exception as e:
-            logging.info(f"Expected error for non-existent deletion: {e}")
+        self.manager.delete_text("non_existent_id")
 
         # Test empty query
-        contexts = self.manager.get_context(query="", top_k=1)
+        result = self.manager.get_context(query="", top_k=1)
         # Should return empty results or handle gracefully
+        assert len(result) == 0
+        assert isinstance(result, list)
 
         # Test invalid top_k
         try:
-            contexts = self.manager.get_context(query="test", top_k=0)
+            _ = self.manager.get_context(query="test", top_k=0)
         except ValidationError:
             logging.info("Correctly handled invalid top_k")
 
@@ -257,9 +255,9 @@ if __name__ == "__main__":
         try:
             test_suite.setup_method()
             getattr(test_suite, test_method)()
-            print(f"✓ {test_method} passed")
+            print(f"{test_method} passed")
         except Exception as e:
-            print(f"✗ {test_method} failed: {e}")
+            print(f"{test_method} failed: {e}")
             exit_code = 1
         finally:
             test_suite.teardown_method()

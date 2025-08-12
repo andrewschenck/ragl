@@ -396,10 +396,16 @@ class RAGManager:
         associated metadata from the store.
 
         Args:
-            text_id: ID of text to delete.
+            text_id:
+                ID of text to delete.
         """
         _LOG.debug('Deleting text %s', text_id)
         with self.track_operation('delete_text'):
+            existing_texts = self.ragstore.list_texts()
+            if text_id not in existing_texts:
+                _LOG.warning('Text ID %s not found, skipping deletion',
+                             text_id)
+                return
             self.ragstore.delete_text(text_id)
 
     def get_context(
@@ -631,7 +637,8 @@ class RAGManager:
             ov: int,
             split: bool,
     ) -> list[str]:
-        """Get text chunks based on split option.
+        """
+        Get text chunks based on split option.
 
         Args:
             text_or_doc:
