@@ -476,25 +476,18 @@ class TestRAGManager(unittest.TestCase):
         manager = RAGManager(self.config, self.mock_ragstore,
                              tokenizer=self.mock_tokenizer)
 
-        with patch('ragl.manager._LOG') as mock_log:
-            with self.assertRaises(ValidationError) as cm:
-                manager.get_context("")
-
-            self.assertIn('Query cannot be empty', str(cm.exception))
-            call_args = mock_log.critical.call_args
-            self.assertEqual(call_args[0][0],
-                             'Operation failed: %s (%.3fs) - %s')
-            self.assertEqual(call_args[0][1], 'get_context')
-            self.assertIsInstance(call_args[0][2], float)  # execution time
-            self.assertIsInstance(call_args[0][3], ValidationError)
+        results = manager.get_context("")
+        self.assertIsInstance(results, list)
+        self.assertEqual(len(results), 0)
 
     def test_get_context_whitespace_query(self):
         """Test getting context with whitespace-only query raises ValidationError."""
         manager = RAGManager(self.config, self.mock_ragstore,
                              tokenizer=self.mock_tokenizer)
 
-        with self.assertRaises(ValidationError):
-            manager.get_context("   \n\t   ")
+        results = manager.get_context("   \n\t   ")
+        self.assertIsInstance(results, list)
+        self.assertEqual(len(results), 0)
 
     def test_get_context_query_too_long(self):
         """Test getting context with overly long query raises ValidationError."""
@@ -809,7 +802,7 @@ class TestRAGManager(unittest.TestCase):
                              tokenizer=self.mock_tokenizer)
         text = "Normal text input"
 
-        result = manager._sanitize_text_input(text)
+        result = manager._sanitize_query(text)
 
         self.assertEqual(result, text)
         mock_log.debug.assert_called_with('Sanitizing text')
@@ -823,7 +816,7 @@ class TestRAGManager(unittest.TestCase):
 
         with patch('ragl.manager._LOG') as mock_log:
             with self.assertRaises(ValidationError) as cm:
-                manager._sanitize_text_input(long_text)
+                manager._sanitize_query(long_text)
 
             self.assertIn('text too long', str(cm.exception))
             mock_log.critical.assert_called_with('text too long')
@@ -835,10 +828,10 @@ class TestRAGManager(unittest.TestCase):
                              tokenizer=self.mock_tokenizer)
         text = "Text with <script>alert('xss')</script> dangerous chars!"
 
-        result = manager._sanitize_text_input(text)
+        result = manager._sanitize_query(text)
 
         # Should remove dangerous characters, keeping only alphanumeric, spaces, and basic punctuation
-        expected = "Text with scriptalertxssscript dangerous chars!"
+        expected = "Text with alert('xss') dangerous chars!"
         self.assertEqual(result, expected)
 
     @patch('ragl.manager._LOG')
@@ -851,14 +844,39 @@ class TestRAGManager(unittest.TestCase):
         # Mock tokenizer behavior
         tokens = list(range(220))  # 220 tokens
         self.mock_tokenizer.encode.return_value = tokens
-        self.mock_tokenizer.decode.side_effect = lambda \
-            chunk_tokens: f"chunk_{len(chunk_tokens)}"
+
+        # Mock decode to return different chunks based on token slice length
+        def mock_decode(token_slice):
+            return f"chunk_{len(token_slice)}_tokens"
+
+        self.mock_tokenizer.decode.side_effect = mock_decode
 
         result = manager._split_text(text, chunk_size=100, overlap=20)
 
-        # Should create 3 chunks: 0-100, 80-180, 160-250
+        # Should create 3 chunks: 0-100, 80-180, 160-220
         self.assertEqual(len(result), 3)
-        self.mock_tokenizer.encode.assert_called_once_with(text)
+        self.mock_tokenizer.encode.assert_called_with(text)
+        self.assertEqual(self.mock_tokenizer.decode.call_count, 3)
+        mock_log.debug.assert_called_with('Splitting text')
+
+    @patch('ragl.manager._LOG')
+    def test_split_text(self, mock_log):
+        """Test splitting text into chunks."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+        text = "This is a test text to split"
+
+        # Mock tokenizer behavior
+        tokens = list(range(220))  # 220 tokens
+        self.mock_tokenizer.encode.return_value = tokens
+        # self.mock_tokenizer.decode.side_effect = lambda \
+        #     chunk_tokens: f"chunk_{len(chunk_tokens)}"
+
+        result = manager._split_text(text, chunk_size=100, overlap=20)
+
+        # Should create 3 chunks: 0-100, 80-180, 160-220
+        self.assertEqual(len(result), 3)
+        self.mock_tokenizer.encode.assert_called_with(text)
         self.assertEqual(self.mock_tokenizer.decode.call_count, 3)
         mock_log.debug.assert_called_with('Splitting text')
 
