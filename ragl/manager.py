@@ -21,13 +21,14 @@ Features:
 """
 
 import logging
-import re
 import statistics
 import time
 from collections import defaultdict, deque
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Iterator
+
+import bleach
 
 from ragl.config import ManagerConfig
 from ragl.constants import TEXT_ID_PREFIX
@@ -345,10 +346,10 @@ class RAGManager:
                     msg = 'Text cannot be empty'
                     _LOG.critical(msg)
                     raise ValidationError(msg)
-                text_or_doc = self._sanitize_text_input(text_or_doc)
+                text_or_doc = self._sanitize_query(text_or_doc)
 
             elif isinstance(text_or_doc, TextUnit):
-                text_or_doc.text = self._sanitize_text_input(text_or_doc.text)
+                text_or_doc.text = self._sanitize_query(text_or_doc.text)
 
             if base_id:
                 parent_id = base_id
@@ -435,8 +436,12 @@ class RAGManager:
             backend documentation for details.
         """
         _LOG.debug('Retrieving context for query: %s', query)
+
+        if query.strip() == '':
+            return []
+
         with self.track_operation('get_context'):
-            self._sanitize_text_input(query)
+            self._sanitize_query(query)
             self._validate_query(query)
             self._validate_top_k(top_k)
 
@@ -651,7 +656,7 @@ class RAGManager:
             return [text_or_doc.text]
         return [text_or_doc]
 
-    def _sanitize_text_input(self, text: str) -> str:
+    def _sanitize_query(self, text: str) -> str:
         """
         Validate and sanitize text input to prevent injection attacks.
 
@@ -676,9 +681,8 @@ class RAGManager:
             _LOG.critical(msg)
             raise ValidationError(msg)
 
-        # Remove potentially dangerous characters
         if self.paranoid:
-            text = re.sub(r'[^\w\s.,!?-]', '', text)
+            text = bleach.clean(text=text, strip=True)
 
         return text
 
@@ -707,15 +711,37 @@ class RAGManager:
             List of text chunks.
         """
         _LOG.debug('Splitting text')
+
         tokens = self.tokenizer.encode(text)
         chunks = []
         step = chunk_size - overlap
         for i in range(0, len(tokens), step):
             chunk_tokens = tokens[i:min(i + chunk_size, len(tokens))]
             chunk_text = self.tokenizer.decode(chunk_tokens)
+
             if chunk_text.strip():
                 chunks.append(chunk_text)
+
         return chunks
+
+        # tokens = self.tokenizer.encode(text)
+        # chunks = []
+        # step = chunk_size - overlap
+        #
+        # for i in range(0, len(tokens), step):
+        #     chunk_tokens = tokens[i:min(i + chunk_size, len(tokens))]
+        #     chunk_text = self.tokenizer.decode(chunk_tokens).strip()
+        #     if chunk_text:
+        #         chunks.append(chunk_text)
+        #
+        # # Merge the last chunk if it's too short
+        # if len(chunks) > 1:
+        #     last_tokens = self.tokenizer.encode(chunks[-1])
+        #     if len(last_tokens) < overlap:
+        #         chunks[-2] += " " + chunks[-1]
+        #         chunks.pop()
+        #
+        # return chunks
 
     def _store_chunk(
             self,
