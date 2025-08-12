@@ -15,7 +15,7 @@ if __name__ == "__main__":
     embedder_config = SentenceTransformerConfig()
     manager_config = ManagerConfig(chunk_size=50, overlap=20)
     manager = create_rag_manager(
-        index_name='rag_index',
+        index_name='new_index',
         storage_config=storage_config,
         embedder_config=embedder_config,
         manager_config=manager_config,

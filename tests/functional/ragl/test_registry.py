@@ -65,7 +65,7 @@ class TestAbstractFactory(unittest.TestCase):
             _config_cls = MockConfig
 
         self.assertIsInstance(TestDirectFactory._factory_map, dict)
-        self.assertIn(MockConfig.__name__, TestDirectFactory._factory_map)
+        self.assertIn(MockConfig, TestDirectFactory._factory_map)
 
     def test_init_subclass_with_config_cls_kwarg(self):
         """Test __init_subclass__ with config_cls passed as keyword argument."""
@@ -73,7 +73,7 @@ class TestAbstractFactory(unittest.TestCase):
         class TestFactory(AbstractFactory, config_cls=MockConfig):
             pass
 
-        self.assertIn(MockConfig.__name__, TestFactory._factory_map)
+        self.assertIn(MockConfig, TestFactory._factory_map)
 
     def test_register_cls_success(self):
         """Test successful registration of a configuration class."""
@@ -82,8 +82,8 @@ class TestAbstractFactory(unittest.TestCase):
 
         self.assertEqual(len(AbstractFactory._factory_map),
                          factory_map_before + 1)
-        self.assertIn(MockConfig.__name__, AbstractFactory._factory_map)
-        self.assertEqual(AbstractFactory._factory_map[MockConfig.__name__],
+        self.assertIn(MockConfig, AbstractFactory._factory_map)
+        self.assertEqual(AbstractFactory._factory_map[MockConfig],
                          MockFactory)
 
     def test_register_cls_invalid_config_type(self):
@@ -109,10 +109,10 @@ class TestAbstractFactory(unittest.TestCase):
     def test_unregister_cls_existing(self):
         """Test unregistering an existing configuration class."""
         AbstractFactory.register_cls(MockConfig, MockFactory)
-        self.assertIn(MockConfig.__name__, AbstractFactory._factory_map)
+        self.assertIn(MockConfig, AbstractFactory._factory_map)
 
         AbstractFactory.unregister_cls(MockConfig)
-        self.assertNotIn(MockConfig.__name__, AbstractFactory._factory_map)
+        self.assertNotIn(MockConfig, AbstractFactory._factory_map)
 
     def test_unregister_cls_nonexistent(self):
         """Test unregistering a non-existent configuration class doesn't raise error."""

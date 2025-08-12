@@ -528,7 +528,11 @@ class RAGManager:
         Reset the store to empty state.
 
         Clears all stored texts and metadata, optionally resetting
-        performance metrics.
+        performance metrics. Does not ensure the underlying storage
+        layer is 100% empty, as some backends may retain schema or
+        configuration metadata.
+
+        Use with caution, as this will remove all stored data.
 
         Args:
             reset_metrics:

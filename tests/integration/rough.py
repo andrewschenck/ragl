@@ -1,6 +1,4 @@
 # TODO:
-#  - freeze dataclasses and use them as registry keys instead of their string names
-#   - or use type(dataclass) without freezing?
 #  - test index creation
 #  - license
 #  - preliminary documentation

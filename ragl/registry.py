@@ -64,10 +64,14 @@ class AbstractFactory:
     concrete implementations.
 
     Attributes:
+        can_call_abstract__call__:
+            List of factory class names that can call the abstract
+            __call__ method. This is used to prevent subclasses from
+            calling the abstract __call__ method directly.
         _config_cls:
             Configuration class type associated with this factory
         _factory_map:
-            Dictionary mapping config class names to factory instances
+            Dictionary mapping config class types to factory instances
 
     Class Methods:
         register_cls:
@@ -90,9 +94,8 @@ class AbstractFactory:
     can_call_abstract__call__ = ['EmbedderFactory', 'VectorStoreFactory']
 
     _config_cls: type[RaglConfig] | None = None
-    _factory_map: dict[str, type[Self]] = {}
+    _factory_map: dict[type[RaglConfig], type[Self]] = {}
 
-    @classmethod
     def __init_subclass__(cls, **kwargs):
         """
         Initialize the subclass and set up factory map.
@@ -145,7 +148,7 @@ class AbstractFactory:
             _LOG.critical(msg)
             raise TypeError(msg)
 
-        cls._factory_map[config_cls.__name__] = factory
+        cls._factory_map[config_cls] = factory
 
     @classmethod
     def unregister_cls(cls, config_cls: type[RaglConfig]) -> None:
@@ -159,7 +162,7 @@ class AbstractFactory:
         """
         _LOG.info('Unregistering factory class %s', cls.__name__)
         with suppress(KeyError):
-            del cls._factory_map[config_cls.__name__]
+            del cls._factory_map[config_cls]
 
     def __call__(self, *args, **kwargs) -> Any:
         """
@@ -205,7 +208,7 @@ class AbstractFactory:
             raise ConfigurationError(msg) from e
 
         try:
-            factory_cls = self._factory_map[config.__class__.__name__]
+            factory_cls = self._factory_map[type(config)]
         except KeyError as e:
             msg = f'No factory found for configuration type: {e}'
             _LOG.critical(msg)
