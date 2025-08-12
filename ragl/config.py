@@ -266,6 +266,7 @@ class RedisConfig(VectorStoreConfig):
 
 @dataclass
 class ManagerConfig:
+    # pylint: disable=too-many-instance-attributes
     """
     Configuration for RAGManager.
 
@@ -281,6 +282,9 @@ class ManagerConfig:
             Name of the index in the vector store.
         chunk_size:
             Size of text chunks to create from documents.
+        min_chunk_size:
+            Minimum size of text chunks. If None, defaults to
+            overlap // 2.
         overlap:
             Number of overlapping tokens between chunks.
         max_query_length:
@@ -296,6 +300,7 @@ class ManagerConfig:
 
     index_name: str = 'rag_index'
     chunk_size: int = 512
+    min_chunk_size: int | None = None
     overlap: int = 64
     max_query_length: int = 8192
     max_input_length: int = (1024 * 1024) * 10
