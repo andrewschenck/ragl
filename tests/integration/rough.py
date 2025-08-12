@@ -1,4 +1,5 @@
 # TODO:
+#  - validation -- cleanup or consolidate? maybe just delete a couple?
 #  - Unit / functional tests
 #  - license
 #  - pre release

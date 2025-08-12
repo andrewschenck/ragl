@@ -131,7 +131,8 @@ class SentenceTransformerConfig(EmbedderConfig):
             ConfigurationError:
                 If model_name_or_path is empty.
         """
-        if not self.model_name_or_path or not self.model_name_or_path.strip():
+        model_name_or_path = str(self.model_name_or_path)
+        if not model_name_or_path or not model_name_or_path.strip():
             raise ConfigurationError('model_name_or_path cannot be empty')
 
     def _validate_cache_settings(self) -> None:
