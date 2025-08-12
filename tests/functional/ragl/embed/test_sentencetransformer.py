@@ -39,11 +39,9 @@ class TestSentenceTransformerEmbedder(unittest.TestCase):
             auto_clear_cache=True,
             device="cpu"
         )
-        # embedder = SentenceTransformerEmbedder(self.config)
-        # self.lru_cache = embedder._embed_cached
 
     def tearDown(self):
-        # Clear cache for all instances by calling cache_clear on the global embedder
+        # Clear cache for all instances
         embedder._embed_cached.cache_clear()
 
     @patch('ragl.embed.sentencetransformer.SentenceTransformer')
@@ -214,23 +212,22 @@ class TestSentenceTransformerEmbedder(unittest.TestCase):
     #     self.assertEqual(cache_info.maxsize, 100)
     #     # embedder.clear_cache()
     #
-    # @patch('ragl.embed.sentencetransformer.SentenceTransformer')
-    # @patch('ragl.embed.sentencetransformer.gc')
-    # def test_clear_cache(self, mock_gc, mock_sentence_transformer):
-    #     """Test cache clearing functionality."""
-    #     mock_sentence_transformer.return_value = self.mock_model
-    #     embedder = SentenceTransformerEmbedder(self.config)
-    #
-    #     # Populate cache
-    #     embedder.embed("test text")
-    #     self.assertEqual(embedder.cache_info().currsize, 1)
-    #
-    #     # Clear cache
-    #     embedder.clear_cache()
-    #
-    #     self.assertEqual(embedder.cache_info().currsize, 0)
-    #     mock_gc.collect.assert_called_once()
-    #     # embedder.clear_cache()
+    @patch('ragl.embed.sentencetransformer.SentenceTransformer')
+    @patch('ragl.embed.sentencetransformer.gc')
+    def test_clear_cache(self, mock_gc, mock_sentence_transformer):
+        """Test cache clearing functionality."""
+        mock_sentence_transformer.return_value = self.mock_model
+        embedder = SentenceTransformerEmbedder(self.config)
+
+        # Populate cache
+        embedder.embed("test text")
+        self.assertEqual(embedder.cache_info().currsize, 1)
+
+        # Clear cache
+        embedder.clear_cache()
+
+        self.assertEqual(embedder.cache_info().currsize, 0)
+        mock_gc.collect.assert_called_once()
 
     @patch('ragl.embed.sentencetransformer.SentenceTransformer')
     @patch('ragl.embed.sentencetransformer.psutil')
