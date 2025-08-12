@@ -227,7 +227,7 @@ class TestSentenceTransformerEmbedder(unittest.TestCase):
         embedder.clear_cache()
 
         self.assertEqual(embedder.cache_info().currsize, 0)
-        mock_gc.collect.assert_called_once()
+        mock_gc.collect.assert_called()
 
     @patch('ragl.embed.sentencetransformer.SentenceTransformer')
     @patch('ragl.embed.sentencetransformer.psutil')

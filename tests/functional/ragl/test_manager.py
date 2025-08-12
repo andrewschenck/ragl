@@ -340,7 +340,7 @@ class TestRAGManager(unittest.TestCase):
         manager = RAGManager(self.config, self.mock_ragstore,
                              tokenizer=self.mock_tokenizer)
         text_id = "test-id"
-
+        self.mock_ragstore.list_texts.return_value = [text_id]
         manager.delete_text(text_id)
 
         self.mock_ragstore.delete_text.assert_called_once_with(text_id)
@@ -349,7 +349,21 @@ class TestRAGManager(unittest.TestCase):
         self.assertEqual(call_args[0][0],
                          'Operation completed: %s (%.3fs)')
         self.assertEqual(call_args[0][1], 'delete_text')
+
         self.assertIsInstance(call_args[0][2], float)  # execution time
+    @patch('ragl.manager._LOG')
+    def test_delete_text_nonexistent(self, mock_log):
+        """Test deleting text."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+        text_id = "test-id"
+        self.mock_ragstore.list_texts.return_value = []
+        manager.delete_text(text_id)
+
+        call_args = mock_log.warning.call_args
+        self.assertEqual(call_args[0][0],
+                         'Text ID %s not found, skipping deletion')
+        self.assertEqual(call_args[0][1], 'test-id')
 
     @patch('ragl.manager._LOG')
     def test_get_context_success(self, mock_log):

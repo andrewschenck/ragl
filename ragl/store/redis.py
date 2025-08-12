@@ -160,25 +160,8 @@ class RedisVectorStore:
             redis_client: redis.Redis,
             dimensions: int | None,
             index_name: str,
-    ) -> None:
-        """
-        Initialize Redis store with an existing Redis client.
-
-        Args:
-            redis_client:
-                Redis client instance to use for connection.
-            dimensions:
-                Size of embedding vectors, required for schema creation.
-            index_name:
-                Name of the Redis search index.
-
-        Raises:
-            ConfigurationError:
-                If dimensions are not provided or if both redis_client
-                and redis_config are provided.
-            StorageConnectionError:
-                If Redis connection fails.
-        """
+    ) -> None:  # noqa: D107
+        ...  # pragma: no cover
 
     @overload
     def __init__(
@@ -187,25 +170,8 @@ class RedisVectorStore:
             redis_config: RedisConfig,
             dimensions: int | None,
             index_name: str,
-    ) -> None:
-        """
-        Initialize Redis store with a Redis configuration.
-
-        Args:
-            redis_config:
-                Redis configuration object for connection details.
-            dimensions:
-                Size of embedding vectors, required for schema creation.
-            index_name:
-                Name of the Redis search index.
-
-        Raises:
-            ConfigurationError:
-                If dimensions are not provided or if both redis_client
-                and redis_config are provided.
-            StorageConnectionError:
-                If Redis connection fails.
-        """
+    ) -> None:  # noqa: D107
+        ...  # pragma: no cover
 
     def __init__(
             self,
