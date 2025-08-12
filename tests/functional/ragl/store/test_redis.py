@@ -1769,7 +1769,5 @@ class TestRedisVectorStore(unittest.TestCase):
         mock_redis_client.ping.assert_called_once()
 
 
-
-
 if __name__ == '__main__':
     unittest.main()

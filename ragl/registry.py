@@ -140,7 +140,7 @@ class AbstractFactory:
             _LOG.critical(msg)
             raise TypeError(msg)
 
-        if not issubclass(cls, AbstractFactory):
+        if not issubclass(factory, AbstractFactory):
             msg = 'cls must be a subclass of AbstractFactory'
             _LOG.critical(msg)
             raise TypeError(msg)

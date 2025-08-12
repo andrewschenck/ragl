@@ -1,8 +1,11 @@
 # TODO:
 #  - freeze dataclasses and use them as registry keys instead of their string names
+#   - or use type(dataclass) without freezing?
+#  - test index creation
 #  - license
 #  - preliminary documentation
-#  - pre release
+#  - remove legacy tests from repo
+#  - pre release -- merge, configure CI, push initial package to PyPI
 #  - integration tests
 #  - README
 #  - validation -- cleanup or consolidate? maybe just delete a couple?

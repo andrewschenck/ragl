@@ -82,6 +82,7 @@ class SentenceTransformerEmbedder:
     _cache_size: int
     _memory_threshold: float
     _auto_cleanup: bool
+    _embed_cached: Any
 
     @property
     def dimensions(self) -> int:

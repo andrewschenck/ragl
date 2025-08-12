@@ -323,7 +323,7 @@ class RedisVectorStore:
         self.index = SearchIndex(schema, self.redis_client)
 
         try:
-            if not self.index.exists():  # todo test this change
+            if not self.index.exists():
                 self.index.create()
                 _LOG.info('Created new index: %s', index_name)
             _LOG.info('Connected to index: %s', index_name)
