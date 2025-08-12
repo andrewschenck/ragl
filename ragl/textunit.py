@@ -146,7 +146,7 @@ class TextUnit:
         sep = '...' if len(self.text) > 50 else ''
         return (
             f'TextUnit(text_id={self.text_id!r}, '
-            f'text={self.text[:50]!r}{sep}, '
+            f'text="{self.text[:50]!r}{sep}", '
             f'distance={self.distance}, '
             f'chunk_position={self.chunk_position}, '
             f'parent_id={self.parent_id!r})'

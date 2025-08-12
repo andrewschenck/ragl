@@ -10,25 +10,6 @@ from ragl.config import SentenceTransformerConfig
 class TestSentenceTransformerEmbedder(unittest.TestCase):
     """Test suite for SentenceTransformerEmbedder class."""
 
-    # def setUp(self):
-    #     """Set up test fixtures."""
-    #     # Mock SentenceTransformer to avoid loading actual models
-    #     self.mock_model = Mock()
-    #     self.mock_model.get_sentence_embedding_dimension.return_value = 768
-    #     self.mock_model.encode.return_value = np.random.rand(768).astype(
-    #         np.float64)
-    #     self.mock_model.model_name = "test-model"
-    #     self.mock_model.device = "cpu"
-    #
-    #     # Create test configuration
-    #     self.config = SentenceTransformerConfig(
-    #         model_name_or_path="test-model",
-    #         cache_maxsize=100,
-    #         memory_threshold=0.8,
-    #         auto_clear_cache=True,
-    #         device="cpu"
-    #     )
-
     def setUp(self):
         """Set up test fixtures."""
         # Mock SentenceTransformer to avoid loading actual models
@@ -201,6 +182,7 @@ class TestSentenceTransformerEmbedder(unittest.TestCase):
         """Test cache info retrieval."""
         mock_sentence_transformer.return_value = self.mock_model
         embedder = SentenceTransformerEmbedder(self.config)
+        embedder.clear_cache()
 
         # Make some calls to populate cache
         embedder.embed("text1")

@@ -1,10 +1,11 @@
 # TODO:
-#  - validation -- cleanup or consolidate? maybe just delete a couple?
-#  - Unit / functional tests
+#  - freeze dataclasses and use them as registry keys instead of their string names
 #  - license
+#  - preliminary documentation
 #  - pre release
 #  - integration tests
 #  - README
+#  - validation -- cleanup or consolidate? maybe just delete a couple?
 #  - `backticks` in docstrings or no? Types in docstrings or no?
 #  - attribute names / ordering
 #  - method ordering
