@@ -234,6 +234,8 @@ class RAGManager:
             Size of text chunks.
         overlap:
             Overlap between chunks.
+        min_chunk_size:
+            Minimum size of a chunk, if specified.
         paranoid:
             Take extra measures when sanitizing text input, aimed
             at preventing injection attacks.
@@ -250,6 +252,7 @@ class RAGManager:
     tokenizer: TokenizerProtocol
     chunk_size: int
     overlap: int
+    min_chunk_size: int | None
     paranoid: bool
     _metrics: dict[str, RAGTelemetry]
 
@@ -291,6 +294,7 @@ class RAGManager:
         self.tokenizer = tokenizer
         self.chunk_size = config.chunk_size
         self.overlap = config.overlap
+        self.min_chunk_size = config.min_chunk_size
         self.paranoid = config.paranoid
         self._metrics = defaultdict(RAGTelemetry)
 
@@ -719,36 +723,42 @@ class RAGManager:
         """
         _LOG.debug('Splitting text')
 
-        tokens = self.tokenizer.encode(text)
-        chunks = []
-        step = chunk_size - overlap
-        for i in range(0, len(tokens), step):
-            chunk_tokens = tokens[i:min(i + chunk_size, len(tokens))]
-            chunk_text = self.tokenizer.decode(chunk_tokens)
-
-            if chunk_text.strip():
-                chunks.append(chunk_text)
-
-        return chunks
-
         # tokens = self.tokenizer.encode(text)
         # chunks = []
         # step = chunk_size - overlap
-        #
         # for i in range(0, len(tokens), step):
         #     chunk_tokens = tokens[i:min(i + chunk_size, len(tokens))]
-        #     chunk_text = self.tokenizer.decode(chunk_tokens).strip()
-        #     if chunk_text:
+        #     chunk_text = self.tokenizer.decode(chunk_tokens)
+        #
+        #     if chunk_text.strip():
         #         chunks.append(chunk_text)
         #
-        # # Merge the last chunk if it's too short
-        # if len(chunks) > 1:
-        #     last_tokens = self.tokenizer.encode(chunks[-1])
-        #     if len(last_tokens) < overlap:
-        #         chunks[-2] += " " + chunks[-1]
-        #         chunks.pop()
-        #
         # return chunks
+
+        min_chunk_size = (
+            self.min_chunk_size
+            if self.min_chunk_size is not None
+            else overlap // 2
+        )
+        tokens = self.tokenizer.encode(text)
+        chunks = []
+        step = chunk_size - overlap
+
+        for i in range(0, len(tokens), step):
+            chunk_tokens = tokens[i:min(i + chunk_size, len(tokens))]
+            chunk_text = self.tokenizer.decode(chunk_tokens).strip()
+            if chunk_text:
+                chunks.append(chunk_text)
+
+        # Merge the last chunk if it's too short
+        if len(chunks) > 1:
+            last_tokens = self.tokenizer.encode(chunks[-1])
+            if len(last_tokens) < min_chunk_size:
+                _LOG.debug('Merging last chunk due to short length')
+                chunks[-2] += ' ' + chunks[-1]
+                chunks.pop()
+
+        return chunks
 
     def _store_chunk(
             self,

@@ -849,29 +849,34 @@ class TestRAGManager(unittest.TestCase):
         self.assertEqual(result, expected)
 
     @patch('ragl.manager._LOG')
-    def test_split_text(self, mock_log):
-        """Test splitting text into chunks."""
+    def test_split_text_last_chunk_too_small(self, mock_log):
+        """Test splitting text where last chunk gets merged."""
         manager = RAGManager(self.config, self.mock_ragstore,
                              tokenizer=self.mock_tokenizer)
-        text = "This is a test text to split"
+        text = (
+                         "Artificial Intelligence (AI) is a broad field encompassing various techniques. "
+                         "Machine Learning (ML) is a subset of AI that focuses on training models with data. "
+                         "Deep Learning (DL), a further subset, uses neural networks with many layers."
+                     ) * 2
 
-        # Mock tokenizer behavior
-        tokens = list(range(220))  # 220 tokens
-        self.mock_tokenizer.encode.return_value = tokens
+        encode_calls = [
+            list(range(64)),
+            list(range(10))
+        ]
+        self.mock_tokenizer.encode.side_effect = encode_calls
 
-        # Mock decode to return different chunks based on token slice length
-        def mock_decode(token_slice):
-            return f"chunk_{len(token_slice)}_tokens"
+        decode_calls = [
+            "First chunk content",
+            "Small last chunk"
+        ]
+        self.mock_tokenizer.decode.side_effect = decode_calls
 
-        self.mock_tokenizer.decode.side_effect = mock_decode
+        result = manager._split_text(text, chunk_size=64, overlap=32)
 
-        result = manager._split_text(text, chunk_size=100, overlap=20)
-
-        # Should create 3 chunks: 0-100, 80-180, 160-220
-        self.assertEqual(len(result), 3)
-        self.mock_tokenizer.encode.assert_called_with(text)
-        self.assertEqual(self.mock_tokenizer.decode.call_count, 3)
-        mock_log.debug.assert_called_with('Splitting text')
+        self.assertEqual(len(result), 1)
+        self.assertIn("First chunk content", result[0])
+        self.assertIn("Small last chunk", result[0])
+        mock_log.debug.assert_called_with('Merging last chunk due to short length')
 
     @patch('ragl.manager._LOG')
     def test_split_text(self, mock_log):
@@ -883,14 +888,11 @@ class TestRAGManager(unittest.TestCase):
         # Mock tokenizer behavior
         tokens = list(range(220))  # 220 tokens
         self.mock_tokenizer.encode.return_value = tokens
-        # self.mock_tokenizer.decode.side_effect = lambda \
-        #     chunk_tokens: f"chunk_{len(chunk_tokens)}"
 
-        result = manager._split_text(text, chunk_size=100, overlap=20)
+        result = manager._split_text(text, chunk_size=100, overlap=25)
 
         # Should create 3 chunks: 0-100, 80-180, 160-220
         self.assertEqual(len(result), 3)
-        self.mock_tokenizer.encode.assert_called_with(text)
         self.assertEqual(self.mock_tokenizer.decode.call_count, 3)
         mock_log.debug.assert_called_with('Splitting text')
 
