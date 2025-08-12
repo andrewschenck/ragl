@@ -1,7 +1,4 @@
 # TODO:
-#  - test index creation
-#  - license
-#  - preliminary documentation
 #  - remove legacy tests from repo
 #  - pre release -- merge, configure CI, push initial package to PyPI
 #  - integration tests
