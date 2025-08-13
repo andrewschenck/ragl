@@ -12,13 +12,15 @@ from ragl.exceptions import ValidationError
 from ragl.registry import create_rag_manager
 
 
+logging.basicConfig(level=logging.INFO)
+
+
 class TestRAGLIntegration:
     """Integration tests for RAGL with live Redis."""
 
     @classmethod
     def setup_class(cls):
         """Set up test environment."""
-        logging.basicConfig(level=logging.INFO)
         cls.storage_config = RedisConfig()
         cls.embedder_config = SentenceTransformerConfig()
         cls.manager_config = ManagerConfig(chunk_size=100, overlap=20)
@@ -32,6 +34,13 @@ class TestRAGLIntegration:
     def setup_method(self):
         """Reset manager before each test."""
         self.manager.reset(reset_metrics=True)
+
+    def teardown_method(self):
+        """Clean up after each test."""
+        try:
+            self.manager.reset(reset_metrics=True)
+        except Exception as e:
+            logging.warning(f"Cleanup error: {e}")
 
     def test_text_sanitization(self):
         """Test text input sanitization."""
@@ -231,12 +240,358 @@ class TestRAGLIntegration:
         except ValidationError:
             logging.info("Correctly handled invalid top_k")
 
-    def teardown_method(self):
-        """Clean up after each test."""
-        try:
-            self.manager.reset(reset_metrics=True)
-        except Exception as e:
-            logging.warning(f"Cleanup error: {e}")
+    def test_tiny_documents_with_large_chunks(self):
+        """Test handling of tiny documents with large chunk sizes."""
+        tiny_text = "Short."
+
+        # Create manager with large chunk size (in tokens)
+        large_chunk_manager = create_rag_manager(
+            index_name='test_large_chunk_index',
+            storage_config=self.storage_config,
+            embedder_config=self.embedder_config,
+            manager_config=ManagerConfig(chunk_size=100, overlap=10),
+            # 100 tokens
+        )
+        large_chunk_manager.reset(reset_metrics=True)
+
+        docs = large_chunk_manager.add_text(
+            text_or_doc=tiny_text,
+            base_id="doc:tiny"
+        )
+
+        assert len(docs) == 1
+        assert docs[0].text == tiny_text
+        large_chunk_manager.reset(reset_metrics=True)
+
+    def test_medium_documents_varying_chunks(self):
+        """Test medium documents with different chunk configurations."""
+        medium_text = (
+                          "Natural language processing is a subfield of linguistics, computer science, "
+                          "and artificial intelligence concerned with the interactions between computers "
+                          "and human language. It involves programming computers to process and analyze "
+                          "large amounts of natural language data. The goal is a computer capable of "
+                          "understanding the contents of documents, including the contextual nuances "
+                          "of the language within them."
+                      ) * 2
+
+        chunk_configs = [
+            (20, 5),  # Small chunks, small overlap (tokens)
+            (50, 10),  # Medium chunks, medium overlap (tokens)
+            (100, 20),  # Large chunks, large overlap (tokens)
+        ]
+
+        for chunk_size, overlap in chunk_configs:
+            manager = create_rag_manager(
+                index_name=f'test_chunk_{chunk_size}_overlap_{overlap}',
+                storage_config=self.storage_config,
+                embedder_config=self.embedder_config,
+                manager_config=ManagerConfig(chunk_size=chunk_size,
+                                             overlap=overlap),
+            )
+            manager.reset(reset_metrics=True)
+
+            docs = manager.add_text(
+                text_or_doc=medium_text,
+                base_id=f"doc:medium_{chunk_size}_{overlap}"
+            )
+
+            # Verify chunking behavior - account for token-based chunking
+            tokenizer = manager.tokenizer
+            total_tokens = len(tokenizer.encode(medium_text))
+            expected_chunks = max(1, (total_tokens - overlap) // (
+                    chunk_size - overlap))
+            assert len(docs) >= 1
+            assert len(docs) <= expected_chunks + 2  # Allow variance for merging
+
+            # Test retrieval
+            contexts = manager.get_context(
+                query="natural language processing",
+                top_k=2
+            )
+            assert len(contexts) >= 1
+            manager.reset(reset_metrics=True)
+
+    def test_very_large_document_small_chunks(self):
+        """Test very large document with small chunk sizes."""
+        # Generate large document
+        large_text = (
+                         "Machine learning is a method of data analysis that automates analytical "
+                         "model building. It is a branch of artificial intelligence based on the "
+                         "idea that systems can learn from data, identify patterns and make "
+                         "decisions with minimal human intervention. Machine learning algorithms "
+                         "build mathematical models based on training data in order to make "
+                         "predictions or decisions without being explicitly programmed to do so. "
+                     ) * 50  # Creates a very large document
+
+        small_chunk_manager = create_rag_manager(
+            index_name='test_large_doc_small_chunks',
+            storage_config=self.storage_config,
+            embedder_config=self.embedder_config,
+            manager_config=ManagerConfig(chunk_size=50, overlap=10),
+            # 50 tokens
+        )
+        small_chunk_manager.reset(reset_metrics=True)
+
+        docs = small_chunk_manager.add_text(
+            text_or_doc=large_text,
+            base_id="doc:very_large"
+        )
+
+        # Should create many chunks
+        assert len(docs) > 5
+
+        # Verify chunk integrity with token-based validation
+        tokenizer = small_chunk_manager.tokenizer
+        for i, doc in enumerate(docs):
+            assert doc.chunk_position == i
+            # Check token count instead of character count
+            token_count = len(tokenizer.encode(doc.text))
+            # Allow for overlap and merging tolerance
+            assert token_count <= 70  # chunk_size + overlap + merging tolerance
+            assert doc.parent_id == "doc:very_large"
+
+        # Test retrieval across many chunks
+        contexts = small_chunk_manager.get_context(
+            query="machine learning algorithms",
+            top_k=5
+        )
+        assert len(contexts) >= 3
+        small_chunk_manager.reset(reset_metrics=True)
+
+    def test_zero_overlap_chunking(self):
+        """Test chunking with zero overlap."""
+        text = (
+                   "Zero overlap chunking means each chunk is completely separate. "
+                   "There is no shared content between adjacent chunks. This can "
+                   "sometimes lead to loss of context at chunk boundaries. However, "
+                   "it maximizes content coverage without duplication."
+               ) * 3
+
+        zero_overlap_manager = create_rag_manager(
+            index_name='test_zero_overlap',
+            storage_config=self.storage_config,
+            embedder_config=self.embedder_config,
+            manager_config=ManagerConfig(chunk_size=30, overlap=0),
+            # 30 tokens, no overlap
+        )
+        zero_overlap_manager.reset(reset_metrics=True)
+
+        docs = zero_overlap_manager.add_text(
+            text_or_doc=text,
+            base_id="doc:zero_overlap"
+        )
+
+        # Should create multiple chunks with no overlap
+        assert len(docs) > 1
+
+        # Verify chunks are distinct (no significant overlap)
+        for i in range(len(docs) - 1):
+            current_chunk = docs[i].text
+            next_chunk = docs[i + 1].text
+            # Should not be identical due to no overlap
+            assert current_chunk != next_chunk
+
+        zero_overlap_manager.reset(reset_metrics=True)
+
+    def test_high_overlap_chunking(self):
+        """Test chunking with high overlap ratio."""
+        text = (
+                   "High overlap chunking creates significant redundancy between chunks. "
+                   "This ensures better context preservation across chunk boundaries but "
+                   "increases storage requirements and may lead to repetitive results. "
+                   "The trade-off is between context preservation and efficiency."
+               ) * 2
+
+        high_overlap_manager = create_rag_manager(
+            index_name='test_high_overlap',
+            storage_config=self.storage_config,
+            embedder_config=self.embedder_config,
+            manager_config=ManagerConfig(chunk_size=40, overlap=30),
+            # High overlap ratio
+        )
+        high_overlap_manager.reset(reset_metrics=True)
+
+        docs = high_overlap_manager.add_text(
+            text_or_doc=text,
+            base_id="doc:high_overlap"
+        )
+
+        # High overlap should create more chunks
+        assert len(docs) > 2
+
+        # Test that overlapping content improves retrieval
+        contexts = high_overlap_manager.get_context(
+            query="context preservation boundaries",
+            top_k=3
+        )
+        assert len(contexts) >= 2
+        high_overlap_manager.reset(reset_metrics=True)
+
+    def test_document_size_edge_cases(self):
+        """Test edge cases for document sizes."""
+        edge_cases = [
+            ("", "empty"),  # Empty document
+            ("A", "single_char"),  # Single character
+            ("Word", "single_word"),  # Single word
+            ("Two words", "two_words"),  # Two words
+            ("A" * 500, "very_long_word"),  # Very long single "word"
+        ]
+
+        for text, case_name in edge_cases:
+            if text:  # Skip empty text as it raises ValidationError
+                docs = self.manager.add_text(
+                    text_or_doc=text,
+                    base_id=f"doc:edge_{case_name}"
+                )
+
+                assert len(docs) >= 1
+                assert docs[0].text == text or docs[
+                    0].text.strip() == text.strip()
+
+    def test_mixed_document_sizes_retrieval(self):
+        """Test retrieval across documents of varying sizes."""
+        documents = [
+            ("AI", "doc:tiny"),
+            ("Machine learning uses algorithms to find patterns in data.",
+             "doc:small"),
+            ((
+                 "Deep learning is a subset of machine learning that uses neural networks "
+                 "with multiple layers to model and understand complex patterns. These "
+                 "networks are inspired by the human brain's structure and function."),
+             "doc:medium"),
+            ((
+                 "Artificial intelligence encompasses a broad range of technologies and "
+                 "methodologies designed to enable machines to perform tasks that typically "
+                 "require human intelligence. This includes reasoning, learning, perception, "
+                 "language understanding, and problem-solving capabilities. The field has "
+                 "evolved significantly since its inception, with major breakthroughs in "
+                 "areas such as computer vision, natural language processing, and robotics.") * 3,
+             "doc:large"),
+        ]
+
+        all_doc_ids = []
+        for text, doc_id in documents:
+            docs = self.manager.add_text(text_or_doc=text, base_id=doc_id)
+            all_doc_ids.extend([doc.text_id for doc in docs])
+
+        # Test retrieval that should match across different document sizes
+        contexts = self.manager.get_context(
+            query="machine learning artificial intelligence",
+            top_k=5
+        )
+
+        assert len(contexts) >= 3
+        # Should find relevant content regardless of document size
+        context_texts = [ctx.text for ctx in contexts]
+        assert any("AI" in text or "machine learning" in text.lower()
+                   for text in context_texts)
+
+    def test_chunk_boundary_context_preservation(self):
+        """Test that important context is preserved across chunk boundaries."""
+        # Create text where important information spans chunk boundaries
+        boundary_text = (
+            "The quick brown fox jumps over the lazy dog. This sentence contains "
+            "every letter of the alphabet and is commonly used for testing. "
+            "However, the most important information is that the fox is actually "
+            "a metaphor for agility and speed in problem-solving methodologies. "
+            "This metaphor demonstrates how quick thinking and adaptability are "
+            "essential skills in software development and system design processes."
+        )
+
+        # Use chunk size that will split the important metaphor explanation
+        boundary_manager = create_rag_manager(
+            index_name='test_boundary_context',
+            storage_config=self.storage_config,
+            embedder_config=self.embedder_config,
+            manager_config=ManagerConfig(chunk_size=25, overlap=8),
+            # Small token chunks with overlap
+        )
+        boundary_manager.reset(reset_metrics=True)
+
+        docs = boundary_manager.add_text(
+            text_or_doc=boundary_text,
+            base_id="doc:boundary_test"
+        )
+
+        # Should create multiple chunks due to length
+        assert len(docs) > 1
+
+        # Test retrieval of information that spans boundaries
+        contexts = boundary_manager.get_context(
+            query="fox metaphor agility",
+            top_k=3
+        )
+
+        # Should retrieve relevant chunks despite boundary split
+        assert len(contexts) >= 1
+        relevant_text = " ".join([ctx.text for ctx in contexts])
+        assert "metaphor" in relevant_text or "agility" in relevant_text
+
+        boundary_manager.reset(reset_metrics=True)
+
+    def test_token_count_validation(self):
+        """Test that token counts match expected chunking behavior."""
+        text = (
+            "This is a test document that will be used to validate token-based chunking. "
+            "Each chunk should contain approximately the specified number of tokens, "
+            "with appropriate overlap between consecutive chunks for context preservation."
+        )
+
+        token_manager = create_rag_manager(
+            index_name='test_token_validation',
+            storage_config=self.storage_config,
+            embedder_config=self.embedder_config,
+            manager_config=ManagerConfig(chunk_size=20, overlap=5),
+        )
+        token_manager.reset(reset_metrics=True)
+
+        docs = token_manager.add_text(
+            text_or_doc=text,
+            base_id="doc:token_test"
+        )
+
+        tokenizer = token_manager.tokenizer
+
+        # Validate token counts for each chunk
+        for doc in docs:
+            token_count = len(tokenizer.encode(doc.text))
+            # Allow for merging tolerance and overlap
+            assert token_count <= 30  # chunk_size + overlap + merging tolerance
+            assert token_count > 0
+
+        token_manager.reset(reset_metrics=True)
+
+    def test_min_chunk_size_handling(self):
+        """Test handling of minimum chunk size parameter."""
+        text = (
+            "Short sentences. More text. Even more content here. "
+            "This creates multiple potential chunks. Final sentence."
+        )
+
+        # Test with explicit min_chunk_size
+        min_chunk_manager = create_rag_manager(
+            index_name='test_min_chunk',
+            storage_config=self.storage_config,
+            embedder_config=self.embedder_config,
+            manager_config=ManagerConfig(chunk_size=15, overlap=3,
+                                         min_chunk_size=8),
+        )
+        min_chunk_manager.reset(reset_metrics=True)
+
+        docs = min_chunk_manager.add_text(
+            text_or_doc=text,
+            base_id="doc:min_chunk_test"
+        )
+
+        tokenizer = min_chunk_manager.tokenizer
+
+        # Verify that chunks respect min_chunk_size through merging
+        for doc in docs[:-1]:  # All but last chunk
+            token_count = len(tokenizer.encode(doc.text))
+            # Should not have tiny chunks due to merging
+            assert token_count >= 5  # Reasonable minimum after merging
+
+        min_chunk_manager.reset(reset_metrics=True)
 
 
 if __name__ == "__main__":
@@ -251,16 +606,20 @@ if __name__ == "__main__":
 
     exit_code = 0
     for test_method in test_methods:
-        print(f"\nRunning {test_method}...")
+        # print(f"\n*** Running {test_method}...")
+        logging.info(f"***** Running {test_method} *****")
         try:
             test_suite.setup_method()
             getattr(test_suite, test_method)()
-            print(f"{test_method} passed")
+            # print(f"*** {test_method} passed")
+            logging.info(f"***** {test_method} passed *****")
         except Exception as e:
-            print(f"{test_method} failed: {e}")
+            # print(f"*** {test_method} failed: {e}")
+            logging.warning(f"***** {test_method} failed: {e} *****")
             exit_code = 1
         finally:
             test_suite.teardown_method()
 
-    print("\nIntegration tests completed.")
+    # print("\n***Integration tests completed.")
+    logging.info("***** Integration tests completed. *****")
     sys.exit(exit_code)

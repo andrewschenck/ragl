@@ -28,7 +28,7 @@ include-package-data = true
 
 [project]
 name = "ragl"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
     "bleach",
     "numpy",

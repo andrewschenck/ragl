@@ -106,6 +106,8 @@ class SentenceTransformerConfig(EmbedderConfig):
         auto_clear_cache:
             Whether to automatically clean up the cache when
             memory usage exceeds the threshold.
+        show_progress:
+            Whether to show progress bars during embedding.
         memory_threshold:
             Threshold for memory usage before cleaning up cache.
             This is a float between 0.0 and 1.0, where 1.0 means
@@ -116,6 +118,7 @@ class SentenceTransformerConfig(EmbedderConfig):
     cache_maxsize: int = 10_000  # set this to 0 to disable caching
     device: str | None = None
     auto_clear_cache: bool = True
+    show_progress: bool = False
     memory_threshold: float = 0.9
 
     def __post_init__(self) -> None:
