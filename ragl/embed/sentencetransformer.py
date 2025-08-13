@@ -67,6 +67,8 @@ class SentenceTransformerEmbedder:
         _auto_cleanup:
             Whether to automatically clear the cache based on
             memory usage.
+        _show_progress:
+            Whether to show progress bars during embedding.
 
     Example:
         >>> config = SentenceTransformerConfig(
@@ -82,6 +84,7 @@ class SentenceTransformerEmbedder:
     _cache_size: int
     _memory_threshold: float
     _auto_cleanup: bool
+    _show_progress: bool
     _embed_cached: Any
 
     @property
@@ -107,6 +110,7 @@ class SentenceTransformerEmbedder:
         self._cache_size = config.cache_maxsize
         self._memory_threshold = config.memory_threshold
         self._auto_cleanup = config.auto_clear_cache
+        self._show_progress = config.show_progress
         self._embed_cached = lru_cache(self._cache_size)(self._embed_impl)
 
     def cache_info(self):
@@ -162,7 +166,10 @@ class SentenceTransformerEmbedder:
         Returns:
             Embedding as a numpy array of float32 type.
         """
-        array = self.model.encode(text)
+        array = self.model.encode(
+            sentences=text,
+            show_progress_bar=self._show_progress,
+        )
         assert isinstance(array, np.ndarray)
         return array.astype(np.float32)
 

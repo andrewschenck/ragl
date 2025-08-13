@@ -378,7 +378,7 @@ class RAGManager:
                     parent_id=parent_id,
                 )
                 stored_docs.append(stored_doc)
-                _LOG.info('Stored text chunk: %s, ID: %s',)
+                _LOG.info('Stored text chunk: %s', stored_doc.text_id)
 
             if not stored_docs:
                 msg = 'No valid chunks stored'
@@ -946,8 +946,11 @@ class RAGManager:
         """Developer representation showing object construction."""
         return (
             f'RAGManager('
-            f'config=ManagerConfig(chunk_size={self.chunk_size}, '
-            f'overlap={self.overlap}, paranoid={self.paranoid}), '
+            f'config=ManagerConfig('
+            f'chunk_size={self.chunk_size}, '
+            f'overlap={self.overlap}, '
+            f'min_chunk_size={self.min_chunk_size}, '
+            f'paranoid={self.paranoid}), '
             f'ragstore={self.ragstore!r}, '
             f'tokenizer={self.tokenizer!r})'
         )

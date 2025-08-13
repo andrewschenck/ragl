@@ -110,7 +110,9 @@ class TestSentenceTransformerEmbedder(unittest.TestCase):
 
         result = embedder._embed_impl("test text")
 
-        self.mock_model.encode.assert_called_once_with("test text")
+        self.mock_model.encode.assert_called_once_with(**{'sentences': 'test text',
+                                                        'show_progress_bar': False,
+                                                       } )
         self.assertIsInstance(result, np.ndarray)
         self.assertEqual(result.dtype, np.float32)
 

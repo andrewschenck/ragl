@@ -1159,10 +1159,13 @@ class TestRAGManager(unittest.TestCase):
                              tokenizer=self.mock_tokenizer)
 
         result = repr(manager)
-
         expected = (
             'RAGManager('
-            'config=ManagerConfig(chunk_size=100, overlap=20, paranoid=False), '
+            'config=ManagerConfig('
+            'chunk_size=100, '
+            'overlap=20, '
+            'min_chunk_size=None, '
+            'paranoid=False), '
             f'ragstore={self.mock_ragstore!r}, '
             f'tokenizer={self.mock_tokenizer!r})'
         )
