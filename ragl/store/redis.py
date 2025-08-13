@@ -30,6 +30,7 @@ import time
 from contextlib import contextmanager
 from typing import (
     Any,
+    ClassVar,
     Iterator,
     Mapping,
     cast,
@@ -129,14 +130,14 @@ class RedisVectorStore:
         >>> results = store.get_relevant(query_embedding, top_k=5)
     """
 
-    SCHEMA_VERSION = 1
+    SCHEMA_VERSION: ClassVar[int] = 1
 
-    MAX_FIELD_SIZE = (1024 * 1024) * 32
-    MAX_METADATA_SIZE = (1024 * 1024) * 64
-    MAX_TEXT_SIZE = (1024 * 1024) * 512
-    MAX_TEXT_ID_LENGTH = 256
+    MAX_FIELD_SIZE: ClassVar[int] = (1024 * 1024) * 32
+    MAX_METADATA_SIZE: ClassVar[int] = (1024 * 1024) * 64
+    MAX_TEXT_SIZE: ClassVar[int] = (1024 * 1024) * 512
+    MAX_TEXT_ID_LENGTH: ClassVar[int] = 256
 
-    POOL_DEFAULTS = {
+    POOL_DEFAULTS: ClassVar[dict[str, Any]] = {
         'socket_timeout':           5,
         'socket_connect_timeout':   5,
         'retry_on_timeout':         True,
@@ -144,8 +145,8 @@ class RedisVectorStore:
         'health_check_interval':    30,
     }
 
-    TAG_SEPARATOR = ','
-    TEXT_COUNTER_KEY = 'text_counter'
+    TAG_SEPARATOR: ClassVar[str] = ','
+    TEXT_COUNTER_KEY: ClassVar[str] = 'text_counter'
 
     index: SearchIndex
     index_name: str

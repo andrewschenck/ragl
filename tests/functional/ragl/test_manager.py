@@ -1207,6 +1207,67 @@ class TestRAGManager(unittest.TestCase):
         positions = [unit.chunk_position for unit in result]
         self.assertEqual(positions, [0, 1, 2])
 
+    def test_metadata_round_trip_preservation(self):
+        """Test that TextUnit metadata is preserved through add/retrieve cycle."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        # Create TextUnit with metadata including confidence
+        original_unit = TextUnit(
+            text_id="test-id",
+            text="Test text with metadata",
+            confidence=0.95,
+            author="John Doe",
+            source="test_source",
+            tags=["important", "test"],
+            language="en",
+            section="intro",
+            distance=0.0
+        )
+
+        # Mock small chunks to avoid splitting
+        self.mock_tokenizer.encode.return_value = list(range(50))
+        self.mock_tokenizer.decode.return_value = original_unit.text
+
+        # Mock retrieve to return the stored metadata
+        stored_metadata = {
+            'text_id':        'stored-id',
+            'text':           original_unit.text,
+            'confidence':     0.95,
+            'author':         "John Doe",
+            'source':         "test_source",
+            'tags':           ["important", "test"],
+            'language':       "en",
+            'section':        "intro",
+            'distance':       0.1,
+            'chunk_position': 0,
+            'parent_id':      'test-parent',
+            'timestamp':      12345
+        }
+        self.mock_ragstore.get_relevant.return_value = [stored_metadata]
+
+        # Add the TextUnit
+        manager.add_text(original_unit)
+
+        # Verify metadata was stored (excluding filtered fields)
+        call_args = self.mock_ragstore.store_text.call_args
+        stored_metadata_arg = call_args[1]['metadata']
+
+        self.assertEqual(stored_metadata_arg['confidence'], 0.95)
+        self.assertEqual(stored_metadata_arg['author'], "John Doe")
+        self.assertEqual(stored_metadata_arg['source'], "test_source")
+        self.assertNotIn('text_id', stored_metadata_arg)  # Should be filtered
+        self.assertNotIn('text', stored_metadata_arg)  # Should be filtered
+        self.assertNotIn('distance', stored_metadata_arg)  # Should be filtered
+
+        # Retrieve and verify metadata is preserved
+        results = manager.get_context("test query")
+        retrieved_unit = results[0]
+
+        self.assertEqual(retrieved_unit.confidence, 0.95)
+        self.assertEqual(retrieved_unit.author, "John Doe")
+        self.assertEqual(retrieved_unit.source, "test_source")
+
 
 if __name__ == '__main__':
     unittest.main()

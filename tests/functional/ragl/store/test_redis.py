@@ -1281,7 +1281,6 @@ class TestRedisVectorStore(unittest.TestCase):
 
         result = repr(store)
         # The repr should contain class name and key attributes
-        print(result)
         self.assertIn('RedisVectorStore', result)
         self.assertIn(str(self.dimensions), result)
         self.assertIn(self.index_name, result)

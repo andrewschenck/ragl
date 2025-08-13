@@ -26,7 +26,7 @@ import time
 from collections import defaultdict, deque
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any, Iterator
+from typing import Any, ClassVar, Iterator
 
 import bleach
 
@@ -244,9 +244,9 @@ class RAGManager:
             for performance tracking.
     """
 
-    DEFAULT_BASE_ID = 'doc'
-    MAX_QUERY_LENGTH = 8192
-    MAX_INPUT_LENGTH = (1024 * 1024) * 10
+    DEFAULT_BASE_ID: ClassVar[str] = 'doc'
+    MAX_QUERY_LENGTH: ClassVar[int] = 8192
+    MAX_INPUT_LENGTH: ClassVar[int] = (1024 * 1024) * 10
 
     ragstore: RAGStoreProtocol
     tokenizer: TokenizerProtocol
