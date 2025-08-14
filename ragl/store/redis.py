@@ -55,6 +55,7 @@ from ragl.exceptions import (
     ValidationError,
 )
 from ragl.schema import SchemaField, sanitize_metadata
+from ragl.textunit import TextUnit
 
 
 _LOG = logging.getLogger(__name__)
@@ -464,13 +465,20 @@ class RedisVectorStore:
             _LOG.error('Redis operation failed: %s', e)
             raise DataError(f'Redis operation failed: {e}') from e
 
+    # def store_text(  # todo
+    #         self,
+    #         text: str,
+    #         embedding: np.ndarray,
+    #         *,
+    #         text_id: str | None = None,
+    #         metadata: Mapping[str, Any] | None = None,
+    # ) -> str:
     def store_text(
             self,
-            text: str,
+            text_unit: TextUnit,
             embedding: np.ndarray,
             *,
             text_id: str | None = None,
-            metadata: Mapping[str, Any] | None = None,
     ) -> str:
         """
         Store text and embedding in Redis.
@@ -482,14 +490,12 @@ class RedisVectorStore:
         RedisVL index. The text ID is returned after successful storage.
 
         Args:
-            text:
+            text_unit:
                 Text to store.
             embedding:
                 Vector embedding.
             text_id:
                 Optional ID for the text.
-            metadata:
-                Optional metadata mapping.
 
         Returns:
             The text ID (generated if not provided.)
@@ -498,6 +504,9 @@ class RedisVectorStore:
             ValidationError:
                 If text is empty.
         """
+        text_data = text_unit.to_dict()
+        text = text_data.pop('text', '')
+
         if not text.strip():
             raise ValidationError('text cannot be empty')
 
@@ -505,12 +514,12 @@ class RedisVectorStore:
             _LOG.debug('generating text_id')
             text_id = self._generate_text_id(text_id)
 
-        self._validate_input_sizes(text, metadata)
+        self._validate_input_sizes(text, text_data)
         self._validate_text_id(text_id)
         self._validate_dimensions_match(embedding)
 
         sanitized = sanitize_metadata(
-            metadata=metadata,
+            metadata=text_data,
             schema=self.metadata_schema,
         )
         if 'tags' in sanitized:

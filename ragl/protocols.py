@@ -19,7 +19,6 @@ Classes:
 
 from typing import (
     Any,
-    Mapping,
     Protocol,
     runtime_checkable,
 )
@@ -91,14 +90,24 @@ class VectorStoreProtocol(Protocol):
 
     def store_text(
             self,
-            text: str,
+            text_unit: TextUnit,
             embedding: np.ndarray,
             *,
-            text_id: str | None,
-            metadata: Mapping[str, Any] | None,
+            text_id: str | None = None,
     ) -> str:  # noqa: D102
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
+
+    # def store_text(  # todo
+    #         self,
+    #         text: str,
+    #         embedding: np.ndarray,
+    #         *,
+    #         text_id: str | None,
+    #         metadata: Mapping[str, Any] | None,
+    # ) -> str:  # noqa: D102
+    #     # pylint: disable=missing-function-docstring
+    #     ...  # pragma: no cover
 
 
 @runtime_checkable

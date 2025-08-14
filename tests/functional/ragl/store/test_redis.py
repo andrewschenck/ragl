@@ -17,6 +17,7 @@ from ragl.exceptions import (
     ValidationError,
 )
 from ragl.store.redis import RedisVectorStore
+from ragl.textunit import TextUnit
 
 
 class TestRedisVectorStore(unittest.TestCase):
@@ -441,6 +442,11 @@ class TestRedisVectorStore(unittest.TestCase):
             )
 
         text = "Sample text"
+        text_unit = TextUnit(
+            text=text,
+            text_id=None,
+            distance=0.0,
+        )
         embedding = np.random.rand(self.dimensions)
         metadata = {'tags': ['test'], 'source': 'test_source'}
 
@@ -449,7 +455,7 @@ class TestRedisVectorStore(unittest.TestCase):
         with patch('ragl.store.redis.sanitize_metadata',
                    return_value=metadata):
             with patch.object(store, 'index', self.mock_index):
-                result = store.store_text(text, embedding, metadata=metadata)
+                result = store.store_text(text_unit, embedding)
 
         self.assertEqual(result, f'{TEXT_ID_PREFIX}123')
         self.mock_index.load.assert_called_once()
@@ -463,20 +469,32 @@ class TestRedisVectorStore(unittest.TestCase):
                 dimensions=self.dimensions,
                 index_name=self.index_name
             )
-
         text = "Sample text"
+        text_unit = TextUnit(
+            text=text,
+            text_id='test-id',
+            distance=0.0,
+        )
+
         embedding = np.random.rand(self.dimensions)
         custom_id = f'{TEXT_ID_PREFIX}custom'
 
         with patch('ragl.store.redis.sanitize_metadata', return_value={}):
             with patch.object(store, 'index', self.mock_index):
-                result = store.store_text(text, embedding, text_id=custom_id)
+                result = store.store_text(text_unit, embedding, text_id=custom_id)
 
         self.assertEqual(result, custom_id)
 
     @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
     def test_store_text_empty_text(self, mock_validate_sync):
         """Test storing empty text."""
+
+        text_unit = TextUnit(
+            text="",
+            text_id='test-id',
+            distance=0.0,
+        )
+
         with patch.object(RedisVectorStore, '_enforce_schema_version'):
             store = RedisVectorStore(
                 redis_client=self.mock_redis_client,
@@ -487,11 +505,17 @@ class TestRedisVectorStore(unittest.TestCase):
         embedding = np.random.rand(self.dimensions)
 
         with self.assertRaises(ValidationError):
-            store.store_text("", embedding)
+            store.store_text(text_unit, embedding)
 
     @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
     def test_store_text_whitespace_only(self, mock_validate_sync):
         """Test storing whitespace-only text."""
+        text = "   \n\t   "
+        text_unit = TextUnit(
+            text=text,
+            text_id='test-id',
+            distance=0.0,
+        )
         with patch.object(RedisVectorStore, '_enforce_schema_version'):
             store = RedisVectorStore(
                 redis_client=self.mock_redis_client,
@@ -502,7 +526,7 @@ class TestRedisVectorStore(unittest.TestCase):
         embedding = np.random.rand(self.dimensions)
 
         with self.assertRaises(ValidationError):
-            store.store_text("   \n\t   ", embedding)
+            store.store_text(text_unit, embedding)
 
     @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
     def test_store_text_invalid_embedding_dimensions(self, mock_validate_sync):
@@ -513,12 +537,16 @@ class TestRedisVectorStore(unittest.TestCase):
                 dimensions=self.dimensions,
                 index_name=self.index_name
             )
+        text_unit = TextUnit(
+            text="text",
+            text_id='test-id',
+            distance=0.0,
+        )
 
-        text = "Sample text"
         wrong_embedding = np.random.rand(512)  # Wrong dimensions
 
         with self.assertRaises(ConfigurationError):
-            store.store_text(text, wrong_embedding)
+            store.store_text(text_unit, wrong_embedding)
 
     @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
     def test_close(self, mock_validate_sync):

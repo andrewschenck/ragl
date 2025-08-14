@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import Mock
 
+import numpy as np
+
 from ragl.ragstore import RAGStore
 from ragl.protocols import EmbedderProtocol, VectorStoreProtocol
 from ragl.textunit import TextUnit
@@ -160,9 +162,10 @@ class TestRAGStore(unittest.TestCase):
     def test_store_text_basic(self):
         """Test basic text storage without ID or metadata."""
         text = "Hello, world!"
+        original_text_id = "text-id-1"
         text_unit = TextUnit(
             text=text,
-            text_id="text-id-1",
+            text_id=original_text_id,
             distance=0.0,
         )
 
@@ -170,12 +173,50 @@ class TestRAGStore(unittest.TestCase):
 
         self.assertIsInstance(result, TextUnit)
         self.assertEqual(result.text, text)
+        # The text_id should be updated to what storage returned
+        self.assertEqual(result.text_id, "test_id_123")
         self.mock_storage.store_text.assert_called_once()
 
-        # Verify the call to storage with the correct parameters
+        # Verify the storage was called with the original TextUnit
         call_args = self.mock_storage.store_text.call_args
-        self.assertEqual(call_args[1]['text'], text)
-        self.assertIsNotNone(call_args[1]['embedding'])
+        # Note: The TextUnit passed to storage will have the updated text_id
+        # because RAGStore modifies it before returning
+        self.assertEqual(call_args.kwargs['text_unit'].text, text)
+        self.assertEqual(call_args.kwargs['text_unit'].text_id, "test_id_123")
+
+    # def test_store_text_basic(self):
+    #     """Test basic text storage without ID or metadata."""
+    #     text = "Hello, world!"
+    #     text_unit = TextUnit(
+    #         text=text,
+    #         text_id="text-id-1",
+    #         distance=0.0,
+    #     )
+    #
+    #     result = self.rag_store.store_text(text_unit)
+    #
+    #     self.assertIsInstance(result, TextUnit)
+    #     self.assertEqual(result.text, text)
+    #     self.mock_storage.store_text.assert_called_once()
+    #
+    #     # Verify the call to storage with the correct parameters
+    #     """
+    #     text_unit=TextUnit(text_id='test_id_123', text="'Hello, world!'", distance=0.0, chunk_position=None, parent_id=None), embedding=[0.1, 0.2, 0.3])
+    #     """
+    #     expected_unit = {
+    #         'text_id': 'test_id_123',
+    #         'text': "Hello, world!",
+    #         'distance': 0.0,
+    #         'chunk_position': None,
+    #         'parent_id': None,
+    #     }
+    #     expected_embedding = [0.1, 0.2, 0.3]
+    #
+    #     call_args = self.mock_storage.store_text.call_args
+    #     print(call_args)
+    #
+    #     self.assertEqual(call_args[1]['text'], text)
+    #     self.assertIsNotNone(call_args[1]['embedding'])
 
     def test_store_text_with_id(self):
         """Test text storage with provided ID."""
@@ -193,9 +234,36 @@ class TestRAGStore(unittest.TestCase):
 
         # Verify the call to storage with the correct parameters
         call_args = self.mock_storage.store_text.call_args
-        self.assertEqual(call_args[1]['text'], text)
-        self.assertEqual(call_args[1]['text_id'], text_id)
-        self.assertIsNotNone(call_args[1]['embedding'])
+        # Access kwargs instead of positional args
+        self.assertEqual(call_args.kwargs['text_unit'].text, text)
+        self.assertEqual(call_args.kwargs['text_unit'].text_id,
+                         "test_id_123")  # Updated by RAGStore
+
+        # Check that embedding was passed
+        self.assertIn('embedding', call_args.kwargs)
+        # Verify it's the mocked embedding result
+        np.testing.assert_array_equal(call_args.kwargs['embedding'],
+                                      [0.1, 0.2, 0.3])
+
+    # def test_store_text_with_id(self):
+    #     """Test text storage with provided ID."""
+    #     text = "Hello, world!"
+    #     text_id = "custom_id"
+    #     text_unit = TextUnit(text=text, text_id=text_id, distance=0.0)
+    #
+    #     result = self.rag_store.store_text(text_unit)
+    #
+    #     self.assertIsInstance(result, TextUnit)
+    #     self.assertEqual(result.text, text)
+    #     self.assertEqual(result.text_id,
+    #                      "test_id_123")  # Returned by mock storage
+    #     self.mock_storage.store_text.assert_called_once()
+    #
+    #     # Verify the call to storage with the correct parameters
+    #     call_args = self.mock_storage.store_text.call_args
+    #     self.assertEqual(call_args[1]['text'], text)
+    #     self.assertEqual(call_args[1]['text_id'], text_id)
+    #     self.assertIsNotNone(call_args[1]['embedding'])
 
     # def test_store_text_with_metadata(self):
     #     """Test text storage with metadata."""

@@ -3,6 +3,7 @@ Comprehensive integration tests for RAGL against live Redis container.
 Assumes Redis is running and accessible.
 """
 import logging
+import time
 
 from ragl.config import (
     ManagerConfig,
@@ -11,6 +12,7 @@ from ragl.config import (
 )
 from ragl.exceptions import ValidationError
 from ragl.registry import create_rag_manager
+from ragl.textunit import TextUnit
 
 
 logging.basicConfig(level=logging.INFO)
@@ -189,38 +191,6 @@ class TestRAGLIntegration:
         assert len(contexts) >= 1
         assert contexts[0].distance is not None
         assert 0.0 <= contexts[0].distance <= 1.0
-
-    # def test_concurrent_operations(self):
-    #     """Test concurrent add/retrieve operations."""
-    #
-    #     results = []
-    #
-    #     def add_documents(thread_id):
-    #         for i in range(3):
-    #             text = f"Thread {thread_id} document {i} content"
-    #             docs = self.manager.add_text(
-    #                 text_or_doc=text,
-    #                 base_id=f"doc:thread_{thread_id}_{i}"
-    #             )
-    #             results.append(docs[0].text_id)
-    #             time.sleep(0.1)
-    #
-    #     # Create multiple threads
-    #     threads = []
-    #     for i in range(3):
-    #         thread = threading.Thread(target=add_documents, args=(i,))
-    #         threads.append(thread)
-    #         thread.start()
-    #
-    #     # Wait for completion
-    #     for thread in threads:
-    #         thread.join()
-    #
-    #     # Verify all documents were added
-    #     assert len(results) == 9
-    #     all_texts = self.manager.list_texts()
-    #     for text_id in results:
-    #         assert text_id in all_texts
 
     def test_error_handling(self):
         """Test error handling for invalid operations."""
@@ -594,8 +564,6 @@ class TestRAGLIntegration:
 
     def test_textunit_metadata_preservation(self):
         """Test end-to-end preservation of TextUnit metadata when storing to Redis."""
-        import time
-        from ragl.textunit import TextUnit
 
         # Create TextUnit with comprehensive metadata
         original_timestamp = int(time.time()) - 3600  # 1 hour ago
@@ -892,70 +860,102 @@ class TestRAGLIntegration:
 
             logging.info(f"{operation_name} metrics precision verified")
 
-#     def test_concurrent_metrics_tracking(self):
-#         """Test that metrics tracking works correctly under concurrent operations."""
-#
-#         def perform_operations(thread_id: int, operation_count: int):
-#             """Perform multiple operations in a thread."""
-#             for i in range(operation_count):
-#                 try:
-#                     text = f"Thread {thread_id} operation {i} content"
-#                     self.manager.add_text(text,
-#                                           base_id=f"doc:concurrent_{thread_id}_{i}")
-#                     self.manager.get_context(f"thread {thread_id} query {i}",
-#                                              top_k=1)
-#                     time.sleep(0.01)  # Small delay to allow interleaving
-#                 except Exception as e:
-#                     logging.warning(
-#                         f"Thread {thread_id} operation {i} failed: {e}")
-#
-#         # Run concurrent operations
-#         threads = []
-#         operations_per_thread = 3
-#         thread_count = 3
-#
-#         for thread_id in range(thread_count):
-#             thread = threading.Thread(
-#                 target=perform_operations,
-#                 args=(thread_id, operations_per_thread)
-#             )
-#             threads.append(thread)
-#             thread.start()
-#
-#         # Wait for all threads to complete
-#         for thread in threads:
-#             thread.join()
-#
-#         # Verify metrics consistency
-#         metrics = self.manager.get_performance_metrics()
-#
-#         # Should have metrics for operations performed
-#         assert 'add_text' in metrics
-#         assert 'get_context' in metrics
-#
-#         # Verify total call counts make sense
-#         expected_min_calls = thread_count * operations_per_thread
-#         add_text_calls = metrics['add_text']['total_calls']
-#         context_calls = metrics['get_context']['total_calls']
-#
-#         # Should have at least the expected number of calls (allowing for some failures)
-#         assert add_text_calls >= expected_min_calls * 0.8  # Allow 20% failure rate
-#         assert context_calls >= expected_min_calls * 0.8
-#
-#         # Verify metrics integrity
-#         for operation_name, operation_metrics in metrics.items():
-#             total_calls = operation_metrics['total_calls']
-#             failure_count = operation_metrics['failure_count']
-#             success_rate = operation_metrics['success_rate']
-#
-#             # Basic consistency checks
-#             assert failure_count <= total_calls
-#             expected_success_rate = (
-#                                             total_calls - failure_count) / total_calls if total_calls > 0 else 0.0
-#             assert abs(success_rate - expected_success_rate) < 0.001
-#
-#         logging.info(f"Concurrent metrics tracking verified - "
-#                      f"add_text: {add_text_calls} calls, get_context: {context_calls} calls")
+    # def test_concurrent_operations(self):
+    #     """Test concurrent add/retrieve operations."""
+    #
+    #     results = []
+    #
+    #     def add_documents(thread_id):
+    #         for i in range(3):
+    #             text = f"Thread {thread_id} document {i} content"
+    #             docs = self.manager.add_text(
+    #                 text_or_doc=text,
+    #                 base_id=f"doc:thread_{thread_id}_{i}"
+    #             )
+    #             results.append(docs[0].text_id)
+    #             time.sleep(0.1)
+    #
+    #     # Create multiple threads
+    #     threads = []
+    #     for i in range(3):
+    #         thread = threading.Thread(target=add_documents, args=(i,))
+    #         threads.append(thread)
+    #         thread.start()
+    #
+    #     # Wait for completion
+    #     for thread in threads:
+    #         thread.join()
+    #
+    #     # Verify all documents were added
+    #     assert len(results) == 9
+    #     all_texts = self.manager.list_texts()
+    #     for text_id in results:
+    #         assert text_id in all_texts
+    #
+    # def test_concurrent_metrics_tracking(self):
+    #     """Test that metrics tracking works correctly under concurrent operations."""
+    #
+    #     def perform_operations(thread_id: int, operation_count: int):
+    #         """Perform multiple operations in a thread."""
+    #         for i in range(operation_count):
+    #             try:
+    #                 text = f"Thread {thread_id} operation {i} content"
+    #                 self.manager.add_text(text,
+    #                                       base_id=f"doc:concurrent_{thread_id}_{i}")
+    #                 self.manager.get_context(f"thread {thread_id} query {i}",
+    #                                          top_k=1)
+    #                 time.sleep(0.01)  # Small delay to allow interleaving
+    #             except Exception as e:
+    #                 logging.warning(
+    #                     f"Thread {thread_id} operation {i} failed: {e}")
+    #
+    #     # Run concurrent operations
+    #     threads = []
+    #     operations_per_thread = 3
+    #     thread_count = 3
+    #
+    #     for thread_id in range(thread_count):
+    #         thread = threading.Thread(
+    #             target=perform_operations,
+    #             args=(thread_id, operations_per_thread)
+    #         )
+    #         threads.append(thread)
+    #         thread.start()
+    #
+    #     # Wait for all threads to complete
+    #     for thread in threads:
+    #         thread.join()
+    #
+    #     # Verify metrics consistency
+    #     metrics = self.manager.get_performance_metrics()
+    #
+    #     # Should have metrics for operations performed
+    #     assert 'add_text' in metrics
+    #     assert 'get_context' in metrics
+    #
+    #     # Verify total call counts make sense
+    #     expected_min_calls = thread_count * operations_per_thread
+    #     add_text_calls = metrics['add_text']['total_calls']
+    #     context_calls = metrics['get_context']['total_calls']
+    #
+    #     # Should have at least the expected number of calls (allowing for some failures)
+    #     assert add_text_calls >= expected_min_calls * 0.8  # Allow 20% failure rate
+    #     assert context_calls >= expected_min_calls * 0.8
+    #
+    #     # Verify metrics integrity
+    #     for operation_name, operation_metrics in metrics.items():
+    #         total_calls = operation_metrics['total_calls']
+    #         failure_count = operation_metrics['failure_count']
+    #         success_rate = operation_metrics['success_rate']
+    #
+    #         # Basic consistency checks
+    #         assert failure_count <= total_calls
+    #         expected_success_rate = (
+    #                                         total_calls - failure_count) / total_calls if total_calls > 0 else 0.0
+    #         assert abs(success_rate - expected_success_rate) < 0.001
+    #
+    #     logging.info(f"Concurrent metrics tracking verified - "
+    #                  f"add_text: {add_text_calls} calls, get_context: {context_calls} calls")
 
 
 if __name__ == "__main__":
