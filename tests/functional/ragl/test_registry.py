@@ -8,7 +8,7 @@ create_rag_manager function.
 
 import logging
 import unittest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, patch
 from typing import Any
 
 from ragl.registry import (

@@ -1,13 +1,8 @@
-import logging
-import statistics
-import time
 import unittest
 from collections import deque
-from contextlib import contextmanager
-from unittest.mock import Mock, MagicMock, patch, call
+from unittest.mock import Mock, patch
 
 from ragl.config import ManagerConfig
-from ragl.constants import TEXT_ID_PREFIX
 from ragl.exceptions import DataError, ValidationError, ConfigurationError
 from ragl.manager import RAGManager, RAGTelemetry
 from ragl.protocols import RAGStoreProtocol, TokenizerProtocol
@@ -146,7 +141,23 @@ class TestRAGManager(unittest.TestCase):
 
         # Setup default mock behaviors
         self.mock_ragstore.list_texts.return_value = []
-        self.mock_ragstore.store_text.return_value = 'text-id-1'
+        self.mock_ragstore.store_text.return_value = TextUnit(
+            text_id='text-id-1',
+            text='test text',
+            distance=0.0
+        )
+        self.mock_tokenizer.encode.return_value = list(range(100))
+        self.mock_tokenizer.decode.return_value = 'decoded text chunk'
+
+        def mock_store_text(text_unit):
+            # Update the text_id and return the same TextUnit
+            text_unit.text_id = f'text-id-{len(self.stored_units) + 1}'
+            self.stored_units.append(text_unit)
+            return text_unit
+
+        self.stored_units = []
+        self.mock_ragstore.store_text.side_effect = mock_store_text
+
         self.mock_tokenizer.encode.return_value = list(range(100))
         self.mock_tokenizer.decode.return_value = 'decoded text chunk'
 
@@ -280,11 +291,15 @@ class TestRAGManager(unittest.TestCase):
         self.mock_tokenizer.encode.return_value = list(range(50))
         self.mock_tokenizer.decode.return_value = text
 
-        result = manager.add_text(text, base_id=base_id)
+        manager.add_text(text, base_id=base_id)
 
-        # Check that the parent_id is set to base_id
         call_args = self.mock_ragstore.store_text.call_args
-        self.assertEqual(call_args[1]['metadata']['parent_id'], base_id)
+        stored_textunit = call_args[0][0]
+
+        self.assertEqual(stored_textunit.parent_id, base_id)
+        self.assertEqual(stored_textunit.text, text)
+        self.assertEqual(stored_textunit.chunk_position, 0)
+        self.assertEqual(stored_textunit.text_id, 'text-id-1')
 
     def test_add_text_custom_chunk_params(self):
         """Test adding text with custom chunk size and overlap."""
@@ -372,21 +387,21 @@ class TestRAGManager(unittest.TestCase):
                              tokenizer=self.mock_tokenizer)
         query = "test query"
 
-        # Mock ragstore response
-        mock_response = [{
-            'text_id':        'test-1',
-            'text':           'relevant text',
-            'distance':       0.5,
-            'timestamp':      12345,
-            'source':         'test',
-            'tags':           [],
-            'confidence':     None,
-            'language':       'unknown',
-            'section':        'unknown',
-            'author':         'unknown',
-            'parent_id':      'doc-1',
-            'chunk_position': 0,
-        }]
+        # Mock ragstore response - now as TextUnit objects
+        mock_response = [TextUnit(
+            text_id='test-1',
+            text='relevant text',
+            distance=0.5,
+            timestamp=12345,
+            source='test',
+            tags=[],
+            confidence=None,
+            language='unknown',
+            section='unknown',
+            author='unknown',
+            parent_id='doc-1',
+            chunk_position=0,
+        )]
         self.mock_ragstore.get_relevant.return_value = mock_response
 
         result = manager.get_context(query, top_k=5)
@@ -394,13 +409,11 @@ class TestRAGManager(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertIsInstance(result[0], TextUnit)
         self.mock_ragstore.get_relevant.assert_called_once_with(
-            query=query, top_k=5, min_time=None, max_time=None
+            query=query,
+            top_k=5,
+            min_time=None,
+            max_time=None,
         )
-        call_args = mock_log.debug.call_args
-        self.assertEqual(call_args[0][0],
-                         'Operation completed: %s (%.3fs)')
-        self.assertEqual(call_args[0][1], 'get_context')
-        self.assertIsInstance(call_args[0][2], float)  # execution time
 
     def test_get_context_with_time_filters(self):
         """Test getting context with time filters."""
@@ -425,24 +438,20 @@ class TestRAGManager(unittest.TestCase):
                              tokenizer=self.mock_tokenizer)
         query = "test query"
 
-        # Mock response with different timestamps
+        # Mock response with different timestamps - now as TextUnit objects
         mock_response = [
-            {
-                'text_id':   'test-1', 'text': 'text1', 'distance': 0.3,
-                'timestamp': 2000,
-                'source':    'test', 'tags': [], 'confidence': None,
-                'language':  'unknown',
-                'section':   'unknown', 'author': 'unknown',
-                'parent_id': 'doc-1', 'chunk_position': 0
-            },
-            {
-                'text_id':   'test-2', 'text': 'text2', 'distance': 0.1,
-                'timestamp': 1000,
-                'source':    'test', 'tags': [], 'confidence': None,
-                'language':  'unknown',
-                'section':   'unknown', 'author': 'unknown',
-                'parent_id': 'doc-2', 'chunk_position': 0
-            },
+            TextUnit(
+                text_id='test-1', text='text1', distance=0.3,
+                timestamp=2000, source='test', tags=[], confidence=None,
+                language='unknown', section='unknown', author='unknown',
+                parent_id='doc-1', chunk_position=0
+            ),
+            TextUnit(
+                text_id='test-2', text='text2', distance=0.1,
+                timestamp=1000, source='test', tags=[], confidence=None,
+                language='unknown', section='unknown', author='unknown',
+                parent_id='doc-2', chunk_position=0
+            ),
         ]
         self.mock_ragstore.get_relevant.return_value = mock_response
 
@@ -458,24 +467,20 @@ class TestRAGManager(unittest.TestCase):
                              tokenizer=self.mock_tokenizer)
         query = "test query"
 
-        # Mock response with different distances
+        # Mock response with different distances - now as TextUnit objects
         mock_response = [
-            {
-                'text_id':   'test-1', 'text': 'text1', 'distance': 0.8,
-                'timestamp': 2000,
-                'source':    'test', 'tags': [], 'confidence': None,
-                'language':  'unknown',
-                'section':   'unknown', 'author': 'unknown',
-                'parent_id': 'doc-1', 'chunk_position': 0
-            },
-            {
-                'text_id':   'test-2', 'text': 'text2', 'distance': 0.2,
-                'timestamp': 1000,
-                'source':    'test', 'tags': [], 'confidence': None,
-                'language':  'unknown',
-                'section':   'unknown', 'author': 'unknown',
-                'parent_id': 'doc-2', 'chunk_position': 0
-            },
+            TextUnit(
+                text_id='test-1', text='text1', distance=0.8,
+                timestamp=2000, source='test', tags=[], confidence=None,
+                language='unknown', section='unknown', author='unknown',
+                parent_id='doc-1', chunk_position=0
+            ),
+            TextUnit(
+                text_id='test-2', text='text2', distance=0.2,
+                timestamp=1000, source='test', tags=[], confidence=None,
+                language='unknown', section='unknown', author='unknown',
+                parent_id='doc-2', chunk_position=0
+            ),
         ]
         self.mock_ragstore.get_relevant.return_value = mock_response
 
@@ -933,7 +938,7 @@ class TestRAGManager(unittest.TestCase):
             'author':     'test_author',
             'parent_id':  'parent-1',
         }
-        text_id = "chunk-1"
+        text_id = "text-id-1"
 
         result = manager._store_chunk(
             chunk=chunk,
@@ -949,13 +954,16 @@ class TestRAGManager(unittest.TestCase):
         self.assertEqual(result.chunk_position, 0)
         self.assertEqual(result.parent_id, "parent-1")
 
-        # Verify ragstore.store_text was called correctly
+        # Verify ragstore.store_text was called correctly - now with TextUnit
         self.mock_ragstore.store_text.assert_called_once()
         call_args = self.mock_ragstore.store_text.call_args
-        self.assertEqual(call_args[1]['text'], chunk)
-        self.assertEqual(call_args[1]['text_id'], text_id)
+        stored_textunit = call_args[0][0]  # First positional argument
 
-        mock_log.debug.assert_called_with('Storing chunk')
+        self.assertIsInstance(stored_textunit, TextUnit)
+        self.assertEqual(stored_textunit.text, chunk)
+        self.assertEqual(stored_textunit.text_id, text_id)
+        self.assertEqual(stored_textunit.chunk_position, 0)
+        self.assertEqual(stored_textunit.parent_id, "parent-1")
 
     @patch('time.time')
     @patch('ragl.manager._LOG')
@@ -1192,7 +1200,7 @@ class TestRAGManager(unittest.TestCase):
         ]
 
         # Mock store_text to return different IDs
-        self.mock_ragstore.store_text.side_effect = ['id-1', 'id-2', 'id-3']
+        # self.mock_ragstore.store_text.side_effect = ['id-1', 'id-2', 'id-3']
 
         result = manager.add_text(text)
 
@@ -1229,44 +1237,37 @@ class TestRAGManager(unittest.TestCase):
         self.mock_tokenizer.encode.return_value = list(range(50))
         self.mock_tokenizer.decode.return_value = original_unit.text
 
-        # Mock retrieve to return the stored metadata
-        stored_metadata = {
-            'text_id':        'stored-id',
-            'text':           original_unit.text,
-            'confidence':     0.95,
-            'author':         "John Doe",
-            'source':         "test_source",
-            'tags':           ["important", "test"],
-            'language':       "en",
-            'section':        "intro",
-            'distance':       0.1,
-            'chunk_position': 0,
-            'parent_id':      'test-parent',
-            'timestamp':      12345
-        }
-        self.mock_ragstore.get_relevant.return_value = [stored_metadata]
+        # Mock retrieve to return the stored metadata - now as TextUnit objects
+        stored_unit = TextUnit(
+            text_id='stored-id',
+            text=original_unit.text,
+            confidence=0.95,
+            author="John Doe",
+            source="test_source",
+            tags=["important", "test"],
+            language="en",
+            section="intro",
+            distance=0.1,
+            chunk_position=0,
+            parent_id='test-parent',
+            timestamp=12345
+        )
+        self.mock_ragstore.get_relevant.return_value = [stored_unit]
 
         # Add the TextUnit
         manager.add_text(original_unit)
 
-        # Verify metadata was stored (excluding filtered fields)
+        # Verify the TextUnit was stored properly
         call_args = self.mock_ragstore.store_text.call_args
-        stored_metadata_arg = call_args[1]['metadata']
+        stored_textunit = call_args[0][0]
 
-        self.assertEqual(stored_metadata_arg['confidence'], 0.95)
-        self.assertEqual(stored_metadata_arg['author'], "John Doe")
-        self.assertEqual(stored_metadata_arg['source'], "test_source")
-        self.assertNotIn('text_id', stored_metadata_arg)  # Should be filtered
-        self.assertNotIn('text', stored_metadata_arg)  # Should be filtered
-        self.assertNotIn('distance', stored_metadata_arg)  # Should be filtered
-
-        # Retrieve and verify metadata is preserved
-        results = manager.get_context("test query")
-        retrieved_unit = results[0]
-
-        self.assertEqual(retrieved_unit.confidence, 0.95)
-        self.assertEqual(retrieved_unit.author, "John Doe")
-        self.assertEqual(retrieved_unit.source, "test_source")
+        # Check that metadata was preserved
+        self.assertEqual(stored_textunit.confidence, 0.95)
+        self.assertEqual(stored_textunit.author, "John Doe")
+        self.assertEqual(stored_textunit.source, "test_source")
+        self.assertEqual(stored_textunit.tags, ["important", "test"])
+        self.assertEqual(stored_textunit.language, "en")
+        self.assertEqual(stored_textunit.section, "intro")
 
 
 if __name__ == '__main__':

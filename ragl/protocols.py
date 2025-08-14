@@ -26,6 +26,7 @@ from typing import (
 
 import numpy as np
 
+from ragl.textunit import TextUnit
 
 __all__ = (
     'EmbedderProtocol',
@@ -119,6 +120,17 @@ class RAGStoreProtocol(Protocol):
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
+    # def get_relevant( # todo
+    #         self,
+    #         query: str,
+    #         top_k: int,
+    #         *,
+    #         min_time: int | None,
+    #         max_time: int | None,
+    # ) -> list[dict[str, Any]]:  # noqa: D102
+    #     # pylint: disable=missing-function-docstring
+    #     ...  # pragma: no cover
+
     def get_relevant(
             self,
             query: str,
@@ -126,7 +138,7 @@ class RAGStoreProtocol(Protocol):
             *,
             min_time: int | None,
             max_time: int | None,
-    ) -> list[dict[str, Any]]:  # noqa: D102
+    ) -> list[TextUnit]:  # noqa: D102
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
@@ -134,15 +146,19 @@ class RAGStoreProtocol(Protocol):
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
-    def store_text(
-            self,
-            text: str,
-            *,
-            text_id: str | None,
-            metadata: Mapping[str, Any] | None,
-    ) -> str:  # noqa: D102
+    def store_text(self, text_unit: TextUnit) -> TextUnit:  # noqa: D102
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
+
+    # def store_text( # todo
+    #         self,
+    #         text: str,
+    #         *,
+    #         text_id: str | None,
+    #         metadata: Mapping[str, Any] | None,
+    # ) -> str:  # noqa: D102
+    #     # pylint: disable=missing-function-docstring
+    #     ...  # pragma: no cover
 
 
 @runtime_checkable

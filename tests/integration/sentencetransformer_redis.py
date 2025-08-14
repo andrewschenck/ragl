@@ -956,35 +956,34 @@ class TestRAGLIntegration:
 #
 #         logging.info(f"Concurrent metrics tracking verified - "
 #                      f"add_text: {add_text_calls} calls, get_context: {context_calls} calls")
-#
-#
-#
-# if __name__ == "__main__":
-#     import sys
-#     test_suite = TestRAGLIntegration()
-#     test_suite.setup_class()
-#
-#     test_methods = [
-#         method for method in dir(test_suite)
-#         if method.startswith('test_')
-#     ]
-#
-#     exit_code = 0
-#     for test_method in test_methods:
-#         # print(f"\n*** Running {test_method}...")
-#         logging.info(f"***** Running {test_method} *****")
-#         try:
-#             test_suite.setup_method()
-#             getattr(test_suite, test_method)()
-#             # print(f"*** {test_method} passed")
-#             logging.info(f"***** {test_method} passed *****")
-#         except Exception as e:
-#             # print(f"*** {test_method} failed: {e}")
-#             logging.warning(f"***** {test_method} failed: {e} *****")
-#             exit_code = 1
-#         finally:
-#             test_suite.teardown_method()
-#
-#     # print("\n***Integration tests completed.")
-#     logging.info("***** Integration tests completed. *****")
-#     sys.exit(exit_code)
+
+
+if __name__ == "__main__":
+    import sys
+    test_suite = TestRAGLIntegration()
+    test_suite.setup_class()
+
+    test_methods = [
+        method for method in dir(test_suite)
+        if method.startswith('test_')
+    ]
+
+    exit_code = 0
+    for test_method in test_methods:
+        # print(f"\n*** Running {test_method}...")
+        logging.info(f"***** Running {test_method} *****")
+        try:
+            test_suite.setup_method()
+            getattr(test_suite, test_method)()
+            # print(f"*** {test_method} passed")
+            logging.info(f"***** {test_method} passed *****")
+        except Exception as e:
+            # print(f"*** {test_method} failed: {e}")
+            logging.warning(f"***** {test_method} failed: {e} *****")
+            exit_code = 1
+        finally:
+            test_suite.teardown_method()
+
+    # print("\n***Integration tests completed.")
+    logging.info("***** Integration tests completed. *****")
+    sys.exit(exit_code)

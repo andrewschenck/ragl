@@ -1,3 +1,4 @@
+# pylint: disable=too-many-lines
 """
 Core RAG management functionality for text storage and retrieval.
 
@@ -463,14 +464,74 @@ class RAGManager:
             )
 
             if sort_by_time:
-                results = sorted(results, key=lambda x: x['timestamp'])
+                results = sorted(results, key=lambda x: x.timestamp)
             else:
-                results = sorted(results, key=lambda x: x['distance'])
+                results = sorted(results, key=lambda x: x.distance)
 
             _LOG.info('Retrieved %s contexts for query: %s',
                       len(results), query)
 
-            return [TextUnit.from_dict(result) for result in results]
+            return results
+
+    # def get_context(  # todo
+    #         self,
+    #         query: str,
+    #         top_k: int = 10,
+    #         *,
+    #         min_time: int | None = None,
+    #         max_time: int | None = None,
+    #         sort_by_time: bool = False,
+    # ) -> list[TextUnit]:
+    #     # pylint: disable=too-many-arguments
+    #     """
+    #     Retrieve relevant text chunks for a query.
+    #
+    #     Retrieves text chunks based on semantic similarity
+    #     to the query, optionally filtering by time range and sorting.
+    #
+    #     Args:
+    #         query:
+    #             Query text.
+    #         top_k:
+    #             Number of results to return.
+    #         min_time:
+    #             Minimum timestamp filter.
+    #         max_time:
+    #             Maximum timestamp filter.
+    #         sort_by_time:
+    #             Sort by time instead of distance.
+    #
+    #     Returns:
+    #         List of TextUnit instances, possibly fewer than top_k
+    #         if backend filtering reduces results. See relevant
+    #         backend documentation for details.
+    #     """
+    #     _LOG.debug('Retrieving context for query: %s', query)
+    #
+    #     if query.strip() == '':
+    #         return []
+    #
+    #     with self.track_operation('get_context'):
+    #         self._sanitize_query(query)
+    #         self._validate_query(query)
+    #         self._validate_top_k(top_k)
+    #
+    #         results = self.ragstore.get_relevant(
+    #             query=query,
+    #             top_k=top_k,
+    #             min_time=min_time,
+    #             max_time=max_time,
+    #         )
+    #
+    #         if sort_by_time:
+    #             results = sorted(results, key=lambda x: x['timestamp'])
+    #         else:
+    #             results = sorted(results, key=lambda x: x['distance'])
+    #
+    #         _LOG.info('Retrieved %s contexts for query: %s',
+    #                   len(results), query)
+    #
+    #         return [TextUnit.from_dict(result) for result in results]
 
     def get_health_status(self) -> dict[str, Any]:
         """
@@ -773,7 +834,7 @@ class RAGManager:
         """
         Store a single text chunk.
 
-        Stores a text chunk with metadata in the RAG store.
+        Stores a text chunk with metadata in the ragstore.
 
         Args:
             chunk:
@@ -793,24 +854,71 @@ class RAGManager:
         _LOG.debug('Storing chunk')
         chunk_data = base_data.copy()
         chunk_data.update({
-            'text_id':          text_id,
-            'text':             chunk,
-            'chunk_position':   i,
-            'parent_id':        parent_id,
-            'distance':         0.0,
+            'text_id':        text_id,
+            'text':           chunk,
+            'chunk_position': i,
+            'parent_id':      parent_id,
+            'distance':       0.0,
         })
 
-        metadata = {k: v for k, v in chunk_data.items()
-                    if k not in {'text_id', 'text', 'distance'}}
+        # todo TextUnit to the backend
+        # Create TextUnit from chunk_data
+        text_unit = TextUnit.from_dict(chunk_data)
 
-        text_id = self.ragstore.store_text(
-            text=chunk,
-            text_id=text_id,
-            metadata=metadata
-        )
-        chunk_data['text_id'] = text_id
+        # Store the TextUnit and return the result
+        return self.ragstore.store_text(text_unit)
 
-        return TextUnit.from_dict(chunk_data)
+    # def _store_chunk( # todo
+    #         self,
+    #         *,
+    #         chunk: str,
+    #         base_data: dict[str, Any],
+    #         text_id: str,
+    #         i: int,
+    #         parent_id: str,
+    # ) -> TextUnit:
+    #     # pylint: disable=too-many-arguments
+    #     """
+    #     Store a single text chunk.
+    #
+    #     Stores a text chunk with metadata in the RAG store.
+    #
+    #     Args:
+    #         chunk:
+    #             Text chunk to store.
+    #         base_data:
+    #             Base metadata dict.
+    #         text_id:
+    #             ID for the chunk.
+    #         i:
+    #             Position of the chunk.
+    #         parent_id:
+    #             ID of parent document.
+    #
+    #     Returns:
+    #         Stored TextUnit instance.
+    #     """
+    #     _LOG.debug('Storing chunk')
+    #     chunk_data = base_data.copy()
+    #     chunk_data.update({
+    #         'text_id':          text_id,
+    #         'text':             chunk,
+    #         'chunk_position':   i,
+    #         'parent_id':        parent_id,
+    #         'distance':         0.0,
+    #     })
+    #
+    #     metadata = {k: v for k, v in chunk_data.items()
+    #                 if k not in {'text_id', 'text', 'distance'}}
+    #
+    #     text_id = self.ragstore.store_text(
+    #         text=chunk,
+    #         text_id=text_id,
+    #         metadata=metadata
+    #     )
+    #     chunk_data['text_id'] = text_id
+    #
+    #     return TextUnit.from_dict(chunk_data)
 
     @staticmethod
     def _prepare_base_data(
