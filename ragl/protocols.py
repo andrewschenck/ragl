@@ -76,9 +76,20 @@ class VectorStoreProtocol(Protocol):
             *,
             min_time: int | None,
             max_time: int | None,
-    ) -> list[dict[str, Any]]:  # noqa: D102
+    ) -> list[TextUnit]:  # noqa: D102
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
+
+    # def get_relevant( # todo
+    #         self,
+    #         embedding: np.ndarray,
+    #         top_k: int,
+    #         *,
+    #         min_time: int | None,
+    #         max_time: int | None,
+    # ) -> list[dict[str, Any]]:  # noqa: D102
+    #     # pylint: disable=missing-function-docstring
+    #     ...  # pragma: no cover
 
     def health_check(self) -> dict[str, Any]:  # noqa: D102
         # pylint: disable=missing-function-docstring

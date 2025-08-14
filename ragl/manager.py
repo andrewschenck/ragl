@@ -861,11 +861,7 @@ class RAGManager:
             'distance':       0.0,
         })
 
-        # todo TextUnit to the backend
-        # Create TextUnit from chunk_data
         text_unit = TextUnit.from_dict(chunk_data)
-
-        # Store the TextUnit and return the result
         return self.ragstore.store_text(text_unit)
 
     # def _store_chunk( # todo

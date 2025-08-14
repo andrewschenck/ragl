@@ -244,9 +244,9 @@ class TestRedisVectorStore(unittest.TestCase):
 
         self.assertEqual(len(results), 1)
         result = results[0]
-        self.assertEqual(result['text'], 'Sample text')
-        self.assertEqual(result['text_id'], f'{TEXT_ID_PREFIX}123')
-        self.assertEqual(result['tags'], ['tag1', 'tag2'])
+        self.assertEqual(result.text, 'Sample text')
+        self.assertEqual(result.text_id, f'{TEXT_ID_PREFIX}123')
+        self.assertEqual(result.tags, ['tag1', 'tag2'])
 
     @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
     def test_get_relevant_with_time_filters(self, mock_validate_sync):
