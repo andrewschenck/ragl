@@ -11,7 +11,7 @@ import unittest
 from unittest.mock import Mock, patch
 from typing import Any
 
-from ragl.registry import (
+from ragl.factory import (
     AbstractFactory,
     EmbedderFactory,
     VectorStoreFactory,
@@ -37,7 +37,7 @@ class MockConfig(RaglConfig):
 
 class MockFactory(AbstractFactory):
     """Mock factory class for testing."""
-    _config_cls = MockConfig
+    config_cls = MockConfig
 
     def __call__(self, *args, **kwargs) -> Any:
         return Mock()
@@ -62,7 +62,7 @@ class TestAbstractFactory(unittest.TestCase):
         """Test that direct subclasses get their own factory map."""
 
         class TestDirectFactory(AbstractFactory):
-            _config_cls = MockConfig
+            config_cls = MockConfig
 
         self.assertIsInstance(TestDirectFactory._factory_map, dict)
         self.assertIn(MockConfig, TestDirectFactory._factory_map)
@@ -253,7 +253,7 @@ class TestSentenceTransformerFactory(unittest.TestCase):
 
     def test_sentence_transformer_factory_config_cls(self):
         """Test that SentenceTransformerFactory has correct config class."""
-        self.assertEqual(SentenceTransformerFactory._config_cls,
+        self.assertEqual(SentenceTransformerFactory.config_cls,
                          SentenceTransformerConfig)
 
     def test_call_missing_config(self):
@@ -308,7 +308,7 @@ class TestRedisVectorStoreFactory(unittest.TestCase):
 
     def test_redis_vector_store_factory_config_cls(self):
         """Test that RedisVectorStoreFactory has correct config class."""
-        self.assertEqual(RedisVectorStoreFactory._config_cls, RedisConfig)
+        self.assertEqual(RedisVectorStoreFactory.config_cls, RedisConfig)
 
     def test_call_missing_config(self):
         """Test __call__ without config parameter."""
@@ -380,10 +380,10 @@ class TestRedisVectorStoreFactory(unittest.TestCase):
 class TestCreateRagManager(unittest.TestCase):
     """Test cases for create_rag_manager function."""
 
-    @patch('ragl.registry.RAGManager')
-    @patch('ragl.registry.RAGStore')
-    @patch('ragl.registry.VectorStoreFactory')
-    @patch('ragl.registry.EmbedderFactory')
+    @patch('ragl.factory.RAGManager')
+    @patch('ragl.factory.RAGStore')
+    @patch('ragl.factory.VectorStoreFactory')
+    @patch('ragl.factory.EmbedderFactory')
     def test_create_rag_manager_success(self, mock_embedder_factory_class,
                                         mock_vector_store_factory_class,
                                         mock_rag_store_class,
@@ -454,7 +454,7 @@ class TestLogging(unittest.TestCase):
         factory = EmbedderFactory()
         config = MockConfig()
 
-        with self.assertLogs('ragl.registry', level='DEBUG') as log:
+        with self.assertLogs('ragl.factory', level='DEBUG') as log:
             factory(config=config)
 
         # Verify debug messages are logged
@@ -466,7 +466,7 @@ class TestLogging(unittest.TestCase):
         """Test critical logging when errors occur."""
         factory = EmbedderFactory()
 
-        with self.assertLogs('ragl.registry', level='CRITICAL') as log:
+        with self.assertLogs('ragl.factory', level='CRITICAL') as log:
             try:
                 factory()  # Missing config
             except ConfigurationError:

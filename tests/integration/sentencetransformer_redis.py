@@ -11,7 +11,7 @@ from ragl.config import (
     SentenceTransformerConfig,
 )
 from ragl.exceptions import ValidationError
-from ragl.registry import create_rag_manager
+from ragl.factory import create_rag_manager
 from ragl.textunit import TextUnit
 
 
@@ -48,7 +48,7 @@ class TestRAGLIntegration:
     def test_text_sanitization(self):
         """Test text input sanitization."""
         malicious_text = "Text with <script>alert('xss')</script> chars!"
-        result = self.manager._sanitize_query(malicious_text)
+        result = self.manager._sanitize_text(malicious_text)
         assert "<script>" not in result
         logging.info(f"Sanitized text: {result}")
 

@@ -44,11 +44,11 @@ class EmbedderProtocol(Protocol):
     """
 
     @property
-    def dimensions(self) -> int:  # noqa: D102
+    def dimensions(self) -> int:
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
-    def embed(self, text: str) -> np.ndarray:  # noqa: D102
+    def embed(self, text: str) -> np.ndarray:
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
@@ -61,11 +61,11 @@ class VectorStoreProtocol(Protocol):
     Defines methods for storing and retrieving vectors.
     """
 
-    def clear(self) -> None:  # noqa: D102
+    def clear(self) -> None:
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
-    def delete_text(self, text_id: str) -> bool:  # noqa: D102
+    def delete_text(self, text_id: str) -> bool:
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
@@ -80,11 +80,11 @@ class VectorStoreProtocol(Protocol):
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
-    def health_check(self) -> dict[str, Any]:  # noqa: D102
+    def health_check(self) -> dict[str, Any]:
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
-    def list_texts(self) -> list[str]:  # noqa: D102
+    def list_texts(self) -> list[str]:
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
@@ -104,11 +104,11 @@ class RAGStoreProtocol(Protocol):
     embedder: EmbedderProtocol
     storage: VectorStoreProtocol
 
-    def clear(self) -> None:  # noqa: D102
+    def clear(self) -> None:
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
-    def delete_text(self, text_id: str) -> bool:  # noqa: D102
+    def delete_text(self, text_id: str) -> bool:
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
@@ -119,15 +119,15 @@ class RAGStoreProtocol(Protocol):
             *,
             min_time: int | None,
             max_time: int | None,
-    ) -> list[TextUnit]:  # noqa: D102
+    ) -> list[TextUnit]:
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
-    def list_texts(self) -> list[str]:  # noqa: D102
+    def list_texts(self) -> list[str]:
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
-    def store_text(self, text_unit: TextUnit) -> TextUnit:  # noqa: D102
+    def store_text(self, text_unit: TextUnit) -> TextUnit:
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
@@ -140,10 +140,10 @@ class TokenizerProtocol(Protocol):
     Defines methods for encoding and decoding text.
     """
 
-    def decode(self, tokens: list[int]) -> str:  # noqa: D102
+    def decode(self, tokens: list[int]) -> str:
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
-    def encode(self, text: str) -> list[int]:  # noqa: D102
+    def encode(self, text: str) -> list[int]:
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover

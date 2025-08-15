@@ -68,7 +68,7 @@ class AbstractFactory:
             List of factory class names that can call the abstract
             __call__ method. This is used to prevent subclasses from
             calling the abstract __call__ method directly.
-        _config_cls:
+        config_cls:
             Configuration class type associated with this factory
         _factory_map:
             Dictionary mapping config class types to factory instances
@@ -81,7 +81,7 @@ class AbstractFactory:
 
     The factory uses configuration class names as keys to determine
     which concrete implementation to instantiate. Subclasses should set
-    _config_cls or pass config_cls in __init_subclass__ to enable
+    config_cls or pass config_cls in __init_subclass__ to enable
     automatic registration.
 
     Raises:
@@ -94,7 +94,7 @@ class AbstractFactory:
     can_call_abstract__call__: ClassVar[list] = ['EmbedderFactory',
                                                  'VectorStoreFactory']
 
-    _config_cls: ClassVar[type[RaglConfig] | None] = None
+    config_cls: ClassVar[type[RaglConfig] | None] = None
     _factory_map: ClassVar[dict[type[RaglConfig], type[Self]]] = {}
 
     def __init_subclass__(cls, **kwargs):
@@ -110,7 +110,7 @@ class AbstractFactory:
                 keyword arguments are ignored and passed to the parent
                 class's __init_subclass__ method.
         """
-        config_cls = kwargs.pop('config_cls', cls._config_cls)
+        config_cls = kwargs.pop('config_cls', cls.config_cls)
         super().__init_subclass__(**kwargs)
 
         if cls._is_direct_subclass():
@@ -255,8 +255,8 @@ class AbstractFactory:
             A string showing the factory class name, config class, and
             factory map.
         """
-        if self._config_cls:
-            config_cls_name = self._config_cls.__name__
+        if self.config_cls:
+            config_cls_name = self.config_cls.__name__
         else:
             config_cls_name = None
 
@@ -285,7 +285,7 @@ class EmbedderFactory(AbstractFactory):
 class SentenceTransformerFactory(EmbedderFactory):
     """Factory for creating SentenceTransformer embedder instances."""
 
-    _config_cls = SentenceTransformerConfig
+    config_cls = SentenceTransformerConfig
 
     def __call__(self, *args, **kwargs) -> Any:
         """
@@ -337,7 +337,7 @@ class VectorStoreFactory(AbstractFactory):
 class RedisVectorStoreFactory(VectorStoreFactory):
     """Factory for creating RedisVectorStore instances."""
 
-    _config_cls = RedisConfig
+    config_cls = RedisConfig
 
     def __call__(self, *args, **kwargs) -> Any:
         """

@@ -7,7 +7,7 @@ Generation (RAG) systems.
 
 import logging
 
-from ragl.registry import create_rag_manager
+from ragl.factory import create_rag_manager
 from ragl.textunit import TextUnit
 
 

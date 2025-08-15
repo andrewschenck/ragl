@@ -821,7 +821,7 @@ class TestRAGManager(unittest.TestCase):
                              tokenizer=self.mock_tokenizer)
         text = "Normal text input"
 
-        result = manager._sanitize_query(text)
+        result = manager._sanitize_text(text)
 
         self.assertEqual(result, text)
         mock_log.debug.assert_called_with('Sanitizing text')
@@ -835,7 +835,7 @@ class TestRAGManager(unittest.TestCase):
 
         with patch('ragl.manager._LOG') as mock_log:
             with self.assertRaises(ValidationError) as cm:
-                manager._sanitize_query(long_text)
+                manager._sanitize_text(long_text)
 
             self.assertIn('text too long', str(cm.exception))
             mock_log.critical.assert_called_with('text too long')
@@ -847,7 +847,7 @@ class TestRAGManager(unittest.TestCase):
                              tokenizer=self.mock_tokenizer)
         text = "Text with <script>alert('xss')</script> dangerous chars!"
 
-        result = manager._sanitize_query(text)
+        result = manager._sanitize_text(text)
 
         # Should remove dangerous characters, keeping only alphanumeric, spaces, and basic punctuation
         expected = "Text with alert('xss') dangerous chars!"

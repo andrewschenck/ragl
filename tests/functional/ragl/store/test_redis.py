@@ -645,27 +645,11 @@ class TestRedisVectorStore(unittest.TestCase):
 
         self.mock_redis_client.incr.return_value = 123
 
-        result = store._generate_text_id(None)
+        result = store._generate_text_id()
 
         self.assertEqual(result, f'{TEXT_ID_PREFIX}123')
         self.mock_redis_client.incr.assert_called_once_with(
             RedisVectorStore.TEXT_COUNTER_KEY)
-
-    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
-    def test_generate_text_id_provided(self, mock_validate_sync):
-        """Test generating text ID when provided."""
-        with patch.object(RedisVectorStore, '_enforce_schema_version'):
-            store = RedisVectorStore(
-                redis_client=self.mock_redis_client,
-                dimensions=self.dimensions,
-                index_name=self.index_name
-            )
-
-        provided_id = f'{TEXT_ID_PREFIX}custom'
-        result = store._generate_text_id(provided_id)
-
-        self.assertEqual(result, provided_id)
-        self.mock_redis_client.incr.assert_not_called()
 
     @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
     def test_parse_tags_from_retrieval_none(self, mock_validate_sync):
