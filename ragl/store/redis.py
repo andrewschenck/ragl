@@ -30,6 +30,7 @@ import time
 from contextlib import contextmanager
 from typing import (
     Any,
+    ClassVar,
     Iterator,
     Mapping,
     cast,
@@ -54,6 +55,7 @@ from ragl.exceptions import (
     ValidationError,
 )
 from ragl.schema import SchemaField, sanitize_metadata
+from ragl.textunit import TextUnit
 
 
 _LOG = logging.getLogger(__name__)
@@ -108,13 +110,12 @@ class RedisVectorStore:
             Schema for metadata sanitization.
 
     Note:
-        Metadata fields like `tags` are stored as strings in Redis
-        (e.g., comma-separated for `tags`), but are returned as their
-        expected types (e.g., list for `tags`) in method results,
-        such as `get_relevant`.
+        Metadata fields like tags are stored as strings in Redis
+        (e.g., comma-separated for tags), but are returned as their
+        expected types (e.g., list for tags) in method results,
+        such as get_relevant.
 
     Example:
-        >>> from ragl.config import RedisConfig
         >>> config = RedisConfig(host='localhost', port=6379)
         >>> store = RedisVectorStore(
         ...     redis_config=config,
@@ -123,20 +124,20 @@ class RedisVectorStore:
         ... )
         >>> text_id = store.store_text(
         ...     text="Sample document",
-        ...     embedding=embedding_vector,
+        ...     embedding=some_embedding,
         ...     metadata={'tags': ['important'], 'source': 'docs'}
         ... )
-        >>> results = store.get_relevant(query_embedding, top_k=5)
+        >>> results = store.get_relevant(embedding=another_embedding, top_k=5)
     """
 
-    SCHEMA_VERSION = 1
+    SCHEMA_VERSION: ClassVar[int] = 1
 
-    MAX_FIELD_SIZE = (1024 * 1024) * 32
-    MAX_METADATA_SIZE = (1024 * 1024) * 64
-    MAX_TEXT_SIZE = (1024 * 1024) * 512
-    MAX_TEXT_ID_LENGTH = 256
+    MAX_FIELD_SIZE: ClassVar[int] = (1024 * 1024) * 32
+    MAX_METADATA_SIZE: ClassVar[int] = (1024 * 1024) * 64
+    MAX_TEXT_SIZE: ClassVar[int] = (1024 * 1024) * 512
+    MAX_TEXT_ID_LENGTH: ClassVar[int] = 256
 
-    POOL_DEFAULTS = {
+    POOL_DEFAULTS: ClassVar[dict[str, Any]] = {
         'socket_timeout':           5,
         'socket_connect_timeout':   5,
         'retry_on_timeout':         True,
@@ -144,8 +145,8 @@ class RedisVectorStore:
         'health_check_interval':    30,
     }
 
-    TAG_SEPARATOR = ','
-    TEXT_COUNTER_KEY = 'text_counter'
+    TAG_SEPARATOR: ClassVar[str] = ','
+    TEXT_COUNTER_KEY: ClassVar[str] = 'text_counter'
 
     index: SearchIndex
     index_name: str
@@ -194,10 +195,11 @@ class RedisVectorStore:
             redis_client:
                 Redis client instance. If provided, config is ignored.
             redis_config:
-                Redis configuration object. If provided, redis_client is
-                ignored.
+                Redis configuration object. If provided, redis_client
+                is ignored.
             dimensions:
-                Size of embedding vectors, required for schema creation.
+                Size of embedding vectors, required for schema
+                creation.
             index_name:
                 Name of the Redis search index.
 
@@ -351,13 +353,14 @@ class RedisVectorStore:
             *,
             min_time: int | None = None,
             max_time: int | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[TextUnit]:
         """
         Retrieve relevant texts from Redis.
 
         Performs a vector search in Redis using the provided embedding
-        and returns the top_k most relevant results. It applies optional
-        timestamp filters to limit results to a specific time range.
+        and returns the top_k most relevant results as TextUnit objects.
+        Applies optional timestamp filters to limit results to a
+        specific time range.
 
         Args:
             embedding:
@@ -370,7 +373,7 @@ class RedisVectorStore:
                 Maximum timestamp filter.
 
         Returns:
-            List of result dicts, may be fewer than top_k.
+            List of TextUnit objects, may be fewer than top_k.
         """
         self._validate_dimensions_match(embedding)
 
@@ -381,7 +384,10 @@ class RedisVectorStore:
             max_time=max_time,
         )
         results = self._search_redis(vector_query)
-        return self._transform_redis_results(results)
+        result_dicts = self._transform_redis_results(results)
+
+        return [TextUnit.from_dict(result_dict)
+                for result_dict in result_dicts]
 
     def health_check(self) -> dict[str, Any]:
         """
@@ -463,14 +469,7 @@ class RedisVectorStore:
             _LOG.error('Redis operation failed: %s', e)
             raise DataError(f'Redis operation failed: {e}') from e
 
-    def store_text(
-            self,
-            text: str,
-            embedding: np.ndarray,
-            *,
-            text_id: str | None = None,
-            metadata: Mapping[str, Any] | None = None,
-    ) -> str:
+    def store_text(self, text_unit: TextUnit, embedding: np.ndarray) -> str:
         """
         Store text and embedding in Redis.
 
@@ -481,14 +480,10 @@ class RedisVectorStore:
         RedisVL index. The text ID is returned after successful storage.
 
         Args:
-            text:
+            text_unit:
                 Text to store.
             embedding:
                 Vector embedding.
-            text_id:
-                Optional ID for the text.
-            metadata:
-                Optional metadata mapping.
 
         Returns:
             The text ID (generated if not provided.)
@@ -497,23 +492,29 @@ class RedisVectorStore:
             ValidationError:
                 If text is empty.
         """
+        text_id = text_unit.text_id
+        text_data = text_unit.to_dict()
+        text = text_data.pop('text')
+
         if not text.strip():
             raise ValidationError('text cannot be empty')
 
         if text_id is None:
-            _LOG.debug('generating text_id')
+            _LOG.info('generating text_id')
             text_id = self._generate_text_id(text_id)
 
-        self._validate_input_sizes(text, metadata)
+        self._validate_input_sizes(text, text_data)
         self._validate_text_id(text_id)
         self._validate_dimensions_match(embedding)
 
         sanitized = sanitize_metadata(
-            metadata=metadata,
+            metadata=text_data,
             schema=self.metadata_schema,
         )
+
         if 'tags' in sanitized:
             sanitized['tags'] = self._prepare_tags(tags=sanitized['tags'])
+
         text_data = self._prepare_text_data(
             text=text,
             embedding=embedding,
@@ -669,7 +670,7 @@ class RedisVectorStore:
 
         Generates a unique text ID if not provided. It uses a Redis
         counter to ensure uniqueness. If a text ID is provided,
-        it validates the ID length and returns it as is.
+        it's returned unchanged.
 
         Args:
             text_id:

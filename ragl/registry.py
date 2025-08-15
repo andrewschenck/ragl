@@ -25,7 +25,7 @@ Functions:
 
 import logging
 from contextlib import suppress
-from typing import Any, Self
+from typing import Any, ClassVar, Self
 
 from ragl.config import (
     EmbedderConfig,
@@ -91,10 +91,11 @@ class AbstractFactory:
             When invalid types are passed to registration methods
     """
 
-    can_call_abstract__call__ = ['EmbedderFactory', 'VectorStoreFactory']
+    can_call_abstract__call__: ClassVar[list] = ['EmbedderFactory',
+                                                 'VectorStoreFactory']
 
-    _config_cls: type[RaglConfig] | None = None
-    _factory_map: dict[type[RaglConfig], type[Self]] = {}
+    _config_cls: ClassVar[type[RaglConfig] | None] = None
+    _factory_map: ClassVar[dict[type[RaglConfig], type[Self]]] = {}
 
     def __init_subclass__(cls, **kwargs):
         """

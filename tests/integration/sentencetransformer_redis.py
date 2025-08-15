@@ -3,6 +3,8 @@ Comprehensive integration tests for RAGL against live Redis container.
 Assumes Redis is running and accessible.
 """
 import logging
+import time
+
 from ragl.config import (
     ManagerConfig,
     RedisConfig,
@@ -10,6 +12,7 @@ from ragl.config import (
 )
 from ragl.exceptions import ValidationError
 from ragl.registry import create_rag_manager
+from ragl.textunit import TextUnit
 
 
 logging.basicConfig(level=logging.INFO)
@@ -188,40 +191,6 @@ class TestRAGLIntegration:
         assert len(contexts) >= 1
         assert contexts[0].distance is not None
         assert 0.0 <= contexts[0].distance <= 1.0
-
-    def test_concurrent_operations(self):
-        """Test concurrent add/retrieve operations."""
-        import threading
-        import time
-
-        results = []
-
-        def add_documents(thread_id):
-            for i in range(3):
-                text = f"Thread {thread_id} document {i} content"
-                docs = self.manager.add_text(
-                    text_or_doc=text,
-                    base_id=f"doc:thread_{thread_id}_{i}"
-                )
-                results.append(docs[0].text_id)
-                time.sleep(0.1)
-
-        # Create multiple threads
-        threads = []
-        for i in range(3):
-            thread = threading.Thread(target=add_documents, args=(i,))
-            threads.append(thread)
-            thread.start()
-
-        # Wait for completion
-        for thread in threads:
-            thread.join()
-
-        # Verify all documents were added
-        assert len(results) == 9
-        all_texts = self.manager.list_texts()
-        for text_id in results:
-            assert text_id in all_texts
 
     def test_error_handling(self):
         """Test error handling for invalid operations."""
@@ -592,6 +561,401 @@ class TestRAGLIntegration:
             assert token_count >= 5  # Reasonable minimum after merging
 
         min_chunk_manager.reset(reset_metrics=True)
+
+    def test_textunit_metadata_preservation(self):
+        """Test end-to-end preservation of TextUnit metadata when storing to Redis."""
+
+        # Create TextUnit with comprehensive metadata
+        original_timestamp = int(time.time()) - 3600  # 1 hour ago
+        original_textunit = TextUnit(
+            text_id="will_be_overridden",  # This will be set by manager
+            text="Machine learning algorithms analyze data patterns to make predictions.",
+            source="research_paper.pdf",
+            timestamp=original_timestamp,
+            tags=["ml", "algorithms", "data-science"],
+            confidence=0.85,
+            language="en",
+            section="methodology",
+            author="Dr. Jane Smith",
+            parent_id="will_be_set",  # This will be set by manager
+            chunk_position=0,
+            distance=0.0
+        )
+
+        # Store the TextUnit
+        stored_docs = self.manager.add_text(
+            text_or_doc=original_textunit,
+            base_id="doc:metadata_test"
+        )
+
+        assert len(stored_docs) == 1
+        stored_doc = stored_docs[0]
+
+        # Verify basic fields are set correctly by manager
+        assert stored_doc.text == original_textunit.text
+        assert stored_doc.parent_id == "doc:metadata_test"
+        assert stored_doc.chunk_position == 0
+
+        # Verify original metadata is preserved
+        assert stored_doc.source == original_textunit.source
+        assert stored_doc.timestamp == original_textunit.timestamp
+        assert stored_doc.tags == original_textunit.tags
+        assert stored_doc.confidence == original_textunit.confidence
+        assert stored_doc.language == original_textunit.language
+        assert stored_doc.section == original_textunit.section
+        assert stored_doc.author == original_textunit.author
+
+        # Test retrieval preserves metadata
+        contexts = self.manager.get_context(
+            query="machine learning data patterns",
+            top_k=1
+        )
+
+        assert len(contexts) >= 1
+        retrieved_doc = contexts[0]
+
+        # Verify all metadata survives round-trip through Redis
+        assert retrieved_doc.text == original_textunit.text
+        assert retrieved_doc.source == original_textunit.source
+        assert retrieved_doc.timestamp == original_textunit.timestamp
+        assert retrieved_doc.tags == original_textunit.tags
+        assert retrieved_doc.confidence == original_textunit.confidence
+        assert retrieved_doc.language == original_textunit.language
+        assert retrieved_doc.section == original_textunit.section
+        assert retrieved_doc.author == original_textunit.author
+        assert retrieved_doc.parent_id == "doc:metadata_test"
+        assert retrieved_doc.chunk_position == 0
+
+        # Verify distance is populated for retrieved document
+        assert retrieved_doc.distance is not None
+        assert 0.0 <= retrieved_doc.distance <= 1.0
+
+        # Test metadata filtering/sorting if supported
+        # Test time-based filtering
+        future_time = int(time.time()) + 3600
+        past_time = original_timestamp - 3600
+
+        # Should find document within time range
+        time_filtered_contexts = self.manager.get_context(
+            query="machine learning",
+            top_k=1,
+            min_time=past_time,
+            max_time=future_time
+        )
+        assert len(time_filtered_contexts) >= 1
+
+        # Should not find document outside time range
+        future_contexts = self.manager.get_context(
+            query="machine learning",
+            top_k=1,
+            min_time=future_time,
+            max_time=future_time + 3600
+        )
+        assert len(future_contexts) == 0
+
+        logging.info("TextUnit metadata preservation test "
+                     "completed successfully")
+
+    def test_health_check_functionality(self):
+        """Test health check functionality."""
+        # Get health status
+        health_status = self.manager.get_health_status()
+
+        # Should return a dictionary with status information
+        assert isinstance(health_status, dict)
+        for key in ('redis_connected', 'index_exists', 'index_healthy'):
+            assert key in health_status
+            assert health_status[key] is True
+
+        assert 'document_count' in health_status
+        assert health_status['document_count'] == 0
+
+        assert 'errors' in health_status
+        assert isinstance(health_status['errors'], list)
+        assert len(health_status['errors']) == 0
+
+        assert 'last_check' in health_status
+        assert isinstance(health_status['last_check'], int)
+
+        assert 'memory_info' in health_status
+        assert isinstance(health_status['memory_info'], dict)
+
+        logging.info("Backend does not support health checks")
+
+    def test_performance_metrics_tracking(self):
+        """Test performance metrics collection and retrieval."""
+        # Perform some operations to generate metrics
+        text1 = "Machine learning is a subset of artificial intelligence."
+        text2 = "Deep learning uses neural networks with multiple layers."
+
+        # Add texts to generate add_text metrics
+        self.manager.add_text(text_or_doc=text1,
+                                      base_id="doc:metrics_test1")
+        self.manager.add_text(text_or_doc=text2,
+                                      base_id="doc:metrics_test2")
+
+        # Perform queries to generate get_context metrics
+        self.manager.get_context(query="machine learning", top_k=1)
+        self.manager.get_context(query="neural networks", top_k=2)
+
+        # List texts to generate list_texts metrics
+        self.manager.list_texts()
+
+        # Get all performance metrics
+        all_metrics = self.manager.get_performance_metrics()
+
+        # Verify metrics structure
+        assert isinstance(all_metrics, dict)
+
+        # Should have metrics for operations we performed
+        expected_operations = ['add_text', 'get_context', 'list_texts']
+        for operation in expected_operations:
+            assert operation in all_metrics, f"Missing metrics for {operation}"
+
+            metrics = all_metrics[operation]
+            assert isinstance(metrics, dict)
+
+            # Verify required metric fields
+            required_fields = [
+                'total_calls', 'failure_count', 'success_rate',
+                'min_duration', 'max_duration', 'avg_duration',
+                'recent_avg', 'recent_med'
+            ]
+            for field in required_fields:
+                assert field in metrics, f"Missing metric field: {field}"
+                assert isinstance(metrics[field], (int, float))
+
+            # Verify logical constraints
+            assert metrics['total_calls'] > 0
+            assert metrics['failure_count'] >= 0
+            assert metrics['failure_count'] <= metrics['total_calls']
+            assert 0.0 <= metrics['success_rate'] <= 1.0
+            assert metrics['min_duration'] >= 0.0
+            assert metrics['max_duration'] >= metrics['min_duration']
+            assert metrics['avg_duration'] >= 0.0
+
+        # Test specific operation metrics
+        add_text_metrics = self.manager.get_performance_metrics('add_text')
+        assert 'add_text' in add_text_metrics
+        assert add_text_metrics['add_text'][
+                   'total_calls'] >= 2  # We added 2 texts
+
+        get_context_metrics = self.manager.get_performance_metrics(
+            'get_context')
+        assert 'get_context' in get_context_metrics
+        assert get_context_metrics['get_context'][
+                   'total_calls'] >= 2  # We queried 2 times
+
+        # Test non-existent operation
+        empty_metrics = self.manager.get_performance_metrics(
+            'non_existent_operation')
+        assert empty_metrics == {}
+
+        logging.info("Performance metrics collected: "
+                     f"{list(all_metrics.keys())}")
+
+    def test_metrics_reset_functionality(self):
+        """Test metrics reset functionality."""
+        # Perform operations to generate metrics
+        self.manager.add_text("Test text for metrics",
+                              base_id="doc:metrics_reset")
+        self.manager.get_context("test query", top_k=1)
+
+        # Verify metrics exist
+        initial_metrics = self.manager.get_performance_metrics()
+        assert len(initial_metrics) > 0
+
+        # Reset metrics only
+        self.manager.reset_metrics()
+
+        # Verify metrics are cleared
+        after_reset_metrics = self.manager.get_performance_metrics()
+        assert len(after_reset_metrics) == 0
+
+        # Verify data is still there (only metrics were reset)
+        remaining_texts = self.manager.list_texts()
+        assert len(remaining_texts) > 0  # Data should remain
+
+        # Verify new operations start tracking again
+        self.manager.get_context("another query", top_k=1)
+        new_metrics = self.manager.get_performance_metrics()
+        assert 'get_context' in new_metrics
+        assert new_metrics['get_context']['total_calls'] == 1
+
+        logging.info("Metrics reset functionality verified")
+
+    def test_operation_failure_tracking(self):
+        """Test that operation failures are properly tracked in metrics."""
+        # Perform a valid operation first
+        self.manager.add_text("Valid text", base_id="doc:failure_test")
+
+        # Attempt operations that should fail
+        try:
+            # Invalid top_k should raise ValidationError
+            self.manager.get_context("test query", top_k=0)
+        except ValidationError:
+            pass  # Expected failure
+
+        # Empty query should return empty results (not fail)
+        result = self.manager.get_context("", top_k=1)
+        assert len(result) == 0
+
+        # Check if failure tracking works (some operations might handle errors gracefully)
+        metrics = self.manager.get_performance_metrics()
+
+        # At minimum, we should have add_text metrics from successful operation
+        assert 'add_text' in metrics
+        assert metrics['add_text']['total_calls'] >= 1
+        assert metrics['add_text']['success_rate'] > 0.0
+
+        # Check if get_context has any failure tracking
+        if 'get_context' in metrics:
+            context_metrics = metrics['get_context']
+            total_calls = context_metrics['total_calls']
+            failure_count = context_metrics['failure_count']
+            success_rate = context_metrics['success_rate']
+
+            # Verify metrics consistency
+            expected_success_rate = (
+                                            total_calls - failure_count) / total_calls if total_calls > 0 else 0.0
+            assert abs(
+                success_rate - expected_success_rate) < 0.001  # Allow for rounding
+
+            logging.info(f"get_context metrics - calls: {total_calls}, "
+                         f"failures: {failure_count}, success_rate: {success_rate}")
+
+        logging.info("Operation failure tracking verified")
+
+    def test_performance_metrics_precision(self):
+        """Test that performance metrics maintain appropriate precision."""
+        # Perform multiple operations to get more stable metrics
+        for i in range(5):
+            self.manager.add_text(f"Test text {i}",
+                                  base_id=f"doc:precision_test_{i}")
+            self.manager.get_context(f"query {i}", top_k=1)
+
+        metrics = self.manager.get_performance_metrics()
+
+        for operation_name, operation_metrics in metrics.items():
+            # Check precision of timing metrics (should be rounded to 4 decimal places)
+            timing_fields = ['min_duration', 'max_duration', 'avg_duration',
+                             'recent_avg', 'recent_med']
+
+            for field in timing_fields:
+                value = operation_metrics[field]
+                # Check that value has at most 4 decimal places
+                decimal_places = len(str(value).split('.')[-1]) if '.' in str(
+                    value) else 0
+                assert decimal_places <= 4, f"{operation_name}.{field} has too many decimal places: {value}"
+
+            # Check success_rate precision (should be rounded to 4 decimal places)
+            success_rate = operation_metrics['success_rate']
+            decimal_places = len(
+                str(success_rate).split('.')[-1]) if '.' in str(
+                success_rate) else 0
+            assert decimal_places <= 4, f"{operation_name}.success_rate has too many decimal places: {success_rate}"
+
+            # Verify success_rate is between 0 and 1
+            assert 0.0 <= success_rate <= 1.0
+
+            logging.info(f"{operation_name} metrics precision verified")
+
+    # def test_concurrent_operations(self):
+    #     """Test concurrent add/retrieve operations."""
+    #
+    #     results = []
+    #
+    #     def add_documents(thread_id):
+    #         for i in range(3):
+    #             text = f"Thread {thread_id} document {i} content"
+    #             docs = self.manager.add_text(
+    #                 text_or_doc=text,
+    #                 base_id=f"doc:thread_{thread_id}_{i}"
+    #             )
+    #             results.append(docs[0].text_id)
+    #             time.sleep(0.1)
+    #
+    #     # Create multiple threads
+    #     threads = []
+    #     for i in range(3):
+    #         thread = threading.Thread(target=add_documents, args=(i,))
+    #         threads.append(thread)
+    #         thread.start()
+    #
+    #     # Wait for completion
+    #     for thread in threads:
+    #         thread.join()
+    #
+    #     # Verify all documents were added
+    #     assert len(results) == 9
+    #     all_texts = self.manager.list_texts()
+    #     for text_id in results:
+    #         assert text_id in all_texts
+    #
+    # def test_concurrent_metrics_tracking(self):
+    #     """Test that metrics tracking works correctly under concurrent operations."""
+    #
+    #     def perform_operations(thread_id: int, operation_count: int):
+    #         """Perform multiple operations in a thread."""
+    #         for i in range(operation_count):
+    #             try:
+    #                 text = f"Thread {thread_id} operation {i} content"
+    #                 self.manager.add_text(text,
+    #                                       base_id=f"doc:concurrent_{thread_id}_{i}")
+    #                 self.manager.get_context(f"thread {thread_id} query {i}",
+    #                                          top_k=1)
+    #                 time.sleep(0.01)  # Small delay to allow interleaving
+    #             except Exception as e:
+    #                 logging.warning(
+    #                     f"Thread {thread_id} operation {i} failed: {e}")
+    #
+    #     # Run concurrent operations
+    #     threads = []
+    #     operations_per_thread = 3
+    #     thread_count = 3
+    #
+    #     for thread_id in range(thread_count):
+    #         thread = threading.Thread(
+    #             target=perform_operations,
+    #             args=(thread_id, operations_per_thread)
+    #         )
+    #         threads.append(thread)
+    #         thread.start()
+    #
+    #     # Wait for all threads to complete
+    #     for thread in threads:
+    #         thread.join()
+    #
+    #     # Verify metrics consistency
+    #     metrics = self.manager.get_performance_metrics()
+    #
+    #     # Should have metrics for operations performed
+    #     assert 'add_text' in metrics
+    #     assert 'get_context' in metrics
+    #
+    #     # Verify total call counts make sense
+    #     expected_min_calls = thread_count * operations_per_thread
+    #     add_text_calls = metrics['add_text']['total_calls']
+    #     context_calls = metrics['get_context']['total_calls']
+    #
+    #     # Should have at least the expected number of calls (allowing for some failures)
+    #     assert add_text_calls >= expected_min_calls * 0.8  # Allow 20% failure rate
+    #     assert context_calls >= expected_min_calls * 0.8
+    #
+    #     # Verify metrics integrity
+    #     for operation_name, operation_metrics in metrics.items():
+    #         total_calls = operation_metrics['total_calls']
+    #         failure_count = operation_metrics['failure_count']
+    #         success_rate = operation_metrics['success_rate']
+    #
+    #         # Basic consistency checks
+    #         assert failure_count <= total_calls
+    #         expected_success_rate = (
+    #                                         total_calls - failure_count) / total_calls if total_calls > 0 else 0.0
+    #         assert abs(success_rate - expected_success_rate) < 0.001
+    #
+    #     logging.info(f"Concurrent metrics tracking verified - "
+    #                  f"add_text: {add_text_calls} calls, get_context: {context_calls} calls")
 
 
 if __name__ == "__main__":

@@ -19,13 +19,13 @@ Classes:
 
 from typing import (
     Any,
-    Mapping,
     Protocol,
     runtime_checkable,
 )
 
 import numpy as np
 
+from ragl.textunit import TextUnit
 
 __all__ = (
     'EmbedderProtocol',
@@ -76,7 +76,7 @@ class VectorStoreProtocol(Protocol):
             *,
             min_time: int | None,
             max_time: int | None,
-    ) -> list[dict[str, Any]]:  # noqa: D102
+    ) -> list[TextUnit]:  # noqa: D102
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
@@ -88,14 +88,7 @@ class VectorStoreProtocol(Protocol):
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
-    def store_text(
-            self,
-            text: str,
-            embedding: np.ndarray,
-            *,
-            text_id: str | None,
-            metadata: Mapping[str, Any] | None,
-    ) -> str:  # noqa: D102
+    def store_text(self, text_unit: TextUnit, embedding: np.ndarray) -> str:
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
@@ -126,7 +119,7 @@ class RAGStoreProtocol(Protocol):
             *,
             min_time: int | None,
             max_time: int | None,
-    ) -> list[dict[str, Any]]:  # noqa: D102
+    ) -> list[TextUnit]:  # noqa: D102
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
@@ -134,13 +127,7 @@ class RAGStoreProtocol(Protocol):
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
-    def store_text(
-            self,
-            text: str,
-            *,
-            text_id: str | None,
-            metadata: Mapping[str, Any] | None,
-    ) -> str:  # noqa: D102
+    def store_text(self, text_unit: TextUnit) -> TextUnit:  # noqa: D102
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 

@@ -12,6 +12,7 @@ Classes:
 """
 
 import logging
+from typing import ClassVar
 
 import tiktoken
 
@@ -31,7 +32,7 @@ class TiktokenTokenizer:
             tiktoken Encoding for tokenization.
     """
 
-    _DEFAULT_ENCODING = 'cl100k_base'
+    _DEFAULT_ENCODING: ClassVar[str] = 'cl100k_base'
 
     encoding: tiktoken.Encoding
 

@@ -26,7 +26,7 @@ import time
 from collections import defaultdict, deque
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any, Iterator
+from typing import Any, ClassVar, Iterator
 
 import bleach
 
@@ -244,9 +244,9 @@ class RAGManager:
             for performance tracking.
     """
 
-    DEFAULT_BASE_ID = 'doc'
-    MAX_QUERY_LENGTH = 8192
-    MAX_INPUT_LENGTH = (1024 * 1024) * 10
+    DEFAULT_BASE_ID: ClassVar[str] = 'doc'
+    MAX_QUERY_LENGTH: ClassVar[int] = 8192
+    MAX_INPUT_LENGTH: ClassVar[int] = (1024 * 1024) * 10
 
     ragstore: RAGStoreProtocol
     tokenizer: TokenizerProtocol
@@ -328,7 +328,7 @@ class RAGManager:
             overlap:
                 Optional overlap override.
             split:
-                Whether to split the text.
+                Whether to split the text into chunks.
 
         Raises:
             ValidationError:
@@ -463,14 +463,14 @@ class RAGManager:
             )
 
             if sort_by_time:
-                results = sorted(results, key=lambda x: x['timestamp'])
+                results = sorted(results, key=lambda x: x.timestamp)
             else:
-                results = sorted(results, key=lambda x: x['distance'])
+                results = sorted(results, key=lambda x: x.distance)
 
             _LOG.info('Retrieved %s contexts for query: %s',
                       len(results), query)
 
-            return [TextUnit.from_dict(result) for result in results]
+            return results
 
     def get_health_status(self) -> dict[str, Any]:
         """
@@ -773,7 +773,7 @@ class RAGManager:
         """
         Store a single text chunk.
 
-        Stores a text chunk with metadata in the RAG store.
+        Stores a text chunk with metadata in the ragstore.
 
         Args:
             chunk:
@@ -793,24 +793,15 @@ class RAGManager:
         _LOG.debug('Storing chunk')
         chunk_data = base_data.copy()
         chunk_data.update({
-            'text_id':          text_id,
-            'text':             chunk,
-            'chunk_position':   i,
-            'parent_id':        parent_id,
-            'distance':         0.0,
+            'text_id':        text_id,
+            'text':           chunk,
+            'chunk_position': i,
+            'parent_id':      parent_id,
+            'distance':       0.0,
         })
 
-        metadata = {k: v for k, v in chunk_data.items()
-                    if k not in {'text_id', 'text', 'distance'}}
-
-        text_id = self.ragstore.store_text(
-            text=chunk,
-            text_id=text_id,
-            metadata=metadata
-        )
-        chunk_data['text_id'] = text_id
-
-        return TextUnit.from_dict(chunk_data)
+        text_unit = TextUnit.from_dict(chunk_data)
+        return self.ragstore.store_text(text_unit)
 
     @staticmethod
     def _prepare_base_data(

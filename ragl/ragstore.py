@@ -15,9 +15,9 @@ Classes:
 """
 
 import logging
-from typing import Mapping, Any
 
 from ragl.protocols import EmbedderProtocol, VectorStoreProtocol
+from ragl.textunit import TextUnit
 
 
 __all__ = ('RAGStore',)
@@ -114,11 +114,11 @@ class RAGStore:
             *,
             min_time: int | None = None,
             max_time: int | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[TextUnit]:
         """
         Retrieve relevant texts for a query.
 
-        Retrieves a list of texts that are relevant to the provided
+        Retrieves a list of TextUnit objects that are relevant to the provided
         query based on semantic similarity. It uses the embedder to
         convert the query into a vector, and then queries the storage
         for the most similar texts.
@@ -139,7 +139,7 @@ class RAGStore:
                 Maximum timestamp filter.
 
         Returns:
-            List of result dicts.
+            List of TextUnit objects.
         """
         _LOG.debug('Retrieving relevant texts for query %s', query)
         return self.storage.get_relevant(
@@ -159,47 +159,29 @@ class RAGStore:
         _LOG.debug('Listing all texts in store')
         return self.storage.list_texts()
 
-    def store_text(
-            self,
-            text: str,
-            *,
-            text_id: str | None = None,
-            metadata: Mapping[str, Any] | None = None,
-    ) -> str:
+    def store_text(self, text_unit: TextUnit) -> TextUnit:
         """
-        Store text in the store backend.
+        Store TextUnit in the store backend.
 
-        Stores a text document in the underlying storage system,
+        Stores a TextUnit document in the underlying storage system,
         generating an embedding for the text using the embedder.
 
-        If `text_id` is provided, it will be used as the ID for the
-        text; otherwise, a new ID will be generated.
-
-        If `metadata` is provided, it will be stored alongside the text.
-
-        This method returns the text ID, which is either the provided
-        `text_id` or a newly generated ID if none was provided.
-
         Args:
-            text:
-                Text to store.
-            text_id:
-                Optional ID for the text.
-            metadata:
-                Optional metadata dict.
+            text_unit:
+                TextUnit to store.
 
         Returns:
-                The text ID (generated if not provided, or the provided
-                text_id).
+            The stored TextUnit with updated text_id if it was generated.
         """
-        _LOG.debug('Storing text %s', text)
-        text_id = self.storage.store_text(
-            text=text,
-            embedding=self.embedder.embed(text),
-            text_id=text_id,
-            metadata=metadata,
+        _LOG.debug('Storing TextUnit %s', text_unit.text_id)
+
+        stored_text_id = self.storage.store_text(
+            text_unit=text_unit,
+            embedding=self.embedder.embed(text_unit.text),
         )
-        return text_id
+
+        text_unit.text_id = stored_text_id
+        return text_unit
 
     def __repr__(self) -> str:
         """Return a detailed string representation of the RAGStore."""
