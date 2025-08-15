@@ -469,13 +469,7 @@ class RedisVectorStore:
             _LOG.error('Redis operation failed: %s', e)
             raise DataError(f'Redis operation failed: {e}') from e
 
-    def store_text(
-            self,
-            text_unit: TextUnit,
-            embedding: np.ndarray,
-            *,
-            text_id: str | None = None,
-    ) -> str:
+    def store_text(self, text_unit: TextUnit, embedding: np.ndarray) -> str:
         """
         Store text and embedding in Redis.
 
@@ -490,8 +484,6 @@ class RedisVectorStore:
                 Text to store.
             embedding:
                 Vector embedding.
-            text_id:
-                Optional ID for the text.
 
         Returns:
             The text ID (generated if not provided.)
@@ -500,8 +492,9 @@ class RedisVectorStore:
             ValidationError:
                 If text is empty.
         """
+        text_id = text_unit.text_id
         text_data = text_unit.to_dict()
-        text = text_data.pop('text', '')
+        text = text_data.pop('text')
 
         if not text.strip():
             raise ValidationError('text cannot be empty')

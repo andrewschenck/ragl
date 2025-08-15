@@ -470,18 +470,18 @@ class TestRedisVectorStore(unittest.TestCase):
                 index_name=self.index_name
             )
         text = "Sample text"
+        custom_id = f'{TEXT_ID_PREFIX}custom'
         text_unit = TextUnit(
             text=text,
-            text_id='test-id',
+            text_id=custom_id,
             distance=0.0,
         )
 
         embedding = np.random.rand(self.dimensions)
-        custom_id = f'{TEXT_ID_PREFIX}custom'
 
         with patch('ragl.store.redis.sanitize_metadata', return_value={}):
             with patch.object(store, 'index', self.mock_index):
-                result = store.store_text(text_unit, embedding, text_id=custom_id)
+                result = store.store_text(text_unit, embedding)
 
         self.assertEqual(result, custom_id)
 
@@ -538,8 +538,8 @@ class TestRedisVectorStore(unittest.TestCase):
                 index_name=self.index_name
             )
         text_unit = TextUnit(
-            text="text",
-            text_id='test-id',
+            text="txt",
+            text_id='txt:100',
             distance=0.0,
         )
 

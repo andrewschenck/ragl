@@ -1,4 +1,3 @@
-# pylint: disable=too-many-lines
 """
 Core RAG management functionality for text storage and retrieval.
 

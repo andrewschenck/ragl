@@ -178,7 +178,6 @@ class RAGStore:
         stored_text_id = self.storage.store_text(
             text_unit=text_unit,
             embedding=self.embedder.embed(text_unit.text),
-            text_id=text_unit.text_id,
         )
 
         text_unit.text_id = stored_text_id

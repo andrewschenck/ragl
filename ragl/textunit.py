@@ -31,16 +31,14 @@ class TextUnit:
             Unique identifier.
         text:
             Text content.
+        distance:
+            Similarity distance.
         chunk_position:
             Position in parent text.
         parent_id:
             ID of parent document.
-        distance:
-            Similarity distance.
         source:
             Source of the text.
-        tags:
-            List of tags.
         confidence:
             Confidence score.
         language:
@@ -49,6 +47,8 @@ class TextUnit:
             Section within source.
         author:
             Author of the text.
+        tags:
+            List of tags.
         timestamp:
             Storage timestamp.
     """
@@ -60,11 +60,11 @@ class TextUnit:
     chunk_position: int | None = None
     parent_id: str | None = None
     source: str | None = None
-    tags: list[str] | None = None
     confidence: float | str | None = None
     language: str | None = None
     section: str | None = None
     author: str | None = None
+    tags: list[str] | None = None
     timestamp: int = field(default_factory=lambda: int(time.time()))
 
     @classmethod
@@ -91,15 +91,15 @@ class TextUnit:
         return cls(
             text_id=data.get('text_id', ''),
             text=data.get('text', ''),
+            distance=data.get('distance', 0.0),
             chunk_position=data.get('chunk_position'),
             parent_id=data.get('parent_id'),
-            distance=data.get('distance', 0.0),
             source=data.get('source'),
-            tags=tags,
             confidence=data.get('confidence'),
             language=data.get('language'),
             section=data.get('section'),
             author=data.get('author'),
+            tags=tags,
             timestamp=data.get('timestamp', int(time.time())),
         )
 
@@ -115,16 +115,16 @@ class TextUnit:
         return {
             'text_id':              self.text_id,
             'text':                 self.text,
+            'distance':             self.distance,
             'chunk_position':       self.chunk_position,
             'parent_id':            self.parent_id,
-            'distance':             self.distance,
             'source':               self.source,
-            'timestamp':            self.timestamp,
-            'tags':                 self.tags,
             'confidence':           self.confidence,
             'language':             self.language,
             'section':              self.section,
             'author':               self.author,
+            'tags':                 self.tags,
+            'timestamp':            self.timestamp,
         }
 
     def __str__(self) -> str:

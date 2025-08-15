@@ -88,13 +88,7 @@ class VectorStoreProtocol(Protocol):
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
-    def store_text(
-            self,
-            text_unit: TextUnit,
-            embedding: np.ndarray,
-            *,
-            text_id: str | None = None,
-    ) -> str:  # noqa: D102
+    def store_text(self, text_unit: TextUnit, embedding: np.ndarray) -> str:
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
