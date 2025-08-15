@@ -501,7 +501,7 @@ class RedisVectorStore:
 
         if text_id is None:
             _LOG.info('generating text_id')
-            text_id = self._generate_text_id(text_id)
+            text_id = self._generate_text_id()
 
         self._validate_input_sizes(text, text_data)
         self._validate_text_id(text_id)
@@ -664,7 +664,7 @@ class RedisVectorStore:
                                                   'unknown'),
         }
 
-    def _generate_text_id(self, text_id: str | None) -> str:
+    def _generate_text_id(self) -> str:
         """
         Generate a unique text ID.
 
@@ -672,17 +672,12 @@ class RedisVectorStore:
         counter to ensure uniqueness. If a text ID is provided,
         it's returned unchanged.
 
-        Args:
-            text_id:
-                Optional provided ID.
-
         Returns:
-            Generated or provided text ID.
+            Generated text ID.
         """
-        if text_id is None:
-            with self.redis_context() as client:
-                counter = client.incr(self.TEXT_COUNTER_KEY)
-            text_id = f'{TEXT_ID_PREFIX}{counter}'
+        with self.redis_context() as client:
+            counter = client.incr(self.TEXT_COUNTER_KEY)
+        text_id = f'{TEXT_ID_PREFIX}{counter}'
         return text_id
 
     def _parse_tags_from_retrieval(

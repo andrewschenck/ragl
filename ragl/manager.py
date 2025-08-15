@@ -350,10 +350,10 @@ class RAGManager:
                     msg = 'Text cannot be empty'
                     _LOG.critical(msg)
                     raise ValidationError(msg)
-                text_or_doc = self._sanitize_query(text_or_doc)
+                text_or_doc = self._sanitize_text(text_or_doc)
 
             elif isinstance(text_or_doc, TextUnit):
-                text_or_doc.text = self._sanitize_query(text_or_doc.text)
+                text_or_doc.text = self._sanitize_text(text_or_doc.text)
 
             if base_id:
                 parent_id = base_id
@@ -451,7 +451,7 @@ class RAGManager:
             return []
 
         with self.track_operation('get_context'):
-            self._sanitize_query(query)
+            self._sanitize_text(query)
             self._validate_query(query)
             self._validate_top_k(top_k)
 
@@ -667,7 +667,7 @@ class RAGManager:
             return [text_or_doc.text]
         return [text_or_doc]
 
-    def _sanitize_query(self, text: str) -> str:
+    def _sanitize_text(self, text: str) -> str:
         """
         Validate and sanitize text input to prevent injection attacks.
 
