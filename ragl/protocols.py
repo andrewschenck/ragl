@@ -80,17 +80,6 @@ class VectorStoreProtocol(Protocol):
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
-    # def get_relevant( # todo
-    #         self,
-    #         embedding: np.ndarray,
-    #         top_k: int,
-    #         *,
-    #         min_time: int | None,
-    #         max_time: int | None,
-    # ) -> list[dict[str, Any]]:  # noqa: D102
-    #     # pylint: disable=missing-function-docstring
-    #     ...  # pragma: no cover
-
     def health_check(self) -> dict[str, Any]:  # noqa: D102
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
@@ -108,17 +97,6 @@ class VectorStoreProtocol(Protocol):
     ) -> str:  # noqa: D102
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
-
-    # def store_text(  # todo
-    #         self,
-    #         text: str,
-    #         embedding: np.ndarray,
-    #         *,
-    #         text_id: str | None,
-    #         metadata: Mapping[str, Any] | None,
-    # ) -> str:  # noqa: D102
-    #     # pylint: disable=missing-function-docstring
-    #     ...  # pragma: no cover
 
 
 @runtime_checkable
@@ -140,17 +118,6 @@ class RAGStoreProtocol(Protocol):
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
-    # def get_relevant( # todo
-    #         self,
-    #         query: str,
-    #         top_k: int,
-    #         *,
-    #         min_time: int | None,
-    #         max_time: int | None,
-    # ) -> list[dict[str, Any]]:  # noqa: D102
-    #     # pylint: disable=missing-function-docstring
-    #     ...  # pragma: no cover
-
     def get_relevant(
             self,
             query: str,
@@ -169,16 +136,6 @@ class RAGStoreProtocol(Protocol):
     def store_text(self, text_unit: TextUnit) -> TextUnit:  # noqa: D102
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
-
-    # def store_text( # todo
-    #         self,
-    #         text: str,
-    #         *,
-    #         text_id: str | None,
-    #         metadata: Mapping[str, Any] | None,
-    # ) -> str:  # noqa: D102
-    #     # pylint: disable=missing-function-docstring
-    #     ...  # pragma: no cover
 
 
 @runtime_checkable

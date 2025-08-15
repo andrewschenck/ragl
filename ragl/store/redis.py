@@ -116,7 +116,6 @@ class RedisVectorStore:
         such as get_relevant.
 
     Example:
-        >>> from ragl.config import RedisConfig
         >>> config = RedisConfig(host='localhost', port=6379)
         >>> store = RedisVectorStore(
         ...     redis_config=config,
@@ -390,45 +389,6 @@ class RedisVectorStore:
         return [TextUnit.from_dict(result_dict)
                 for result_dict in result_dicts]
 
-    # def get_relevant(
-    #         self,
-    #         embedding: np.ndarray,
-    #         top_k: int,
-    #         *,
-    #         min_time: int | None = None,
-    #         max_time: int | None = None,
-    # ) -> list[dict[str, Any]]:
-    #     """
-    #     Retrieve relevant texts from Redis.
-    #
-    #     Performs a vector search in Redis using the provided embedding
-    #     and returns the top_k most relevant results. It applies optional
-    #     timestamp filters to limit results to a specific time range.
-    #
-    #     Args:
-    #         embedding:
-    #             Query embedding.
-    #         top_k:
-    #             Number of results to return.
-    #         min_time:
-    #             Minimum timestamp filter.
-    #         max_time:
-    #             Maximum timestamp filter.
-    #
-    #     Returns:
-    #         List of result dicts, may be fewer than top_k.
-    #     """
-    #     self._validate_dimensions_match(embedding)
-    #
-    #     vector_query = self._build_vector_query(
-    #         embedding=embedding,
-    #         top_k=top_k,
-    #         min_time=min_time,
-    #         max_time=max_time,
-    #     )
-    #     results = self._search_redis(vector_query)
-    #     return self._transform_redis_results(results)
-
     def health_check(self) -> dict[str, Any]:
         """
         Check Redis connection and index health.
@@ -509,14 +469,6 @@ class RedisVectorStore:
             _LOG.error('Redis operation failed: %s', e)
             raise DataError(f'Redis operation failed: {e}') from e
 
-    # def store_text(  # todo
-    #         self,
-    #         text: str,
-    #         embedding: np.ndarray,
-    #         *,
-    #         text_id: str | None = None,
-    #         metadata: Mapping[str, Any] | None = None,
-    # ) -> str:
     def store_text(
             self,
             text_unit: TextUnit,
