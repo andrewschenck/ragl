@@ -161,7 +161,7 @@ class RAGStore:
 
     def store_text(self, text_unit: TextUnit) -> TextUnit:
         """
-        Store TextUnit in the store backend.
+        Store TextUnit in the storage backend.
 
         Stores a TextUnit document in the underlying storage system,
         generating an embedding for the text using the embedder.
@@ -171,16 +171,22 @@ class RAGStore:
                 TextUnit to store.
 
         Returns:
-            The stored TextUnit with updated text_id if it was generated.
+            The stored TextUnit.
         """
         _LOG.debug('Storing TextUnit %s', text_unit.text_id)
 
-        stored_text_id = self.storage.store_text(
+        # text_units = [text_unit]
+        # data_to_store = [
+        #     (unit, self.embedder.embed(unit.text))
+        #     for unit in text_units
+        # ]
+        #
+        # multiple_ids = self.storage.store_texts(data_to_store)
+        self.storage.store_text(
             text_unit=text_unit,
             embedding=self.embedder.embed(text_unit.text),
         )
 
-        text_unit.text_id = stored_text_id
         return text_unit
 
     def __repr__(self) -> str:

@@ -408,7 +408,7 @@ class RedisVectorStore:
             'index_healthy':         False,
             'memory_info':           {},
             'last_check':            int(time.time()),
-            'errors':                []
+            'errors':                [],
         }
 
         with self.redis_context() as client:
@@ -471,57 +471,94 @@ class RedisVectorStore:
 
     def store_text(self, text_unit: TextUnit, embedding: np.ndarray) -> str:
         """
-        Store text and embedding in Redis.
+        Store a single text and its embedding in Redis.
 
         Stores the provided text and its vector embedding in Redis.
-        It generates a unique text ID if not provided, validates the
-        input sizes, sanitizes the metadata, and prepares the data
-        for storage. It then stores the data in Redis using the
-        RedisVL index. The text ID is returned after successful storage.
+        Validates and sanitizes the input before storage.
 
         Args:
             text_unit:
-                Text to store.
+                TextUnit containing the text and metadata.
             embedding:
-                Vector embedding.
+                Vector embedding for the text.
 
         Returns:
-            The text ID (generated if not provided.)
+            The generated text ID after successful storage.
+        """
+        text_ids = self.store_texts([(text_unit, embedding)])
+        return text_ids[0]
+
+    def store_texts(
+            self,
+            texts_and_embeddings: list[tuple[TextUnit, np.ndarray]],
+    ) -> list[str]:
+        """
+        Store multiple texts and embeddings in batch.
+
+        Processes multiple text-embedding pairs efficiently by batching
+        the storage operations. Validates all inputs before storing and
+        returns the list of generated text IDs.
+
+        Args:
+            texts_and_embeddings:
+                List of (TextUnit, np.ndarray) tuples to store.
+
+        Returns:
+            List of text IDs for the stored texts.
 
         Raises:
             ValidationError:
-                If text is empty.
+                If any input is invalid.
+            DataError:
+                If storage operation fails.
         """
-        text_id = text_unit.text_id
-        text_data = text_unit.to_dict()
-        text = text_data.pop('text')
+        if not texts_and_embeddings:
+            return []
 
-        if not text.strip():
-            raise ValidationError('text cannot be empty')
+        self._validate_batch_input_structure(texts_and_embeddings)
 
-        if text_id is None:
-            _LOG.info('generating text_id')
-            text_id = self._generate_text_id()
+        _LOG.debug('Storing batch of %d text-embedding pairs',
+                   len(texts_and_embeddings))
 
-        self._validate_input_sizes(text, text_data)
-        self._validate_text_id(text_id)
-        self._validate_dimensions_match(embedding)
+        batch_data = {}
+        text_ids = []
 
-        sanitized = sanitize_metadata(
-            metadata=text_data,
-            schema=self.metadata_schema,
-        )
+        for text_unit, embedding in texts_and_embeddings:
+            text_data = text_unit.to_dict()
+            text = text_data.pop('text')
 
-        if 'tags' in sanitized:
-            sanitized['tags'] = self._prepare_tags(tags=sanitized['tags'])
+            if not text.strip():
+                raise ValidationError('text cannot be empty')
 
-        text_data = self._prepare_text_data(
-            text=text,
-            embedding=embedding,
-            metadata=sanitized,
-        )
-        self._store_to_redis(text_id, text_data)
-        return text_id
+            text_id = text_unit.text_id
+            if text_id is None:
+                text_id = self._generate_text_id()
+
+            self._validate_input_sizes(text, text_data)
+            self._validate_text_id(text_id)
+            self._validate_dimensions_match(embedding)
+
+            sanitized = sanitize_metadata(
+                metadata=text_data,
+                schema=self.metadata_schema,
+            )
+
+            if 'tags' in sanitized:
+                sanitized['tags'] = self._prepare_tags(tags=sanitized['tags'])
+
+            prepared_data = self._prepare_text_data(
+                text=text,
+                embedding=embedding,
+                metadata=sanitized,
+            )
+
+            batch_data[text_id] = prepared_data
+            text_ids.append(text_id)
+
+        self._store_to_redis(batch_data)
+
+        _LOG.info('Successfully stored batch of %d texts', len(text_ids))
+        return text_ids
 
     def close(self) -> None:
         """Close Redis connection pool."""
@@ -804,7 +841,10 @@ class RedisVectorStore:
             _LOG.error(msg)
             raise StorageConnectionError(msg) from e
 
-    def _store_to_redis(self, text_id: str, text_data: dict[str, Any]) -> None:
+    def _store_to_redis(
+            self,
+            batch_data: dict[str, dict[str, Any]],
+    ) -> list[str]:
         """
         Store text data in Redis using RedisVL.
 
@@ -813,13 +853,15 @@ class RedisVectorStore:
         includes the text, embedding, and metadata.
 
         Args:
-            text_id:
-                ID for the text.
-            text_data:
-                Data dict to store.
+            batch_data:
+                Dictionary mapping text IDs to their data dicts.
+
         """
+        keys = list(batch_data.keys())
+        values = list(batch_data.values())
+
         with self.redis_context():
-            self.index.load([text_data], keys=[text_id])
+            return self.index.load(values, keys=keys)
 
     def _transform_redis_results(self, results: Any) -> list[dict[str, Any]]:
         """
@@ -945,6 +987,52 @@ class RedisVectorStore:
             'embedding':        embedding.tobytes(),
             **metadata,
         }
+
+    @staticmethod
+    def _validate_batch_input_structure(
+            texts_and_embeddings: list[tuple[TextUnit, np.ndarray]],
+    ) -> None:
+        """
+        Validate the structure of the batch input.
+
+        Ensures that the input is a list of tuples, each containing
+        exactly two elements: a TextUnit and a numpy array.
+
+        Args:
+            texts_and_embeddings:
+                List of (TextUnit, np.ndarray) tuples to validate.
+
+        Raises:
+            ValidationError:
+                If input structure is invalid.
+        """
+        if not isinstance(texts_and_embeddings, list):
+            raise ValidationError('texts_and_embeddings must be a list')
+
+        for i, item in enumerate(texts_and_embeddings):
+            if not isinstance(item, tuple):
+                raise ValidationError(
+                    f'Item {i} must be a tuple, got {type(item).__name__}')
+
+            if len(item) != 2:
+                msg = (f'Item {i} must be a tuple of length 2, '
+                       f'got length {len(item)}')
+                _LOG.error(msg)
+                raise ValidationError(msg)
+
+            text_unit, embedding = item
+
+            if not isinstance(text_unit, TextUnit):
+                msg = (f'Item {i}: first element must be a TextUnit, '
+                       f'got {type(text_unit).__name__}')
+                _LOG.error(msg)
+                raise ValidationError(msg)
+
+            if not isinstance(embedding, np.ndarray):
+                msg = (f'Item {i}: first element must be a numpy array, '
+                       f'got {type(embedding).__name__}')
+                _LOG.error(msg)
+                raise ValidationError(msg)
 
     @staticmethod
     def _validate_dimensions(dimensions: int | None) -> None:
