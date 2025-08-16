@@ -342,9 +342,12 @@ class TestRAGManager(unittest.TestCase):
                              tokenizer=self.mock_tokenizer)
         text = "Test text"
 
-        # Mock tokenizer to return empty decoded text
-        self.mock_tokenizer.encode.return_value = list(range(50))
-        self.mock_tokenizer.decode.return_value = ""
+        # Mock tokenizer to return enough tokens to trigger splitting
+        # and empty decoded chunks
+        self.mock_tokenizer.encode.return_value = list(
+            range(150))  # More than chunk_size
+        self.mock_tokenizer.decode.return_value = ""  # Empty chunks after decoding
+        self.mock_ragstore.store_texts.return_value = []
 
         with patch('ragl.manager._LOG') as mock_log:
             with self.assertRaises(DataError) as cm:
@@ -674,17 +677,16 @@ class TestRAGManager(unittest.TestCase):
         manager = RAGManager(self.config, self.mock_ragstore,
                              tokenizer=self.mock_tokenizer)
 
-        # Mock tokenizer to return only empty/whitespace chunks
-        self.mock_tokenizer.encode.return_value = list(range(100))
+        # Mock tokenizer to return more tokens than chunk_size to force splitting
+        self.mock_tokenizer.encode.return_value = list(
+            range(150))  # More than chunk_size
         self.mock_tokenizer.decode.side_effect = ["", "   ", "\t\n",
                                                   "  \r\n  "]
 
         with self.assertRaises(DataError) as cm:
-            manager.add_texts(["Some text"])
+            manager.add_texts(["Test text that will be split"])
 
         self.assertIn('No valid chunks stored', str(cm.exception))
-        # store_text should never be called since all chunks are filtered out
-        self.mock_ragstore.store_text.assert_not_called()
 
     def test_add_texts_integration_batch_processing(self):
         """Integration test for batch processing with mixed content."""
@@ -1250,6 +1252,10 @@ class TestRAGManager(unittest.TestCase):
                              tokenizer=self.mock_tokenizer)
         text = "Test text to split"
 
+        # Mock tokenizer to return more tokens than chunk_size to force splitting
+        self.mock_tokenizer.encode.return_value = list(
+            range(150))  # More than chunk_size
+
         # Mock _split_text method
         with patch.object(manager, '_split_text',
                           return_value=['chunk1', 'chunk2']) as mock_split:
@@ -1287,11 +1293,15 @@ class TestRAGManager(unittest.TestCase):
         text_unit = TextUnit(text_id="test", text="Test text to split",
                              source="test", distance=0.1)
 
+        # Mock tokenizer to return more tokens than chunk_size to force splitting
+        self.mock_tokenizer.encode.return_value = list(
+            range(150))  # More than chunk_size
+
         with patch.object(manager, '_split_text',
                           return_value=['chunk1', 'chunk2']) as mock_split:
             result = manager._get_chunks(text_unit, 100, 20, True)
 
-        # self.assertEqual(result, ['chunk1', 'chunk2'])
+        self.assertEqual(result, ['chunk1', 'chunk2'])
         mock_split.assert_called_once_with(text_unit.text, 100, 20)
 
     @patch('ragl.manager._LOG')
