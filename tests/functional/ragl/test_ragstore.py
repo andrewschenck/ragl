@@ -208,6 +208,142 @@ class TestRAGStore(unittest.TestCase):
         self.assertEqual(embedding_arg,
                          [0.1, 0.2, 0.3])  # Mock embedder output
 
+    def test_delete_texts_success(self):
+        """Test successful deletion of multiple texts."""
+        text_ids = ["test_id_1", "test_id_2", "test_id_3"]
+        self.mock_storage.delete_texts.return_value = 3
+
+        result = self.rag_store.delete_texts(text_ids)
+
+        self.assertEqual(result, 3)
+        self.mock_storage.delete_texts.assert_called_once_with(text_ids)
+
+    def test_delete_texts_partial_success(self):
+        """Test deletion when only some texts exist."""
+        text_ids = ["test_id_1", "nonexistent_id", "test_id_3"]
+        self.mock_storage.delete_texts.return_value = 2
+
+        result = self.rag_store.delete_texts(text_ids)
+
+        self.assertEqual(result, 2)
+        self.mock_storage.delete_texts.assert_called_once_with(text_ids)
+
+    def test_delete_texts_empty_list(self):
+        """Test deletion with empty list."""
+        text_ids = []
+        self.mock_storage.delete_texts.return_value = 0
+
+        result = self.rag_store.delete_texts(text_ids)
+
+        self.assertEqual(result, 0)
+        self.mock_storage.delete_texts.assert_called_once_with(text_ids)
+
+    def test_delete_texts_none_found(self):
+        """Test deletion when no texts exist."""
+        text_ids = ["nonexistent_1", "nonexistent_2"]
+        self.mock_storage.delete_texts.return_value = 0
+
+        result = self.rag_store.delete_texts(text_ids)
+
+        self.assertEqual(result, 0)
+        self.mock_storage.delete_texts.assert_called_once_with(text_ids)
+
+    def test_store_texts_multiple(self):
+        """Test storing multiple TextUnits."""
+        text_units = [
+            TextUnit(text="First text", text_id="id_1", distance=0.0),
+            TextUnit(text="Second text", text_id="id_2", distance=0.0),
+            TextUnit(text="Third text", text_id="id_3", distance=0.0)
+        ]
+        self.mock_storage.store_texts.return_value = ["id_1", "id_2", "id_3"]
+
+        result = self.rag_store.store_texts(text_units)
+
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result[0].text, "First text")
+        self.assertEqual(result[1].text, "Second text")
+        self.assertEqual(result[2].text, "Third text")
+
+        # Verify embedder was called for each text
+        self.assertEqual(self.mock_embedder.embed.call_count, 3)
+        self.mock_embedder.embed.assert_any_call("First text")
+        self.mock_embedder.embed.assert_any_call("Second text")
+        self.mock_embedder.embed.assert_any_call("Third text")
+
+        # Verify storage was called with correct structure
+        self.mock_storage.store_texts.assert_called_once()
+        call_args = self.mock_storage.store_texts.call_args[0][0]
+        self.assertEqual(len(call_args), 3)
+
+        # Check that each tuple contains TextUnit and embedding
+        for i, (text_unit, embedding) in enumerate(call_args):
+            self.assertIsInstance(text_unit, TextUnit)
+            self.assertEqual(embedding, [0.1, 0.2, 0.3])
+
+    def test_store_texts_empty_list(self):
+        """Test storing empty list of TextUnits."""
+        text_units = []
+
+        result = self.rag_store.store_texts(text_units)
+
+        self.assertEqual(result, [])
+        self.mock_embedder.embed.assert_not_called()
+        self.mock_storage.store_texts.assert_called_once_with([])
+
+    def test_store_texts_single_text(self):
+        """Test storing single TextUnit via store_texts method."""
+        text_units = [
+            TextUnit(text="Single text", text_id="single_id", distance=0.0)
+        ]
+        self.mock_storage.store_texts.return_value = ["single_id"]
+
+        result = self.rag_store.store_texts(text_units)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].text, "Single text")
+        self.assertEqual(result[0].text_id, "single_id")
+
+        self.mock_embedder.embed.assert_called_once_with("Single text")
+        self.mock_storage.store_texts.assert_called_once()
+
+    def test_store_texts_preserves_metadata(self):
+        """Test that store_texts preserves metadata from TextUnits."""
+        text_units = [
+            TextUnit(
+                text="Text with metadata",
+                text_id="meta_id",
+                distance=0.0,
+                timestamp=1234567890,
+                tags=["tag1", "tag2"],
+                source="test_source"
+            )
+        ]
+        self.mock_storage.store_texts.return_value = ["meta_id"]
+
+        result = self.rag_store.store_texts(text_units)
+
+        self.assertEqual(len(result), 1)
+        stored_unit = result[0]
+        self.assertEqual(stored_unit.timestamp, 1234567890)
+        self.assertEqual(stored_unit.tags, ["tag1", "tag2"])
+        self.assertEqual(stored_unit.source, "test_source")
+
+    def test_store_texts_without_text_ids(self):
+        """Test storing TextUnits without predefined text IDs."""
+        text_units = [
+            TextUnit(text="Text without ID 1", text_id=None, distance=0.0),
+            TextUnit(text="Text without ID 2", text_id=None, distance=0.0)
+        ]
+        self.mock_storage.store_texts.return_value = ["generated_1",
+                                                      "generated_2"]
+
+        result = self.rag_store.store_texts(text_units)
+
+        self.assertEqual(len(result), 2)
+        # The original TextUnits should be returned unchanged
+        self.assertEqual(result[0].text, "Text without ID 1")
+        self.assertEqual(result[1].text, "Text without ID 2")
+
     def test_repr(self):
         """Test __repr__ method."""
         result = repr(self.rag_store)
@@ -290,6 +426,27 @@ class TestRAGStoreLogging(unittest.TestCase):
             self.rag_store.store_text(text_unit)
 
         self.assertIn('Storing TextUnit', log.output[0])
+
+    def test_logging_debug_delete_texts(self):
+        """Test debug logging for delete_texts."""
+        text_ids = ["id1", "id2", "id3"]
+
+        with self.assertLogs('ragl.ragstore', level='DEBUG') as log:
+            self.rag_store.delete_texts(text_ids)
+
+        self.assertIn('Deleting 3 texts', log.output[0])
+
+    def test_logging_debug_store_texts(self):
+        """Test debug logging for store_texts."""
+        text_units = [
+            TextUnit(text="test text 1", text_id="test_id_1", distance=0.0),
+            TextUnit(text="test text 2", text_id="test_id_2", distance=0.0)
+        ]
+
+        with self.assertLogs('ragl.ragstore', level='DEBUG') as log:
+            self.rag_store.store_texts(text_units)
+
+        self.assertIn('Storing 2 TextUnits', log.output[0])
 
 
 if __name__ == '__main__':

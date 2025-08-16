@@ -123,6 +123,10 @@ class RAGStoreProtocol(Protocol):
         # pylint: disable=missing-function-docstring
         ...
 
+    def delete_texts(self, text_ids: list[str]) -> int:
+        # pylint: disable=missing-function-docstring
+        ...
+
     def get_relevant(
             self,
             query: str,
@@ -139,6 +143,10 @@ class RAGStoreProtocol(Protocol):
         ...
 
     def store_text(self, text_unit: TextUnit) -> TextUnit:
+        # pylint: disable=missing-function-docstring
+        ...
+
+    def store_texts(self, texts: list[TextUnit]) -> list[TextUnit]:
         # pylint: disable=missing-function-docstring
         ...
 
