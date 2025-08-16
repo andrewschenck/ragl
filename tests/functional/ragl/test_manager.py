@@ -141,11 +141,20 @@ class TestRAGManager(unittest.TestCase):
 
         # Setup default mock behaviors
         self.mock_ragstore.list_texts.return_value = []
-        self.mock_ragstore.store_text.return_value = TextUnit(
+        tu = TextUnit(
             text_id='text-id-1',
             text='test text',
-            distance=0.0
+            distance=0.0,
         )
+        self.mock_ragstore.store_text.return_value = tu
+        # self.mock_ragstore.store_text.return_value = TextUnit(
+        #     text_id='text-id-1',
+        #     text='test text',
+        #     distance=0.0
+        # )
+        # mock_text_unit = Mock(spec=TextUnit)
+        self.mock_ragstore.store_texts.return_value = [tu]
+
         self.mock_tokenizer.encode.return_value = list(range(100))
         self.mock_tokenizer.decode.return_value = 'decoded text chunk'
 
@@ -1184,6 +1193,7 @@ class TestRAGManager(unittest.TestCase):
         self.assertEqual(RAGManager.DEFAULT_BASE_ID, 'doc')
         self.assertEqual(RAGManager.MAX_QUERY_LENGTH, 8192)
         self.assertEqual(RAGManager.MAX_INPUT_LENGTH, (1024 * 1024) * 10)
+
 
     def test_add_text_integration_multiple_chunks(self):
         """Integration test for adding text that gets split into multiple chunks."""

@@ -1,3 +1,4 @@
+# pylint: disable=too-many-lines
 """
 Core RAG management functionality for text storage and retrieval.
 
@@ -298,9 +299,103 @@ class RAGManager:
         self.paranoid = config.paranoid
         self._metrics = defaultdict(RAGTelemetry)
 
+    # def add_text(
+    #         self,
+    #         text_or_doc: str | TextUnit,
+    #         *,
+    #         base_id: str | None = None,
+    #         chunk_size: int | None = None,
+    #         overlap: int | None = None,
+    #         split: bool = True,
+    # ) -> list[TextUnit]:
+    #     # pylint: disable=too-many-arguments
+    #     # pylint: disable=too-many-locals
+    #     """
+    #     Add text to the store.
+    #
+    #     Splits text into chunks, stores with metadata, and
+    #     returns stored TextUnit instances.
+    #
+    #     Args:
+    #         text_or_doc:
+    #             Text or TextUnit to add.
+    #         base_id:
+    #             Optional base ID for chunks, sets parent_id.
+    #             If unset, parent_id is auto-generated and may
+    #             collide after deletes; specify for uniqueness
+    #             (e.g., UUID) if critical for grouping.
+    #         chunk_size:
+    #             Optional chunk size override.
+    #         overlap:
+    #             Optional overlap override.
+    #         split:
+    #             Whether to split the text into chunks.
+    #
+    #     Raises:
+    #         ValidationError:
+    #             If text is empty or params invalid.
+    #         DataError:
+    #             If no chunks are stored.
+    #
+    #     Returns:
+    #         List of stored TextUnit instances.
+    #     """
+    #     _LOG.debug('Adding text: %s', text_or_doc)
+    #     with self.track_operation('add_text'):
+    #         cs = chunk_size if chunk_size is not None else self.chunk_size
+    #         ov = overlap if overlap is not None else self.overlap
+    #         self._validate_chunking(cs, ov)
+    #
+    #         if isinstance(text_or_doc, str):
+    #             if not text_or_doc.strip():
+    #                 msg = 'Text cannot be empty'
+    #                 _LOG.critical(msg)
+    #                 raise ValidationError(msg)
+    #             text_or_doc = self._sanitize_text(text_or_doc)
+    #
+    #         elif isinstance(text_or_doc, TextUnit):
+    #             text_or_doc.text = self._sanitize_text(text_or_doc.text)
+    #
+    #         if base_id:
+    #             parent_id = base_id
+    #         else:
+    #             current_text_count = len(self.ragstore.list_texts())
+    #             parent_id = f'{TEXT_ID_PREFIX}{current_text_count + 1}'
+    #         _LOG.debug('Using parent_id: %s', parent_id)
+    #
+    #         chunks = self._get_chunks(text_or_doc, cs, ov, split)
+    #         base_data = self._prepare_base_data(text_or_doc, parent_id)
+    #
+    #         stored_docs: list[TextUnit] = []
+    #         for i, chunk in enumerate(chunks):
+    #             _base = base_id or self.DEFAULT_BASE_ID
+    #             text_id = f'{TEXT_ID_PREFIX}{_base}-{i}'
+    #
+    #             stored_doc = self._store_chunk(
+    #                 chunk=chunk,
+    #                 base_data=base_data,
+    #                 text_id=text_id,
+    #                 i=i,
+    #                 parent_id=parent_id,
+    #             )
+    #             stored_docs.append(stored_doc)
+    #             _LOG.info('Stored text chunk: %s', stored_doc.text_id)
+    #
+    #         if not stored_docs:
+    #             msg = 'No valid chunks stored'
+    #             _LOG.critical(msg)
+    #             raise DataError(msg)
+    #
+    #         _doc_count = len(stored_docs)
+    #         _doc_id = [doc.text_id for doc in stored_docs]
+    #         _LOG.debug('Added %s text chunks with IDs: %s',
+    #                    _doc_count, _doc_id)
+    #
+    #         return stored_docs
+
     def add_text(
             self,
-            text_or_doc: str | TextUnit,
+            text_or_unit: str | TextUnit,
             *,
             base_id: str | None = None,
             chunk_size: int | None = None,
@@ -308,7 +403,6 @@ class RAGManager:
             split: bool = True,
     ) -> list[TextUnit]:
         # pylint: disable=too-many-arguments
-        # pylint: disable=too-many-locals
         """
         Add text to the store.
 
@@ -316,13 +410,14 @@ class RAGManager:
         returns stored TextUnit instances.
 
         Args:
-            text_or_doc:
+            text_or_unit:
                 Text or TextUnit to add.
             base_id:
-                Optional base ID for chunks, sets parent_id.
-                If unset, parent_id is auto-generated and may
-                collide after deletes; specify for uniqueness
-                (e.g., UUID) if critical for grouping.
+                Optional base ID for chunks, used to determine
+                parent_id. If base_id is unset, parent_id is
+                auto-generated and may collide after deletes;
+                specify for uniqueness (e.g., UUID) if critical
+                for grouping.
             chunk_size:
                 Optional chunk size override.
             overlap:
@@ -339,60 +434,261 @@ class RAGManager:
         Returns:
             List of stored TextUnit instances.
         """
-        _LOG.debug('Adding text: %s', text_or_doc)
+        _LOG.debug('Adding text: %s', text_or_unit)
+
         with self.track_operation('add_text'):
+            results = self.add_texts(
+                texts_or_units=[text_or_unit],
+                base_id=base_id,
+                chunk_size=chunk_size,
+                overlap=overlap,
+                split=split,
+            )
+
+        return results
+
+    # def add_texts(
+    #         self,
+    #         texts_or_units: list[str | TextUnit],
+    #         *,
+    #         base_id: str | None = None,
+    #         chunk_size: int | None = None,
+    #         overlap: int | None = None,
+    #         split: bool = True,
+    # ) -> list[TextUnit]:
+    #     # pylint: disable=too-many-arguments
+    #     # pylint: disable=too-many-locals
+    #     # pylint: disable=too-many-statements
+    #     """
+    #     Add multiple texts to the store.
+    #
+    #     Splits texts into chunks, stores with metadata in batch, and
+    #     returns stored TextUnit instances.
+    #
+    #     Args:
+    #         texts_or_units:
+    #             List of texts or TextUnits to add.
+    #         base_id:
+    #             Optional base ID for chunks, sets parent_id.
+    #             If unset, parent_id is auto-generated and may
+    #             collide after deletes; specify for uniqueness
+    #             (e.g., UUID) if critical for grouping.
+    #         chunk_size:
+    #             Optional chunk size override.
+    #         overlap:
+    #             Optional overlap override.
+    #         split:
+    #             Whether to split the texts into chunks.
+    #
+    #     Raises:
+    #         ValidationError:
+    #             If any text is empty or params invalid.
+    #         DataError:
+    #             If no chunks are stored.
+    #
+    #     Returns:
+    #         List of stored TextUnit instances.
+    #     """
+    #     _LOG.debug('Adding texts: %d items', len(texts_or_units))
+    #     with self.track_operation('add_texts'):
+    #         cs = chunk_size if chunk_size is not None else self.chunk_size
+    #         ov = overlap if overlap is not None else self.overlap
+    #         self._validate_chunking(cs, ov)
+    #
+    #         if not texts_or_units:
+    #             msg = 'texts_or_docs cannot be empty'
+    #             _LOG.critical(msg)
+    #             raise ValidationError(msg)
+    #
+    #         sanitized_texts: list[TextUnit | str] = []
+    #         for text_or_doc in texts_or_units:
+    #             if isinstance(text_or_doc, str):
+    #                 if not text_or_doc.strip():
+    #                     msg = 'Text cannot be empty'
+    #                     _LOG.critical(msg)
+    #                     raise ValidationError(msg)
+    #                 sanitized_text = self._sanitize_text(text_or_doc)
+    #                 sanitized_texts.append(sanitized_text)
+    #                 # _base_id = base_id
+    #             elif isinstance(text_or_doc, TextUnit):
+    #                 text_or_doc.text = self._sanitize_text(text_or_doc.text)
+    #                 sanitized_texts.append(text_or_doc)
+    #                 # _base_id = text_or_doc.parent_id   # todo update docstring
+    #
+    #         if base_id:  # if _base_id:
+    #             parent_id = base_id
+    #             # todo set parent_id to TextUnit.parent_id if TextUnit object
+    #             # todo or do we just remove base_id param altogether and they
+    #             #  use TextUnit.parent_id?
+    #         else:
+    #             current_text_count = len(self.ragstore.list_texts())
+    #             parent_id = f'{TEXT_ID_PREFIX}{current_text_count + 1}'
+    #         _LOG.debug('Using parent_id: %s', parent_id)
+    #
+    #         all_text_units = []
+    #         chunk_counter = 0
+    #
+    #         # chunker = TextChunker(  # todo
+    #         #     tokenizer=self.tokenizer,
+    #         #     chunk_size=cs,
+    #         #     overlap=ov,
+    #         #     min_chunk_size=self.min_chunk_size
+    #         # )
+    #         for doc_idx, text_or_doc in enumerate(sanitized_texts):
+    #             chunks = self._get_chunks(text_or_doc, cs, ov, split)
+    #             base_data = self._prepare_base_data(text_or_doc, parent_id)
+    #
+    #             for i, chunk in enumerate(chunks):
+    #                 _base = base_id or self.DEFAULT_BASE_ID
+    #                 text_id = f'{TEXT_ID_PREFIX}{_base}-{doc_idx}-{i}'
+    #
+    #                 chunk_data = base_data.copy()
+    #                 chunk_data.update({
+    #                     'text_id':        text_id,
+    #                     'text':           chunk,
+    #                     'chunk_position': i,
+    #                     'parent_id':      parent_id,
+    #                     'distance':       0.0,
+    #                 })
+    #
+    #                 text_unit = TextUnit.from_dict(chunk_data)
+    #                 all_text_units.append(text_unit)
+    #                 chunk_counter += 1
+    #
+    #         if not all_text_units:
+    #             msg = 'No valid chunks created'
+    #             _LOG.critical(msg)
+    #             raise DataError(msg)
+    #
+    #         stored_docs = self.ragstore.store_texts(all_text_units)
+    #
+    #         if not stored_docs:
+    #             msg = 'No valid chunks stored'
+    #             _LOG.critical(msg)
+    #             raise DataError(msg)
+    #
+    #         _doc_count = len(stored_docs)
+    #         _doc_ids = [doc.text_id for doc in stored_docs]
+    #         _LOG.debug('Added %s text chunks with IDs: %s',
+    #                    _doc_count, _doc_ids)
+    #         _LOG.info('Stored %d text chunks from %d documents',
+    #                   _doc_count, len(texts_or_units))
+    #
+    #         return stored_docs
+
+    def add_texts(
+            self,
+            texts_or_units: list[str | TextUnit],
+            *,
+            base_id: str | None = None,
+            chunk_size: int | None = None,
+            overlap: int | None = None,
+            split: bool = True,
+    ) -> list[TextUnit]:
+        # pylint: disable=too-many-arguments
+        # pylint: disable=too-many-locals
+        # pylint: disable=too-many-statements
+        """
+        Add multiple texts to the store.
+
+        Splits texts into chunks, stores with metadata in batch, and
+        returns stored TextUnit instances.
+
+        Args:
+            texts_or_units:
+                List of texts or TextUnit objects to add.
+            base_id:
+                Optional base ID for chunks, sets parent_id.
+                If unset, parent_id is auto-generated and may
+                collide after deletes; specify for uniqueness
+                (e.g., UUID) if critical for grouping.
+            chunk_size:
+                Optional chunk size override.
+            overlap:
+                Optional overlap override.
+            split:
+                Whether to split the text into chunks.
+
+        Raises:
+            ValidationError:
+                If texts are empty or params invalid.
+            DataError:
+                If no chunks are stored.
+
+        Returns:
+            List of stored TextUnit instances.
+        """
+        _LOG.debug('Adding texts: %d items', len(texts_or_units))
+        with self.track_operation('add_texts'):
             cs = chunk_size if chunk_size is not None else self.chunk_size
             ov = overlap if overlap is not None else self.overlap
             self._validate_chunking(cs, ov)
 
-            if isinstance(text_or_doc, str):
-                if not text_or_doc.strip():
-                    msg = 'Text cannot be empty'
-                    _LOG.critical(msg)
-                    raise ValidationError(msg)
-                text_or_doc = self._sanitize_text(text_or_doc)
+            if not texts_or_units:
+                msg = 'texts_or_docs cannot be empty'
+                _LOG.critical(msg)
+                raise ValidationError(msg)
 
-            elif isinstance(text_or_doc, TextUnit):
-                text_or_doc.text = self._sanitize_text(text_or_doc.text)
+            sanitized_texts: list[TextUnit | str] = []
+            for text_or_doc in texts_or_units:
+                if isinstance(text_or_doc, str):
+                    if not text_or_doc.strip():
+                        msg = 'Text cannot be empty'
+                        _LOG.critical(msg)
+                        raise ValidationError(msg)
+                    sanitized_text = self._sanitize_text(text_or_doc)
+                    sanitized_texts.append(sanitized_text)
+                elif isinstance(text_or_doc, TextUnit):
+                    text_or_doc.text = self._sanitize_text(text_or_doc.text)
+                    sanitized_texts.append(text_or_doc)
 
             if base_id:
                 parent_id = base_id
             else:
                 current_text_count = len(self.ragstore.list_texts())
                 parent_id = f'{TEXT_ID_PREFIX}{current_text_count + 1}'
+
             _LOG.debug('Using parent_id: %s', parent_id)
 
-            chunks = self._get_chunks(text_or_doc, cs, ov, split)
-            base_data = self._prepare_base_data(text_or_doc, parent_id)
-
             stored_docs: list[TextUnit] = []
-            for i, chunk in enumerate(chunks):
-                _base = base_id or self.DEFAULT_BASE_ID
-                text_id = f'{TEXT_ID_PREFIX}{_base}-{i}'
+            global_chunk_counter = 1
 
-                stored_doc = self._store_chunk(
-                    chunk=chunk,
-                    base_data=base_data,
-                    text_id=text_id,
-                    i=i,
-                    parent_id=parent_id,
-                )
-                stored_docs.append(stored_doc)
-                _LOG.info('Stored text chunk: %s', stored_doc.text_id)
+            for doc_idx, text_or_doc in enumerate(sanitized_texts):
+                chunks = self._get_chunks(text_or_doc, cs, ov, split)
+                base_data = self._prepare_base_data(text_or_doc, parent_id)
+
+                for i, chunk in enumerate(chunks):
+                    if base_id:
+                        # Use hierarchical naming when base_id is provided
+                        text_id = f'{TEXT_ID_PREFIX}{base_id}-{doc_idx}-{i}'
+                    else:
+                        # Use simple sequential naming when no base_id
+                        current_text_count = len(self.ragstore.list_texts())
+                        text_id = f'{TEXT_ID_PREFIX}{current_text_count + global_chunk_counter}'
+                        global_chunk_counter += 1
+
+                    stored_doc = self._store_chunk(
+                        chunk=chunk,
+                        base_data=base_data,
+                        text_id=text_id,
+                        i=i,
+                        parent_id=parent_id,
+                    )
+                    stored_docs.append(stored_doc)
+                    _LOG.info('Stored text chunk: %s', stored_doc.text_id)
 
             if not stored_docs:
                 msg = 'No valid chunks stored'
                 _LOG.critical(msg)
                 raise DataError(msg)
 
-            _doc_count = len(stored_docs)
-            _doc_id = [doc.text_id for doc in stored_docs]
-            _LOG.debug('Added %s text chunks with IDs: %s',
-                       _doc_count, _doc_id)
+            _doc_ids = [doc.text_id for doc in stored_docs]
+            _LOG.debug('Added %d text chunks with IDs: %s',
+                       len(stored_docs), _doc_ids)
 
             return stored_docs
 
-    def delete_text(self, text_id: str) -> None:
+    def delete_text(self, text_id: str) -> bool | None:
         """
         Delete a text from the store.
 
@@ -409,8 +705,35 @@ class RAGManager:
             if text_id not in existing_texts:
                 _LOG.warning('Text ID %s not found, skipping deletion',
                              text_id)
-                return
-            self.ragstore.delete_text(text_id)
+                return None
+            deleted = self.ragstore.delete_text(text_id)
+            _LOG.info('Deleted text %s', text_id)
+            return deleted
+
+    def delete_texts(self, text_ids: list[str]) -> int:
+        """
+        Delete multiple texts from the store.
+
+        Deletes a list of text chunks by their IDs, removing them
+        and any associated metadata from the store.
+
+        Args:
+            text_ids:
+                List of text IDs to delete.
+
+        Returns:
+            Number of texts deleted.
+        """
+        _LOG.debug('Deleting texts: %s', text_ids)
+        with self.track_operation('delete_texts'):
+            existing_texts = self.ragstore.list_texts()
+            valid_ids = [tid for tid in text_ids if tid in existing_texts]
+            if not valid_ids:
+                _LOG.warning('No valid text IDs found for deletion')
+                return 0
+            deleted_count = self.ragstore.delete_texts(valid_ids)
+            _LOG.info('Deleted %d texts', deleted_count)
+            return deleted_count
 
     def get_context(
             self,

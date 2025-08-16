@@ -56,7 +56,7 @@ class TestRAGLIntegration:
         """Test adding and retrieving a single document."""
         text = "Python is a high-level programming language."
         docs = self.manager.add_text(
-            text_or_doc=text,
+            text_or_unit=text,
             base_id="doc:python_intro"
         )
 
@@ -82,7 +82,7 @@ class TestRAGLIntegration:
                      ) * 3
 
         docs = self.manager.add_text(
-            text_or_doc=large_text,
+            text_or_unit=large_text,
             base_id="doc:ai_overview"
         )
 
@@ -105,7 +105,7 @@ class TestRAGLIntegration:
         all_docs = []
         for i, text in enumerate(texts):
             docs = self.manager.add_text(
-                text_or_doc=text,
+                text_or_unit=text,
                 base_id=f"doc:language_{i}"
             )
             all_docs.extend(docs)
@@ -125,7 +125,7 @@ class TestRAGLIntegration:
         """Test document deletion functionality."""
         text = "This document will be deleted."
         docs = self.manager.add_text(
-            text_or_doc=text,
+            text_or_unit=text,
             base_id="doc:to_delete"
         )
 
@@ -154,7 +154,7 @@ class TestRAGLIntegration:
 
         for text, tags in texts_with_tags:
             self.manager.add_text(
-                text_or_doc=text,
+                text_or_unit=text,
                 base_id=f"doc:{text[:10].replace(' ', '_')}",
             )
 
@@ -178,7 +178,7 @@ class TestRAGLIntegration:
         )
 
         _ = self.manager.add_text(
-            text_or_doc=reference_text,
+            text_or_unit=reference_text,
             base_id="doc:ml_definition"
         )
 
@@ -224,7 +224,7 @@ class TestRAGLIntegration:
         large_chunk_manager.reset(reset_metrics=True)
 
         docs = large_chunk_manager.add_text(
-            text_or_doc=tiny_text,
+            text_or_unit=tiny_text,
             base_id="doc:tiny"
         )
 
@@ -260,7 +260,7 @@ class TestRAGLIntegration:
             manager.reset(reset_metrics=True)
 
             docs = manager.add_text(
-                text_or_doc=medium_text,
+                text_or_unit=medium_text,
                 base_id=f"doc:medium_{chunk_size}_{overlap}"
             )
 
@@ -302,7 +302,7 @@ class TestRAGLIntegration:
         small_chunk_manager.reset(reset_metrics=True)
 
         docs = small_chunk_manager.add_text(
-            text_or_doc=large_text,
+            text_or_unit=large_text,
             base_id="doc:very_large"
         )
 
@@ -346,7 +346,7 @@ class TestRAGLIntegration:
         zero_overlap_manager.reset(reset_metrics=True)
 
         docs = zero_overlap_manager.add_text(
-            text_or_doc=text,
+            text_or_unit=text,
             base_id="doc:zero_overlap"
         )
 
@@ -381,7 +381,7 @@ class TestRAGLIntegration:
         high_overlap_manager.reset(reset_metrics=True)
 
         docs = high_overlap_manager.add_text(
-            text_or_doc=text,
+            text_or_unit=text,
             base_id="doc:high_overlap"
         )
 
@@ -409,7 +409,7 @@ class TestRAGLIntegration:
         for text, case_name in edge_cases:
             if text:  # Skip empty text as it raises ValidationError
                 docs = self.manager.add_text(
-                    text_or_doc=text,
+                    text_or_unit=text,
                     base_id=f"doc:edge_{case_name}"
                 )
 
@@ -440,7 +440,7 @@ class TestRAGLIntegration:
 
         all_doc_ids = []
         for text, doc_id in documents:
-            docs = self.manager.add_text(text_or_doc=text, base_id=doc_id)
+            docs = self.manager.add_text(text_or_unit=text, base_id=doc_id)
             all_doc_ids.extend([doc.text_id for doc in docs])
 
         # Test retrieval that should match across different document sizes
@@ -478,7 +478,7 @@ class TestRAGLIntegration:
         boundary_manager.reset(reset_metrics=True)
 
         docs = boundary_manager.add_text(
-            text_or_doc=boundary_text,
+            text_or_unit=boundary_text,
             base_id="doc:boundary_test"
         )
 
@@ -515,7 +515,7 @@ class TestRAGLIntegration:
         token_manager.reset(reset_metrics=True)
 
         docs = token_manager.add_text(
-            text_or_doc=text,
+            text_or_unit=text,
             base_id="doc:token_test"
         )
 
@@ -548,7 +548,7 @@ class TestRAGLIntegration:
         min_chunk_manager.reset(reset_metrics=True)
 
         docs = min_chunk_manager.add_text(
-            text_or_doc=text,
+            text_or_unit=text,
             base_id="doc:min_chunk_test"
         )
 
@@ -584,7 +584,7 @@ class TestRAGLIntegration:
 
         # Store the TextUnit
         stored_docs = self.manager.add_text(
-            text_or_doc=original_textunit,
+            text_or_unit=original_textunit,
             base_id="doc:metadata_test"
         )
 
@@ -689,10 +689,10 @@ class TestRAGLIntegration:
         text2 = "Deep learning uses neural networks with multiple layers."
 
         # Add texts to generate add_text metrics
-        self.manager.add_text(text_or_doc=text1,
-                                      base_id="doc:metrics_test1")
-        self.manager.add_text(text_or_doc=text2,
-                                      base_id="doc:metrics_test2")
+        self.manager.add_text(text_or_unit=text1,
+                              base_id="doc:metrics_test1")
+        self.manager.add_text(text_or_unit=text2,
+                              base_id="doc:metrics_test2")
 
         # Perform queries to generate get_context metrics
         self.manager.get_context(query="machine learning", top_k=1)
@@ -859,6 +859,342 @@ class TestRAGLIntegration:
             assert 0.0 <= success_rate <= 1.0
 
             logging.info(f"{operation_name} metrics precision verified")
+
+    def test_add_texts_batch_functionality(self):
+        """Test adding multiple texts in batch using add_texts method."""
+        texts = [
+            "Python is a versatile programming language used for web development.",
+            "JavaScript enables interactive web pages and modern applications.",
+            "Machine learning algorithms can process large datasets efficiently.",
+            "Data science combines statistics, programming, and domain expertise."
+        ]
+
+        # Test batch addition
+        docs = self.manager.add_texts(
+            texts_or_units=texts,
+            base_id="batch:programming_languages"
+        )
+
+        # Verify all texts were stored
+        assert len(docs) >= len(texts)  # May be more due to chunking
+
+        # Verify parent_id consistency
+        for doc in docs:
+            assert doc.parent_id == "batch:programming_languages"
+
+        # Verify text content preservation
+        stored_texts = [doc.text for doc in docs]
+        for original_text in texts:
+            assert any(
+                original_text in stored_text for stored_text in stored_texts)
+
+        # Test retrieval across batch
+        contexts = self.manager.get_context(
+            query="programming languages development",
+            top_k=5
+        )
+        assert len(contexts) >= 2
+
+        logging.info(
+            f"Successfully added {len(docs)} chunks from {len(texts)} texts")
+
+    def test_add_texts_with_textunit_objects(self):
+        """Test add_texts method with TextUnit objects."""
+        text_units = [
+            TextUnit(
+                text_id="temp_id_1",
+                text="Artificial intelligence mimics human cognitive functions.",
+                source="ai_textbook.pdf",
+                tags=["ai", "cognitive"],
+                language="en",
+                author="Dr. Smith",
+                distance=0.0,
+            ),
+            TextUnit(
+                text_id="temp_id_2",
+                text="Neural networks are inspired by biological brain structures.",
+                source="ml_research.pdf",
+                tags=["neural-networks", "biology"],
+                language="en",
+                author="Dr. Johnson",
+                distance = 0.0,
+        )
+        ]
+
+        docs = self.manager.add_texts(
+            texts_or_units=text_units,
+            base_id="batch:ai_concepts"
+        )
+
+        # Verify metadata preservation for each stored document
+        assert len(docs) >= 2
+
+        # Check first TextUnit metadata preservation
+        first_docs = [doc for doc in docs if "ai_textbook.pdf" in doc.source]
+        assert len(first_docs) >= 1
+        first_doc = first_docs[0]
+        assert first_doc.source == "ai_textbook.pdf"
+        assert "ai" in first_doc.tags
+        assert first_doc.author == "Dr. Smith"
+
+        # Check second TextUnit metadata preservation
+        second_docs = [doc for doc in docs if "ml_research.pdf" in doc.source]
+        assert len(second_docs) >= 1
+        second_doc = second_docs[0]
+        assert second_doc.source == "ml_research.pdf"
+        assert "neural-networks" in second_doc.tags
+        assert second_doc.author == "Dr. Johnson"
+
+    def test_add_texts_mixed_input_types(self):
+        """Test add_texts with mixed string and TextUnit inputs."""
+        mixed_inputs = [
+            "Simple string text about databases.",
+            TextUnit(
+                text_id="temp_id",
+                text="Structured TextUnit about cloud computing.",
+                source="cloud_guide.pdf",
+                tags=["cloud", "computing"],
+                confidence=0.9,
+                distance=0.0,
+            ),
+            "Another string about microservices architecture."
+        ]
+
+        docs = self.manager.add_texts(
+            texts_or_units=mixed_inputs,
+            base_id="batch:mixed_types"
+        )
+
+        assert len(docs) >= 3
+
+        # Verify all input types were processed
+        stored_texts = [doc.text for doc in docs]
+        assert any("databases" in text for text in stored_texts)
+        assert any("cloud computing" in text for text in stored_texts)
+        assert any("microservices" in text for text in stored_texts)
+
+        # Verify TextUnit metadata was preserved
+        cloud_docs = [doc for doc in docs if "cloud computing" in doc.text]
+        assert len(cloud_docs) >= 1
+        cloud_doc = cloud_docs[0]
+        assert cloud_doc.source == "cloud_guide.pdf"
+        assert cloud_doc.confidence == 0.9
+
+    def test_add_texts_chunking_behavior(self):
+        """Test that add_texts properly chunks large texts."""
+        large_texts = [
+            (
+                    "Machine learning is a subset of artificial intelligence that enables computers to learn and improve from experience without being explicitly programmed. " * 10),
+            (
+                    "Data science is an interdisciplinary field that uses scientific methods, processes, algorithms and systems to extract knowledge and insights from data. " * 8),
+            (
+                    "Cloud computing delivers computing services over the internet to offer faster innovation, flexible resources, and economies of scale. " * 12)
+        ]
+
+        docs = self.manager.add_texts(
+            texts_or_units=large_texts,
+            base_id="batch:large_documents",
+            chunk_size=50,  # Small chunks to force splitting
+            overlap=10
+        )
+
+        # Should create multiple chunks per document
+        assert len(docs) > len(large_texts)
+
+        # Verify chunk positioning and parent relationships
+        doc_chunks = {}
+        for doc in docs:
+            text_id_base = doc.text_id.rsplit('-', 1)[0]  # Remove chunk index
+            if text_id_base not in doc_chunks:
+                doc_chunks[text_id_base] = []
+            doc_chunks[text_id_base].append(doc)
+
+        # Each document should have multiple chunks
+        assert len(doc_chunks) == len(large_texts)
+        for chunks in doc_chunks.values():
+            assert len(chunks) > 1  # Should be chunked
+            # Verify chunk positions are sequential
+            positions = sorted([chunk.chunk_position for chunk in chunks])
+            assert positions == list(range(len(positions)))
+
+    def test_delete_texts_batch_functionality(self):
+        """Test deleting multiple texts using delete_texts method."""
+        # Add texts to delete
+        texts = [
+            "Text that will be deleted soon.",
+            "Another text for deletion testing.",
+            "Final text in the deletion batch."
+        ]
+
+        docs = self.manager.add_texts(
+            texts_or_units=texts,
+            base_id="batch:to_delete"
+        )
+
+        # Get text IDs for deletion
+        text_ids = [doc.text_id for doc in docs]
+        initial_count = len(text_ids)
+
+        # Verify texts exist
+        all_texts_before = self.manager.list_texts()
+        for text_id in text_ids:
+            assert text_id in all_texts_before
+
+        # Delete texts in batch
+        deleted_count = self.manager.delete_texts(text_ids)
+
+        # Verify deletion results
+        assert deleted_count == initial_count
+
+        # Verify texts are gone
+        all_texts_after = self.manager.list_texts()
+        for text_id in text_ids:
+            assert text_id not in all_texts_after
+
+        logging.info(f"Successfully deleted {deleted_count} texts in batch")
+
+    def test_delete_texts_partial_success(self):
+        """Test delete_texts with mix of valid and invalid IDs."""
+        # Add some texts
+        texts = ["Valid text one.", "Valid text two."]
+        docs = self.manager.add_texts(
+            texts_or_units=texts,
+            base_id="batch:partial_delete"
+        )
+
+        valid_ids = [doc.text_id for doc in docs]
+        invalid_ids = ["nonexistent_id_1", "nonexistent_id_2"]
+        mixed_ids = valid_ids + invalid_ids
+
+        # Attempt to delete mix of valid and invalid IDs
+        deleted_count = self.manager.delete_texts(mixed_ids)
+
+        # Should only delete the valid ones
+        assert deleted_count == len(valid_ids)
+
+        # Verify valid IDs are deleted
+        remaining_texts = self.manager.list_texts()
+        for valid_id in valid_ids:
+            assert valid_id not in remaining_texts
+
+    def test_delete_texts_empty_list(self):
+        """Test delete_texts with empty list."""
+        deleted_count = self.manager.delete_texts([])
+        assert deleted_count == 0
+
+    def test_add_texts_empty_list_error(self):
+        """Test that add_texts raises error for empty input list."""
+        try:
+            self.manager.add_texts(texts_or_units=[])
+            assert False, "Should have raised ValidationError"
+        except ValidationError as e:
+            assert "cannot be empty" in str(e)
+
+    def test_add_texts_empty_string_error(self):
+        """Test that add_texts raises error for empty strings in list."""
+        texts_with_empty = ["Valid text", "", "Another valid text"]
+
+        try:
+            self.manager.add_texts(texts_or_units=texts_with_empty)
+            assert False, "Should have raised ValidationError"
+        except ValidationError as e:
+            assert "cannot be empty" in str(e)
+
+    def test_add_texts_no_split_option(self):
+        """Test add_texts with split=False option."""
+        texts = [
+            "This text will not be split into chunks despite being somewhat long.",
+            "Another text that would normally be chunked but won't be with split=False."
+        ]
+
+        docs = self.manager.add_texts(
+            texts_or_units=texts,
+            base_id="batch:no_split",
+            split=False
+        )
+
+        # Should have exactly one document per input text
+        assert len(docs) == len(texts)
+
+        # Each document should contain the full original text
+        for i, doc in enumerate(docs):
+            assert doc.text == texts[i]
+            assert doc.chunk_position == 0
+
+    def test_add_texts_custom_chunk_parameters(self):
+        """Test add_texts with custom chunk size and overlap."""
+        text = "This is a moderately long text that will be chunked using custom parameters to test the flexibility of the add_texts method."
+
+        docs = self.manager.add_texts(
+            texts_or_units=[text],
+            base_id="batch:custom_params",
+            chunk_size=15,  # Small chunk size
+            overlap=3
+        )
+
+        # Verify chunking occurred with custom parameters
+        if len(docs) > 1:  # If text was long enough to chunk
+            tokenizer = self.manager.tokenizer
+            for doc in docs:
+                token_count = len(tokenizer.encode(doc.text))
+                # Should respect custom chunk size (with tolerance for overlap and merging)
+                assert token_count <= 25  # chunk_size + overlap + tolerance
+
+    def test_batch_operations_performance_metrics(self):
+        """Test that batch operations are tracked in performance metrics."""
+        # Perform batch operations
+        texts = [f"Performance test text {i}" for i in range(5)]
+        docs = self.manager.add_texts(texts_or_units=texts,
+                                      base_id="batch:perf")
+
+        text_ids = [doc.text_id for doc in docs]
+        self.manager.delete_texts(text_ids)
+
+        # Check metrics
+        metrics = self.manager.get_performance_metrics()
+
+        # Should have metrics for batch operations
+        assert 'add_texts' in metrics
+        assert metrics['add_texts']['total_calls'] >= 1
+
+        assert 'delete_texts' in metrics
+        assert metrics['delete_texts']['total_calls'] >= 1
+
+        logging.info(
+            "Batch operations properly tracked in performance metrics")
+
+    def test_large_batch_operations(self):
+        """Test batch operations with large number of documents."""
+        # Create large batch of texts
+        large_batch = [
+            f"Large batch test document {i} with some content about topic {i % 10}."
+            for i in range(100)]
+
+        # Test large batch addition
+        start_time = time.time()
+        docs = self.manager.add_texts(
+            texts_or_units=large_batch,
+            base_id="batch:large_test"
+        )
+        add_duration = time.time() - start_time
+
+        assert len(docs) >= len(large_batch)
+        logging.info(f"Added {len(docs)} documents in {add_duration:.3f}s")
+
+        # Test large batch deletion
+        text_ids = [doc.text_id for doc in docs]
+        start_time = time.time()
+        deleted_count = self.manager.delete_texts(text_ids)
+        delete_duration = time.time() - start_time
+
+        assert deleted_count == len(text_ids)
+        logging.info(
+            f"Deleted {deleted_count} documents in {delete_duration:.3f}s")
+
+        # Verify all deleted
+        remaining_texts = self.manager.list_texts()
+        for text_id in text_ids:
+            assert text_id not in remaining_texts
 
 
 if __name__ == "__main__":
