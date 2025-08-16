@@ -416,7 +416,6 @@ class RAGManager:
                 base_id = f'{self.DEFAULT_BASE_ID}'
 
             text_units_to_store = []
-            global_chunk_counter = 0
 
             for text_index, text_or_unit in enumerate(texts_or_units):
 
@@ -459,18 +458,16 @@ class RAGManager:
 
                 # Create TextUnit objects for each chunk
                 for chunk_position, chunk in enumerate(chunks):
+
                     # Skip empty chunks
                     if not chunk.strip():
                         continue
 
                     # Generate hierarchical text_id when base_id is provided
-                    if base_id:
-                        text_id = (f'{TEXT_ID_PREFIX}{base_id}-'
-                                   f'{text_index}-{chunk_position}')
-                    else:
-                        text_id = f'{TEXT_ID_PREFIX}{global_chunk_counter}'
+                    text_id = (f'{TEXT_ID_PREFIX}{base_id}-'
+                               f'{text_index}-{chunk_position}')
 
-                    # Create TextUnit without storing
+                    # Create TextUnit and add to list
                     chunk_data = base_data.copy()
                     chunk_data.update({
                         'text_id':        text_id,
@@ -479,10 +476,8 @@ class RAGManager:
                         'parent_id':      parent_id,
                         'distance':       0.0,
                     })
-
                     text_unit = TextUnit.from_dict(chunk_data)
                     text_units_to_store.append(text_unit)
-                    global_chunk_counter += 1
 
             if not text_units_to_store:
                 raise DataError('No valid chunks stored')

@@ -739,6 +739,365 @@ class TestRAGManager(unittest.TestCase):
         for unit in result:
             self.assertEqual(unit.parent_id, "batch-test")
 
+    def test_add_texts_textunit_empty_text(self):
+        """Test adding TextUnit with empty text raises ValidationError."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        text_unit = TextUnit(
+            text_id="test-id",
+            text="",  # Empty text
+            source="test",
+            distance=0.0
+        )
+        texts = ["Valid text", text_unit]
+
+        with patch('ragl.manager._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                manager.add_texts(texts)
+
+            self.assertIn('text_or_unit cannot be empty or zero-length',
+                          str(cm.exception))
+            mock_log.error.assert_called_with(
+                'text_or_unit cannot be empty or zero-length')
+
+    def test_add_texts_textunit_whitespace_only_text(self):
+        """Test adding TextUnit with whitespace-only text raises ValidationError."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        text_unit = TextUnit(
+            text_id="test-id",
+            text="   \n\t   ",  # Whitespace only
+            source="test",
+            distance=0.0
+        )
+        texts = ["Valid text", text_unit]
+
+        with patch('ragl.manager._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                manager.add_texts(texts)
+
+            self.assertIn('text_or_unit cannot be empty or zero-length',
+                          str(cm.exception))
+            mock_log.error.assert_called_with(
+                'text_or_unit cannot be empty or zero-length')
+
+    def test_add_texts_textunit_none_text(self):
+        """Test adding TextUnit with None text raises ValidationError."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        # Create TextUnit with None text by bypassing normal construction
+        text_unit = TextUnit(
+            text_id="test-id",
+            text="placeholder",
+            source="test",
+            distance=0.0
+        )
+        text_unit.text = None  # Set to None after creation
+
+        texts = ["Valid text", text_unit]
+
+        with patch('ragl.manager._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                manager.add_texts(texts)
+
+            self.assertIn('text_or_unit cannot be empty or zero-length',
+                          str(cm.exception))
+            mock_log.error.assert_called_with(
+                'text_or_unit cannot be empty or zero-length')
+
+    def test_add_texts_multiple_textunits_one_empty(self):
+        """Test adding multiple TextUnits where one has empty text."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        valid_unit = TextUnit(
+            text_id="valid-id",
+            text="Valid text content",
+            source="test",
+            distance=0.0
+        )
+
+        empty_unit = TextUnit(
+            text_id="empty-id",
+            text="",  # Empty text
+            source="test",
+            distance=0.0
+        )
+
+        texts = [valid_unit, empty_unit]
+
+        with patch('ragl.manager._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                manager.add_texts(texts)
+
+            self.assertIn('text_or_unit cannot be empty or zero-length',
+                          str(cm.exception))
+            mock_log.error.assert_called_with(
+                'text_or_unit cannot be empty or zero-length')
+
+    def test_add_texts_textunit_only_spaces_text(self):
+        """Test adding TextUnit with only spaces in text raises ValidationError."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        text_unit = TextUnit(
+            text_id="test-id",
+            text="     ",  # Only spaces
+            source="test",
+            distance=0.0
+        )
+        texts = [text_unit]
+
+        with patch('ragl.manager._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                manager.add_texts(texts)
+
+            self.assertIn('text_or_unit cannot be empty or zero-length',
+                          str(cm.exception))
+            mock_log.error.assert_called_with(
+                'text_or_unit cannot be empty or zero-length')
+
+    def test_add_text_global_counter_single_chunk(self):
+        """Test global counter text_id generation for single chunk when no base_id provided."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        text = "Short text that fits in one chunk"
+
+        # Mock tokenizer to create single chunk (no splitting)
+        self.mock_tokenizer.encode.return_value = list(
+            range(50))  # Under chunk_size
+        self.mock_tokenizer.decode.return_value = text
+
+        # Mock store_texts to return TextUnit with global counter ID
+        mock_text_unit = TextUnit(
+            text_id="txt:0",
+            text=text,
+            source="unknown",
+            timestamp=12345,
+            tags=[],
+            confidence=None,
+            language="unknown",
+            section="unknown",
+            author="unknown",
+            parent_id="doc",
+            chunk_position=0,
+            distance=0.0
+        )
+        self.mock_ragstore.store_texts.return_value = [mock_text_unit]
+
+        result = manager.add_text(text)  # No base_id provided
+
+        # Verify global counter text_id format
+        self.assertEqual(len(result), 1)
+        call_args = self.mock_ragstore.store_texts.call_args[0][0]
+        stored_unit = call_args[0]
+
+        # Should use global counter format: txt:{counter}
+        self.assertTrue(stored_unit.text_id.startswith('txt:'))
+        self.assertEqual(stored_unit.parent_id, "doc")
+
+    def test_add_text_global_counter_multiple_chunks(self):
+        """Test global counter text_id generation for multiple chunks when no base_id provided."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        text = "Long text that will be split into multiple chunks"
+
+        # Mock tokenizer to create 2 chunks
+        self.mock_tokenizer.encode.return_value = list(
+            range(150))  # More than chunk_size
+        self.mock_tokenizer.decode.side_effect = ["First chunk",
+                                                  "Second chunk"]
+
+        # Mock store_texts to return TextUnits with global counter IDs
+        mock_text_units = [
+            TextUnit(text_id="txt:0", text="First chunk", parent_id="doc",
+                     chunk_position=0, distance=0.0),
+            TextUnit(text_id="txt:1", text="Second chunk", parent_id="doc",
+                     chunk_position=1, distance=0.0)
+        ]
+        self.mock_ragstore.store_texts.return_value = mock_text_units
+
+        result = manager.add_text(text)  # No base_id provided
+
+        # Verify global counter text_ids for multiple chunks
+        self.assertEqual(len(result), 2)
+        call_args = self.mock_ragstore.store_texts.call_args[0][0]
+
+        for i, stored_unit in enumerate(call_args):
+            self.assertTrue(stored_unit.text_id.startswith('txt:'))
+            self.assertEqual(stored_unit.parent_id, "doc")
+            self.assertEqual(stored_unit.chunk_position, i)
+
+    def test_add_text_global_counter_increments(self):
+        """Test that global counter increments across multiple add_text calls."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        # Mock tokenizer for single chunks
+        self.mock_tokenizer.encode.return_value = list(range(50))
+        self.mock_tokenizer.decode.side_effect = ["First text", "Second text"]
+
+        # Mock store_texts to simulate incrementing counter
+        counter = 0
+
+        def mock_store_texts(text_units):
+            nonlocal counter
+            for unit in text_units:
+                unit.text_id = f"txt:{counter}"
+                counter += 1
+            return text_units
+
+        self.mock_ragstore.store_texts.side_effect = mock_store_texts
+
+        # Add first text
+        result1 = manager.add_text("First text")
+
+        # Add second text
+        result2 = manager.add_text("Second text")
+
+        # Verify counter incremented
+        self.assertEqual(result1[0].text_id, "txt:0")
+        self.assertEqual(result2[0].text_id, "txt:1")
+
+    def test_add_texts_global_counter_format(self):
+        """Test global counter text_id format when no base_id is provided."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        texts = ["First text", "Second text"]
+
+        # Mock tokenizer to create single chunks (no splitting)
+        self.mock_tokenizer.encode.return_value = list(range(50))
+        self.mock_tokenizer.decode.side_effect = texts
+
+        # Mock store_texts to return TextUnits with global counter format
+        def mock_store_texts(text_units):
+            # Simulate global counter incrementing
+            for i, unit in enumerate(text_units):
+                unit.text_id = f'txt:{i}'
+                unit.parent_id = 'doc'
+            return text_units
+
+        self.mock_ragstore.store_texts.side_effect = mock_store_texts
+
+        result = manager.add_texts(texts)  # No base_id provided
+
+        # Verify global counter format: txt:{counter}
+        self.assertEqual(result[0].text_id, 'txt:0')
+        self.assertEqual(result[1].text_id, 'txt:1')
+
+        # Verify parent_id uses default
+        self.assertEqual(result[0].parent_id, 'doc')
+        self.assertEqual(result[1].parent_id, 'doc')
+
+    def test_add_text_global_counter_with_multiple_chunks_no_base_id(self):
+        """Test global counter for multiple chunks when no base_id provided."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        text = "Text that creates multiple chunks"
+
+        # Mock tokenizer to create 2 chunks
+        self.mock_tokenizer.encode.return_value = list(range(150))
+        self.mock_tokenizer.decode.side_effect = ["First chunk",
+                                                  "Second chunk"]
+
+        # Mock store_texts to simulate global counter behavior
+        def mock_store_texts(text_units):
+            for i, unit in enumerate(text_units):
+                unit.text_id = f'txt:{i}'
+                unit.parent_id = 'doc'
+                unit.chunk_position = i
+            return text_units
+
+        self.mock_ragstore.store_texts.side_effect = mock_store_texts
+
+        result = manager.add_text(text)  # No base_id provided
+
+        # Should use global counter format for each chunk
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0].text_id, 'txt:0')
+        self.assertEqual(result[1].text_id, 'txt:1')
+
+        # Both should have same parent_id (default)
+        self.assertEqual(result[0].parent_id, 'doc')
+        self.assertEqual(result[1].parent_id, 'doc')
+
+    def test_add_text_bare_string_no_base_id(self):
+        """Test adding a bare string with no base_id provided."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+        text = "Simple test text"
+
+        # Mock tokenizer for single chunk
+        self.mock_tokenizer.encode.return_value = list(range(50))
+        self.mock_tokenizer.decode.return_value = text
+
+        # Mock store_texts to return TextUnit with global counter ID
+        mock_text_unit = TextUnit(
+            text_id="txt:0",
+            text=text,
+            parent_id="doc",
+            chunk_position=0,
+            distance=0.0
+        )
+        self.mock_ragstore.store_texts.return_value = [mock_text_unit]
+
+        result = manager.add_text(text)
+
+        # Verify single chunk returned
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].text, text)
+        self.assertEqual(result[0].parent_id, "doc")
+
+        # Verify store_texts was called once
+        self.mock_ragstore.store_texts.assert_called_once()
+
+    def test_add_text_skips_empty_chunks_from_get_chunks(self):
+        """Test that empty chunks returned by _get_chunks are properly skipped."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        text = "Text that will produce some empty chunks"
+
+        # Mock _get_chunks to return a mix of valid and empty chunks
+        with patch.object(manager, '_get_chunks') as mock_get_chunks:
+            mock_get_chunks.return_value = [
+                "Valid chunk 1",
+                "",  # Empty chunk - should be skipped
+                "Valid chunk 2",
+                "   ",  # Whitespace only - should be skipped
+                "Valid chunk 3",
+                "\n\t\r",  # Whitespace only - should be skipped
+            ]
+
+            # Mock store_texts to return what we pass to it
+            self.mock_ragstore.store_texts.side_effect = lambda x: x
+
+            result = manager.add_text(text)
+
+            # Should only have 3 valid chunks, empty ones skipped
+            self.assertEqual(len(result), 3)
+
+            # Verify store_texts was called with only valid chunks
+            call_args = self.mock_ragstore.store_texts.call_args[0][0]
+            self.assertEqual(len(call_args), 3)
+
+            # Verify the text content of stored chunks
+            stored_texts = [unit.text for unit in call_args]
+            expected_texts = ["Valid chunk 1", "Valid chunk 2",
+                              "Valid chunk 3"]
+            self.assertEqual(stored_texts, expected_texts)
+
+            # Verify chunk positions are still sequential (0, 1, 2) despite skipped chunks
+            stored_positions = [unit.chunk_position for unit in call_args]
+            self.assertEqual(stored_positions, [0, 2, 4])
+
     @patch('ragl.manager._LOG')
     def test_delete_texts_success(self, mock_log):
         """Test deleting multiple texts successfully."""
@@ -1406,6 +1765,63 @@ class TestRAGManager(unittest.TestCase):
         result = manager._split_text(text, chunk_size=60, overlap=10)
 
         # Only non-empty chunks should be included
+        self.assertTrue(all(chunk.strip() for chunk in result))
+
+    def test_add_text_filters_empty_chunks(self):
+        """Test that empty chunks are filtered out in add_text."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        text = "Text that creates empty chunks"
+
+        # Mock tokenizer to create chunks where some decode to empty
+        self.mock_tokenizer.encode.return_value = list(
+            range(120))  # Creates 2 chunks
+        self.mock_tokenizer.decode.side_effect = [
+            "",  # First chunk is empty - should be filtered
+            "Valid chunk content"  # Second chunk is valid
+        ]
+
+        # Mock store_text to return the input
+        self.mock_ragstore.store_texts.side_effect = lambda x: x
+
+        result = manager.add_text(text)
+
+        # Should only store 1 chunk (the valid one), empty chunk filtered
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].text, "Valid chunk content")
+
+        # Verify store_text was called only once (for the valid chunk)
+        self.assertEqual(self.mock_ragstore.store_texts.call_count, 1)
+
+    def test_split_text_filters_whitespace_chunks(self):
+        """Test that whitespace-only chunks are filtered out during splitting."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+        text = "Test text with whitespace chunks"
+
+        # Mock tokenizer to return tokens that will create chunks
+        self.mock_tokenizer.encode.return_value = list(
+            range(100))  # Reduced to 100 tokens
+
+        # Mock decode to return mix of valid and whitespace-only chunks
+        # With chunk_size=30, overlap=5, step=25, and 100 tokens:
+        # Iterations: [0, 25, 50, 75] = 4 chunks
+        self.mock_tokenizer.decode.side_effect = [
+            "Valid chunk 1",
+            "   ",  # whitespace only
+            "Valid chunk 2",
+            "\n\t\r",  # whitespace only
+        ]
+
+        result = manager._split_text(text, chunk_size=30, overlap=5)
+
+        # Only non-whitespace chunks should be included
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0], "Valid chunk 1")
+        self.assertEqual(result[1], "Valid chunk 2")
+
+        # Verify all returned chunks are non-empty after stripping
         self.assertTrue(all(chunk.strip() for chunk in result))
 
     @patch('time.time')
