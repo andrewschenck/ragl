@@ -417,24 +417,24 @@ class RAGManager:
 
             text_units_to_store = []
 
-            for text_index, text_or_unit in enumerate(texts_or_units):
+            for text_index, unit in enumerate(texts_or_units):
 
                 # Validate individual items
-                if isinstance(text_or_unit, str):
-                    if not text_or_unit or not text_or_unit.strip():
+                if isinstance(unit, str):
+                    if not unit or not unit.strip():
                         msg = 'text_or_unit cannot be empty or zero-length'
                         _LOG.error(msg)
                         raise ValidationError(msg)
 
-                    text_or_unit = self._sanitize_text(text_or_unit)
+                    unit = self._sanitize_text(unit)
 
-                elif isinstance(text_or_unit, TextUnit):
-                    if not text_or_unit.text or not text_or_unit.text.strip():
+                elif isinstance(unit, TextUnit):
+                    if not unit.text or not unit.text.strip():
                         msg = 'text_or_unit cannot be empty or zero-length'
                         _LOG.error(msg)
                         raise ValidationError(msg)
 
-                    text_or_unit.text = self._sanitize_text(text_or_unit.text)
+                    unit.text = self._sanitize_text(unit.text)
 
                 else:
                     _LOG.error('Invalid text type, must be str or TextUnit')
@@ -442,19 +442,18 @@ class RAGManager:
                         'Invalid text type, must be str or TextUnit')
 
                 # Get chunks for this text
-                chunks = self._get_chunks(text_or_unit, effective_chunk_size,
+                chunks = self._get_chunks(unit, effective_chunk_size,
                                           effective_overlap, split)
 
                 # Prepare base data for this text
-                if isinstance(text_or_unit,
-                              TextUnit) and text_or_unit.parent_id:
+                if isinstance(unit, TextUnit) and unit.parent_id:
                     # TextUnit has its own parent_id, use it
-                    parent_id = text_or_unit.parent_id
+                    parent_id = unit.parent_id
                 else:
                     # Use provided or generated base_id
                     parent_id = base_id
 
-                base_data = self._prepare_base_data(text_or_unit, parent_id)
+                base_data = self._prepare_base_data(unit, parent_id)
 
                 # Create TextUnit objects for each chunk
                 for chunk_position, chunk in enumerate(chunks):
