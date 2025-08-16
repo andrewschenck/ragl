@@ -69,6 +69,10 @@ class VectorStoreProtocol(Protocol):
         # pylint: disable=missing-function-docstring
         ...
 
+    def delete_texts(self, text_ids: list[str]) -> int:
+        # pylint: disable=missing-function-docstring
+        ...
+
     def get_relevant(
             self,
             embedding: np.ndarray,

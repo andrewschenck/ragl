@@ -325,6 +325,11 @@ class RedisVectorStore:
             _LOG.info('Reset schema version to %s for index %s',
                       self.SCHEMA_VERSION, self.index_name)
 
+    def close(self) -> None:
+        """Close Redis connection pool."""
+        if hasattr(self, 'redis_client'):
+            self.redis_client.close()
+
     def delete_text(self, text_id: str) -> bool:
         """
         Delete a text from Redis.
@@ -338,11 +343,36 @@ class RedisVectorStore:
                 ID of text to delete.
 
         Returns:
-            True if text was deleted, False if it did not exist.
+            True if the text was deleted, False if it did not exist.
         """
-        self._validate_text_id(text_id)
+        return bool(self.delete_texts([text_id]))
+
+    def delete_texts(self, text_ids: list[str]) -> int:
+        """
+        Delete multiple texts from Redis.
+
+        Deletes the specified text IDs from Redis. If a text ID does
+        not exist, it is ignored. Returns the number of successfully
+        deleted texts.
+
+        Args:
+            text_ids:
+                List of text IDs to delete.
+
+        Returns:
+            The number of deleted text_id.
+        """
+        if not text_ids:
+            return 0
+
+        for text_id in text_ids:
+            self._validate_text_id(text_id)
+
+        deleted = len(text_ids)
         with self.redis_context() as client:
-            deleted = bool(client.delete(text_id))
+            deleted_result = client.delete(*text_ids)
+            if isinstance(deleted_result, int):
+                deleted = deleted_result
 
         return deleted
 
@@ -555,15 +585,10 @@ class RedisVectorStore:
             batch_data[text_id] = prepared_data
             text_ids.append(text_id)
 
-        self._store_to_redis(batch_data)
+        stored_ids = self._store_to_redis(batch_data)
+        _LOG.info('Successfully stored batch of %d texts', len(stored_ids))
 
-        _LOG.info('Successfully stored batch of %d texts', len(text_ids))
-        return text_ids
-
-    def close(self) -> None:
-        """Close Redis connection pool."""
-        if hasattr(self, 'redis_client'):
-            self.redis_client.close()
+        return stored_ids
 
     def _create_redis_schema(self, index_name: str) -> IndexSchema:
         """
@@ -861,7 +886,7 @@ class RedisVectorStore:
         values = list(batch_data.values())
 
         with self.redis_context():
-            return self.index.load(values, keys=keys)
+            return self.index.load(data=values, keys=keys)
 
     def _transform_redis_results(self, results: Any) -> list[dict[str, Any]]:
         """
