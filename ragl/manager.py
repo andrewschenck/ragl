@@ -513,13 +513,10 @@ class RAGManager:
     #             elif isinstance(text_or_doc, TextUnit):
     #                 text_or_doc.text = self._sanitize_text(text_or_doc.text)
     #                 sanitized_texts.append(text_or_doc)
-    #                 # _base_id = text_or_doc.parent_id   # todo update docstring
+    #                 # _base_id = text_or_doc.parent_id
     #
     #         if base_id:  # if _base_id:
     #             parent_id = base_id
-    #             # todo set parent_id to TextUnit.parent_id if TextUnit object
-    #             # todo or do we just remove base_id param altogether and they
-    #             #  use TextUnit.parent_id?
     #         else:
     #             current_text_count = len(self.ragstore.list_texts())
     #             parent_id = f'{TEXT_ID_PREFIX}{current_text_count + 1}'
@@ -528,7 +525,7 @@ class RAGManager:
     #         all_text_units = []
     #         chunk_counter = 0
     #
-    #         # chunker = TextChunker(  # todo
+    #         # chunker = TextChunker(
     #         #     tokenizer=self.tokenizer,
     #         #     chunk_size=cs,
     #         #     overlap=ov,
@@ -586,6 +583,7 @@ class RAGManager:
             split: bool = True,
     ) -> list[TextUnit]:
         # pylint: disable=too-many-arguments
+        # pylint: disable=too-many-branches
         # pylint: disable=too-many-locals
         # pylint: disable=too-many-statements
         """
@@ -598,10 +596,13 @@ class RAGManager:
             texts_or_units:
                 List of texts or TextUnit objects to add.
             base_id:
-                Optional base ID for chunks, sets parent_id.
-                If unset, parent_id is auto-generated and may
-                collide after deletes; specify for uniqueness
-                (e.g., UUID) if critical for grouping.
+                Optional base ID for chunks, sets parent_id. If unset,
+                parent_id is auto-generated and may collide after
+                deletes; specify for uniqueness (e.g., UUID) if critical
+                for grouping.
+
+                This parameter is uneccessary if using TextUnit objects,
+                as TextUnit.parent_id will be used instead.
             chunk_size:
                 Optional chunk size override.
             overlap:
@@ -625,37 +626,46 @@ class RAGManager:
             self._validate_chunking(cs, ov)
 
             if not texts_or_units:
-                msg = 'texts_or_docs cannot be empty'
-                _LOG.critical(msg)
+                msg = 'texts_or_units cannot be empty'
+                _LOG.error(msg)
                 raise ValidationError(msg)
 
             sanitized_texts: list[TextUnit | str] = []
-            for text_or_doc in texts_or_units:
-                if isinstance(text_or_doc, str):
-                    if not text_or_doc.strip():
-                        msg = 'Text cannot be empty'
-                        _LOG.critical(msg)
-                        raise ValidationError(msg)
-                    sanitized_text = self._sanitize_text(text_or_doc)
-                    sanitized_texts.append(sanitized_text)
-                elif isinstance(text_or_doc, TextUnit):
-                    text_or_doc.text = self._sanitize_text(text_or_doc.text)
-                    sanitized_texts.append(text_or_doc)
+            for unit in texts_or_units:
+                if isinstance(unit, str):
+                    _base_id = base_id
 
-            if base_id:
-                parent_id = base_id
+                    if not unit.strip():
+                        msg = 'text_or_unit cannot be empty or zero-length'
+                        _LOG.error(msg)
+                        raise ValidationError(msg)
+
+                    sanitized_text = self._sanitize_text(unit)
+                    sanitized_texts.append(sanitized_text)
+
+                elif isinstance(unit, TextUnit):
+                    _base_id = unit.parent_id
+                    unit.text = self._sanitize_text(unit.text)
+                    sanitized_texts.append(unit)
+
+                else:
+                    msg = 'Invalid text type, must be str or TextUnit'
+                    _LOG.error(msg)
+                    raise ValidationError(msg)
+
+            if _base_id:
+                parent_id = _base_id
             else:
                 current_text_count = len(self.ragstore.list_texts())
                 parent_id = f'{TEXT_ID_PREFIX}{current_text_count + 1}'
-
             _LOG.debug('Using parent_id: %s', parent_id)
 
             stored_docs: list[TextUnit] = []
             global_chunk_counter = 1
 
-            for doc_idx, text_or_doc in enumerate(sanitized_texts):
-                chunks = self._get_chunks(text_or_doc, cs, ov, split)
-                base_data = self._prepare_base_data(text_or_doc, parent_id)
+            for doc_idx, unit in enumerate(sanitized_texts):
+                chunks = self._get_chunks(unit, cs, ov, split)
+                base_data = self._prepare_base_data(unit, parent_id)
 
                 for i, chunk in enumerate(chunks):
                     if base_id:

@@ -273,7 +273,7 @@ class TestRAGManager(unittest.TestCase):
             with self.assertRaises(ValidationError) as cm:
                 manager.add_text("")
 
-            self.assertIn('Text cannot be empty', str(cm.exception))
+            self.assertIn('text_or_unit cannot be empty or zero-length', str(cm.exception))
             mock_log.critical.assert_called()
             call_args = mock_log.critical.call_args
             self.assertEqual(call_args[0][0],

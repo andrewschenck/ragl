@@ -577,7 +577,7 @@ class TestRAGLIntegration:
             language="en",
             section="methodology",
             author="Dr. Jane Smith",
-            parent_id="will_be_set",  # This will be set by manager
+            parent_id="doc:metadata_test",
             chunk_position=0,
             distance=0.0
         )
@@ -585,7 +585,6 @@ class TestRAGLIntegration:
         # Store the TextUnit
         stored_docs = self.manager.add_text(
             text_or_unit=original_textunit,
-            base_id="doc:metadata_test"
         )
 
         assert len(stored_docs) == 1
@@ -923,7 +922,7 @@ class TestRAGLIntegration:
 
         docs = self.manager.add_texts(
             texts_or_units=text_units,
-            base_id="batch:ai_concepts"
+            # base_id="batch:ai_concepts"
         )
 
         # Verify metadata preservation for each stored document
@@ -962,7 +961,7 @@ class TestRAGLIntegration:
 
         docs = self.manager.add_texts(
             texts_or_units=mixed_inputs,
-            base_id="batch:mixed_types"
+            # base_id="batch:mixed_types"
         )
 
         assert len(docs) >= 3
