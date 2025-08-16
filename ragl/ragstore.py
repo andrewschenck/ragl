@@ -107,6 +107,22 @@ class RAGStore:
         _LOG.debug('Deleting text %s', text_id)
         return self.storage.delete_text(text_id)
 
+    def delete_texts(self, text_ids: list[str]) -> int:
+        """
+        Delete multiple texts from store.
+
+        Attempts to delete multiple text documents by their IDs.
+
+        Args:
+            text_ids:
+                List of text IDs to delete.
+
+        Returns:
+            Number of texts deleted.
+        """
+        _LOG.debug('Deleting %d texts', len(text_ids))
+        return self.storage.delete_texts(text_ids)
+
     def get_relevant(
             self,
             query: str,
@@ -161,7 +177,7 @@ class RAGStore:
 
     def store_text(self, text_unit: TextUnit) -> TextUnit:
         """
-        Store TextUnit in the store backend.
+        Store TextUnit in the storage backend.
 
         Stores a TextUnit document in the underlying storage system,
         generating an embedding for the text using the embedder.
@@ -171,17 +187,38 @@ class RAGStore:
                 TextUnit to store.
 
         Returns:
-            The stored TextUnit with updated text_id if it was generated.
+            The stored TextUnit.
         """
         _LOG.debug('Storing TextUnit %s', text_unit.text_id)
-
-        stored_text_id = self.storage.store_text(
+        self.storage.store_text(
             text_unit=text_unit,
             embedding=self.embedder.embed(text_unit.text),
         )
 
-        text_unit.text_id = stored_text_id
         return text_unit
+
+    def store_texts(self, text_units: list[TextUnit]) -> list[TextUnit]:
+        """
+        Store multiple TextUnits in the storage backend.
+
+        Stores a list of TextUnit documents in the underlying storage
+        system, generating embeddings for each text using the embedder.
+
+        Args:
+            text_units:
+                List of TextUnit objects to store.
+
+        Returns:
+            List of stored TextUnit objects.
+        """
+        _LOG.debug('Storing %d TextUnits', len(text_units))
+        texts_and_embeddings = [
+            (unit, self.embedder.embed(unit.text))
+            for unit in text_units
+        ]
+        self.storage.store_texts(texts_and_embeddings)
+
+        return text_units
 
     def __repr__(self) -> str:
         """Return a detailed string representation of the RAGStore."""

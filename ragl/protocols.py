@@ -63,11 +63,15 @@ class VectorStoreProtocol(Protocol):
 
     def clear(self) -> None:
         # pylint: disable=missing-function-docstring
-        ...  # pragma: no cover
+        ...
 
     def delete_text(self, text_id: str) -> bool:
         # pylint: disable=missing-function-docstring
-        ...  # pragma: no cover
+        ...
+
+    def delete_texts(self, text_ids: list[str]) -> int:
+        # pylint: disable=missing-function-docstring
+        ...
 
     def get_relevant(
             self,
@@ -78,19 +82,26 @@ class VectorStoreProtocol(Protocol):
             max_time: int | None,
     ) -> list[TextUnit]:  # noqa: D102
         # pylint: disable=missing-function-docstring
-        ...  # pragma: no cover
+        ...
 
     def health_check(self) -> dict[str, Any]:
         # pylint: disable=missing-function-docstring
-        ...  # pragma: no cover
+        ...
 
     def list_texts(self) -> list[str]:
         # pylint: disable=missing-function-docstring
-        ...  # pragma: no cover
+        ...
 
     def store_text(self, text_unit: TextUnit, embedding: np.ndarray) -> str:
         # pylint: disable=missing-function-docstring
-        ...  # pragma: no cover
+        ...
+
+    def store_texts(
+            self,
+            texts_and_embeddings: list[tuple[TextUnit, np.ndarray]],
+    ) -> list[str]:
+        # pylint: disable=missing-function-docstring
+        ...
 
 
 @runtime_checkable
@@ -106,11 +117,15 @@ class RAGStoreProtocol(Protocol):
 
     def clear(self) -> None:
         # pylint: disable=missing-function-docstring
-        ...  # pragma: no cover
+        ...
 
     def delete_text(self, text_id: str) -> bool:
         # pylint: disable=missing-function-docstring
-        ...  # pragma: no cover
+        ...
+
+    def delete_texts(self, text_ids: list[str]) -> int:
+        # pylint: disable=missing-function-docstring
+        ...
 
     def get_relevant(
             self,
@@ -121,15 +136,19 @@ class RAGStoreProtocol(Protocol):
             max_time: int | None,
     ) -> list[TextUnit]:
         # pylint: disable=missing-function-docstring
-        ...  # pragma: no cover
+        ...
 
     def list_texts(self) -> list[str]:
         # pylint: disable=missing-function-docstring
-        ...  # pragma: no cover
+        ...
 
     def store_text(self, text_unit: TextUnit) -> TextUnit:
         # pylint: disable=missing-function-docstring
-        ...  # pragma: no cover
+        ...
+
+    def store_texts(self, texts: list[TextUnit]) -> list[TextUnit]:
+        # pylint: disable=missing-function-docstring
+        ...
 
 
 @runtime_checkable
@@ -142,8 +161,8 @@ class TokenizerProtocol(Protocol):
 
     def decode(self, tokens: list[int]) -> str:
         # pylint: disable=missing-function-docstring
-        ...  # pragma: no cover
+        ...
 
     def encode(self, text: str) -> list[int]:
         # pylint: disable=missing-function-docstring
-        ...  # pragma: no cover
+        ...
