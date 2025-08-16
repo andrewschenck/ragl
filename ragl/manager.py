@@ -410,10 +410,9 @@ class RAGManager:
 
             # Generate base_id if not provided
             if base_id is None:
-                # base_id = f'{self.DEFAULT_BASE_ID}-{int(time.time())}'
                 base_id = f'{self.DEFAULT_BASE_ID}'
 
-            all_results = []
+            text_units_to_store = []
             global_chunk_counter = 0
 
             for text_index, text_or_unit in enumerate(texts_or_units):
@@ -421,18 +420,17 @@ class RAGManager:
                 # Validate individual items
                 if isinstance(text_or_unit, str):
                     if not text_or_unit or not text_or_unit.strip():
-                        _LOG.error(
-                            'text_or_unit cannot be empty or zero-length')
-                        raise ValidationError(
-                            'text_or_unit cannot be empty or zero-length')
+                        msg = 'text_or_unit cannot be empty or zero-length'
+                        _LOG.error(msg)
+                        raise ValidationError(msg)
+
                     text_or_unit = self._sanitize_text(text_or_unit)
 
                 elif isinstance(text_or_unit, TextUnit):
                     if not text_or_unit.text or not text_or_unit.text.strip():
-                        _LOG.error(
-                            'text_or_unit cannot be empty or zero-length')
-                        raise ValidationError(
-                            'text_or_unit cannot be empty or zero-length')
+                        msg = 'text_or_unit cannot be empty or zero-length'
+                        _LOG.error(msg)
+                        raise ValidationError(msg)
 
                 else:
                     _LOG.error('Invalid text type, must be str or TextUnit')
@@ -454,8 +452,7 @@ class RAGManager:
 
                 base_data = self._prepare_base_data(text_or_unit, parent_id)
 
-                # Store each chunk with proper text_id and chunk position
-                text_results = []
+                # Create TextUnit objects for each chunk
                 for chunk_position, chunk in enumerate(chunks):
                     # Skip empty chunks
                     if not chunk.strip():
@@ -468,24 +465,163 @@ class RAGManager:
                     else:
                         text_id = f'{TEXT_ID_PREFIX}{global_chunk_counter}'
 
-                    result = self._store_chunk(
-                        chunk=chunk,
-                        base_data=base_data,
-                        text_id=text_id,
-                        i=chunk_position,
-                        parent_id=parent_id
-                    )
-                    text_results.append(result)
+                    # Create TextUnit without storing
+                    chunk_data = base_data.copy()
+                    chunk_data.update({
+                        'text_id':        text_id,
+                        'text':           chunk,
+                        'chunk_position': chunk_position,
+                        'parent_id':      parent_id,
+                        'distance':       0.0,
+                    })
+
+                    text_unit = TextUnit.from_dict(chunk_data)
+                    text_units_to_store.append(text_unit)
                     global_chunk_counter += 1
 
-                all_results.extend(text_results)
-
-            if not all_results:
+            if not text_units_to_store:
                 raise DataError('No valid chunks stored')
 
+            # Store all TextUnits in a single batch operation
+            stored_units = self.ragstore.store_texts(text_units_to_store)
+
             _LOG.info('Added %d texts resulting in %d chunks',
-                      len(texts_or_units), len(all_results))
-            return all_results
+                      len(texts_or_units), len(stored_units))
+            return stored_units
+
+    # def add_texts(
+    #         self,
+    #         texts_or_units: list[str | TextUnit],
+    #         *,
+    #         base_id: str | None = None,
+    #         chunk_size: int | None = None,
+    #         overlap: int | None = None,
+    #         split: bool = True,
+    # ) -> list[TextUnit]:
+    #     """
+    #     Add multiple texts to the store.
+    #
+    #     Splits texts into chunks, stores with metadata in batch, and
+    #     returns stored TextUnit instances.
+    #
+    #     Args:
+    #         texts_or_units:
+    #             List of texts or TextUnit objects to add.
+    #         base_id:
+    #             Optional base ID for chunks, sets parent_id. If unset,
+    #             parent_id is auto-generated and may collide after
+    #             deletes; specify for uniqueness (e.g., UUID) if critical
+    #             for grouping.
+    #
+    #             This parameter is uneccessary if using TextUnit objects,
+    #             as TextUnit.parent_id will be used instead.
+    #         chunk_size:
+    #             Optional chunk size override.
+    #         overlap:
+    #             Optional overlap override.
+    #         split:
+    #             Whether to split the text into chunks.
+    #
+    #     Raises:
+    #         ValidationError:
+    #             If texts are empty or params invalid.
+    #         DataError:
+    #             If no chunks are stored.
+    #
+    #     Returns:
+    #         List of stored TextUnit instances.
+    #     """
+    #     with self.track_operation('add_texts'):
+    #         _LOG.debug('Adding texts: %d items', len(texts_or_units))
+    #
+    #         # Validate inputs
+    #         if not texts_or_units:
+    #             _LOG.error('texts_or_units cannot be empty')
+    #             raise ValidationError('texts_or_units cannot be empty')
+    #
+    #         # Use provided parameters or instance defaults
+    #         effective_chunk_size = chunk_size or self.chunk_size
+    #         effective_overlap = overlap or self.overlap
+    #         self._validate_chunking(effective_chunk_size, effective_overlap)
+    #
+    #         # Generate base_id if not provided
+    #         if base_id is None:
+    #             # base_id = f'{self.DEFAULT_BASE_ID}-{int(time.time())}'
+    #             base_id = f'{self.DEFAULT_BASE_ID}'
+    #
+    #         all_results = []
+    #         global_chunk_counter = 0
+    #
+    #         for text_index, text_or_unit in enumerate(texts_or_units):
+    #
+    #             # Validate individual items
+    #             if isinstance(text_or_unit, str):
+    #                 if not text_or_unit or not text_or_unit.strip():
+    #                     _LOG.error(
+    #                         'text_or_unit cannot be empty or zero-length')
+    #                     raise ValidationError(
+    #                         'text_or_unit cannot be empty or zero-length')
+    #                 text_or_unit = self._sanitize_text(text_or_unit)
+    #
+    #             elif isinstance(text_or_unit, TextUnit):
+    #                 if not text_or_unit.text or not text_or_unit.text.strip():
+    #                     _LOG.error(
+    #                         'text_or_unit cannot be empty or zero-length')
+    #                     raise ValidationError(
+    #                         'text_or_unit cannot be empty or zero-length')
+    #
+    #             else:
+    #                 _LOG.error('Invalid text type, must be str or TextUnit')
+    #                 raise ValidationError(
+    #                     'Invalid text type, must be str or TextUnit')
+    #
+    #             # Get chunks for this text
+    #             chunks = self._get_chunks(text_or_unit, effective_chunk_size,
+    #                                       effective_overlap, split)
+    #
+    #             # Prepare base data for this text
+    #             if isinstance(text_or_unit,
+    #                           TextUnit) and text_or_unit.parent_id:
+    #                 # TextUnit has its own parent_id, use it
+    #                 parent_id = text_or_unit.parent_id
+    #             else:
+    #                 # Use provided or generated base_id
+    #                 parent_id = base_id
+    #
+    #             base_data = self._prepare_base_data(text_or_unit, parent_id)
+    #
+    #             # Store each chunk with proper text_id and chunk position
+    #             text_results = []
+    #             for chunk_position, chunk in enumerate(chunks):
+    #                 # Skip empty chunks
+    #                 if not chunk.strip():
+    #                     continue
+    #
+    #                 # Generate hierarchical text_id when base_id is provided
+    #                 if base_id:
+    #                     text_id = (f'{TEXT_ID_PREFIX}{base_id}-'
+    #                                f'{text_index}-{chunk_position}')
+    #                 else:
+    #                     text_id = f'{TEXT_ID_PREFIX}{global_chunk_counter}'
+    #
+    #                 result = self._store_chunk(
+    #                     chunk=chunk,
+    #                     base_data=base_data,
+    #                     text_id=text_id,
+    #                     i=chunk_position,
+    #                     parent_id=parent_id
+    #                 )
+    #                 text_results.append(result)
+    #                 global_chunk_counter += 1
+    #
+    #             all_results.extend(text_results)
+    #
+    #         if not all_results:
+    #             raise DataError('No valid chunks stored')
+    #
+    #         _LOG.info('Added %d texts resulting in %d chunks',
+    #                   len(texts_or_units), len(all_results))
+    #         return all_results
 
     # def add_texts(
     #         self,
@@ -880,6 +1016,52 @@ class RAGManager:
         """
         _LOG.debug('Formatting chunks')
         return separator.join(str(chunk) for chunk in chunks)
+
+    # TODO
+    #  Proposed new version of _get_chunks which prevents
+    #  splitting unless the last chunk is small enough to warrant it.
+    # def _get_chunks(
+    #         self,
+    #         text_or_doc: str | TextUnit,
+    #         cs: int,
+    #         ov: int,
+    #         split: bool,
+    # ) -> list[str]:
+    #     """
+    #     Get text chunks based on split option.
+    #
+    #     Args:
+    #         text_or_doc:
+    #             Text or TextUnit to chunk.
+    #         cs:
+    #             Chunk size.
+    #         ov:
+    #             Overlap size.
+    #         split:
+    #             Whether to split the text.
+    #
+    #     Returns:
+    #         List of text chunks.
+    #     """
+    #     _LOG.debug('Getting chunks')
+    #     if split:
+    #         if isinstance(text_or_doc, TextUnit):
+    #             text = text_or_doc.text
+    #         else:
+    #             text = text_or_doc
+    #
+    #         # Only split if text is long enough to warrant chunking
+    #         tokens = self.tokenizer.encode(text)
+    #         if len(tokens) <= cs:
+    #             # Text is small enough to be a single chunk
+    #             return [text]
+    #         else:
+    #             # Text is large enough to split
+    #             return self._split_text(text, cs, ov)
+    #     else:
+    #         if isinstance(text_or_doc, TextUnit):
+    #             return [text_or_doc.text]
+    #         return [text_or_doc]
 
     def _get_chunks(
             self,
