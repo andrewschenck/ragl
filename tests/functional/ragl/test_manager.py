@@ -160,7 +160,7 @@ class TestRAGManager(unittest.TestCase):
 
         def mock_store_text(text_unit):
             # Update the text_id and return the same TextUnit
-            text_unit.text_id = f'text-id-{len(self.stored_units) + 1}'
+            # text_unit.text_id = f'text-id-{len(self.stored_units) + 1}'
             self.stored_units.append(text_unit)
             return text_unit
 
@@ -308,7 +308,7 @@ class TestRAGManager(unittest.TestCase):
         self.assertEqual(stored_textunit.parent_id, base_id)
         self.assertEqual(stored_textunit.text, text)
         self.assertEqual(stored_textunit.chunk_position, 0)
-        self.assertEqual(stored_textunit.text_id, 'text-id-1')
+        self.assertEqual(stored_textunit.text_id, 'txt:custom-base-0-0')
 
     def test_add_text_custom_chunk_params(self):
         """Test adding text with custom chunk size and overlap."""
@@ -357,6 +357,400 @@ class TestRAGManager(unittest.TestCase):
             self.assertEqual(call_args[0][1], 'add_text')
             self.assertIsInstance(call_args[0][2], float)  # execution time
             self.assertIsInstance(call_args[0][3], DataError)
+
+    @patch('ragl.manager._LOG')
+    def test_add_texts_strings_success(self, mock_log):
+        """Test adding multiple texts as strings successfully."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+        texts = ["First test text", "Second test text", "Third test text"]
+
+        # Mock tokenizer to return smaller chunks
+        self.mock_tokenizer.encode.return_value = list(range(50))
+        self.mock_tokenizer.decode.side_effect = texts
+
+        result = manager.add_texts(texts)
+
+        self.assertEqual(len(result), 3)
+        self.assertTrue(all(isinstance(unit, TextUnit) for unit in result))
+        self.assertEqual(self.mock_ragstore.store_text.call_count, 3)
+        mock_log.debug.assert_any_call('Adding texts: %d items', 3)
+
+    def test_add_texts_textunits_success(self):
+        """Test adding multiple TextUnit objects successfully."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        text_units = [
+            TextUnit(text_id="test-1", text="First text", source="test1",
+                     distance=0.0),
+            TextUnit(text_id="test-2", text="Second text", source="test2",
+                     distance=0.0),
+            TextUnit(text_id="test-3", text="Third text", source="test3",
+                     distance=0.0)
+        ]
+
+        # Mock tokenizer to return smaller chunks
+        self.mock_tokenizer.encode.return_value = list(range(50))
+        self.mock_tokenizer.decode.side_effect = [unit.text for unit in
+                                                  text_units]
+
+        result = manager.add_texts(text_units)
+
+        self.assertEqual(len(result), 3)
+        self.assertTrue(all(isinstance(unit, TextUnit) for unit in result))
+        self.assertEqual(self.mock_ragstore.store_text.call_count, 3)
+
+    def test_add_texts_mixed_types_success(self):
+        """Test adding mixed strings and TextUnit objects successfully."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        texts_or_units = [
+            "First string text",
+            TextUnit(text_id="test-2", text="Second text unit", source="test",
+                     distance=0.0),
+            "Third string text"
+        ]
+
+        # Mock tokenizer to return smaller chunks
+        self.mock_tokenizer.encode.return_value = list(range(50))
+        self.mock_tokenizer.decode.side_effect = ["First string text",
+                                                  "Second text unit",
+                                                  "Third string text"]
+
+        result = manager.add_texts(texts_or_units)
+
+        self.assertEqual(len(result), 3)
+        self.assertTrue(all(isinstance(unit, TextUnit) for unit in result))
+        self.assertEqual(self.mock_ragstore.store_text.call_count, 3)
+
+    def test_add_texts_empty_list(self):
+        """Test adding empty list raises ValidationError."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        with patch('ragl.manager._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                manager.add_texts([])
+
+            self.assertIn('texts_or_units cannot be empty', str(cm.exception))
+            mock_log.error.assert_called_with('texts_or_units cannot be empty')
+
+    def test_add_texts_contains_empty_string(self):
+        """Test adding texts with empty string raises ValidationError."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        texts = ["Valid text", "", "Another valid text"]
+
+        with patch('ragl.manager._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                manager.add_texts(texts)
+
+            self.assertIn('text_or_unit cannot be empty or zero-length',
+                          str(cm.exception))
+            mock_log.error.assert_called_with(
+                'text_or_unit cannot be empty or zero-length')
+
+    def test_add_texts_contains_invalid_type(self):
+        """Test adding texts with invalid type raises ValidationError."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        texts = ["Valid text", 123, "Another valid text"]  # 123 is invalid
+
+        with patch('ragl.manager._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                manager.add_texts(texts)
+
+            self.assertIn('Invalid text type, must be str or TextUnit',
+                          str(cm.exception))
+            mock_log.error.assert_called_with(
+                'Invalid text type, must be str or TextUnit')
+
+    def test_add_texts_with_base_id(self):
+        """Test adding texts with custom base_id."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+        texts = ["First text", "Second text"]
+        base_id = "custom-batch"
+
+        self.mock_tokenizer.encode.return_value = list(range(50))
+        self.mock_tokenizer.decode.side_effect = texts
+
+        result = manager.add_texts(texts, base_id=base_id)
+
+        # Verify all texts have the same parent_id (base_id)
+        for unit in result:
+            self.assertEqual(unit.parent_id, base_id)
+
+        # Verify hierarchical text_ids when base_id is provided
+        call_args_list = self.mock_ragstore.store_text.call_args_list
+
+        # Check the text_ids that were passed to store_text
+        for i, call in enumerate(call_args_list):
+            stored_unit = call[0][0]
+            expected_id = f'txt:{base_id}-{i}-0'
+            self.assertEqual(stored_unit.text_id, expected_id)
+            self.assertEqual(stored_unit.parent_id, base_id)
+            self.assertEqual(stored_unit.chunk_position, 0)
+
+    def test_add_texts_custom_chunk_params(self):
+        """Test adding texts with custom chunk parameters."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+        texts = ["Text to chunk", "Another text"]
+
+        # Mock tokenizer for custom chunk size
+        self.mock_tokenizer.encode.return_value = list(range(150))
+        self.mock_tokenizer.decode.side_effect = texts
+
+        manager.add_texts(texts, chunk_size=200, overlap=50)
+
+        # Verify store_text was called for each text
+        self.assertEqual(self.mock_ragstore.store_text.call_count, 2)
+
+    def test_add_texts_no_split(self):
+        """Test adding texts without splitting."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+        texts = ["First whole text", "Second whole text"]
+
+        result = manager.add_texts(texts, split=False)
+
+        self.assertEqual(len(result), 2)
+        # Should not call encode/decode when not splitting
+        self.mock_tokenizer.encode.assert_not_called()
+        self.mock_tokenizer.decode.assert_not_called()
+
+    def test_add_texts_textunit_with_parent_id(self):
+        """Test that TextUnit parent_id takes precedence over base_id."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        text_unit = TextUnit(
+            text_id="test-1",
+            text="Test text",
+            parent_id="unit-parent",
+            distance=0.0
+        )
+        texts = [text_unit]
+
+        self.mock_tokenizer.encode.return_value = list(range(50))
+        self.mock_tokenizer.decode.return_value = text_unit.text
+
+        result = manager.add_texts(texts, base_id="ignored-base")
+
+        # TextUnit's parent_id should be used, not base_id
+        stored_unit = self.mock_ragstore.store_text.call_args[0][0]
+        self.assertEqual(stored_unit.parent_id, "unit-parent")
+
+    def test_add_texts_multiple_chunks_per_text(self):
+        """Test adding texts that get split into multiple chunks each."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+        texts = ["Long text one", "Long text two"]
+
+        # Mock tokenizer to create 2 chunks per text
+        self.mock_tokenizer.encode.return_value = list(
+            range(160))  # Creates 2 chunks
+
+        # Provide enough side effects for all decode calls
+        # Each text creates 2 chunks, so we need 4 total decode calls
+        decode_results = [
+            "Long text one chunk 1", "Long text one chunk 2",
+            "Long text two chunk 1", "Long text two chunk 2",
+            "Long text one chunk 1", "Long text one chunk 2",
+            "Long text two chunk 1", "Long text two chunk 2",
+            "Long text one chunk 1", "Long text one chunk 2",
+            "Long text two chunk 1", "Long text two chunk 2",
+        ]
+        self.mock_tokenizer.decode.side_effect = decode_results
+
+        result = manager.add_texts(texts)
+
+        # Should have 4 total chunks (2 per text)
+        self.assertEqual(len(result), 4)
+        self.assertEqual(self.mock_ragstore.store_text.call_count, 4)
+
+        # Verify chunk positions are correct
+        call_args_list = self.mock_ragstore.store_text.call_args_list
+        chunk_positions = [call[0][0].chunk_position for call in
+                           call_args_list]
+        self.assertEqual(chunk_positions, [0, 1, 0, 1])
+
+        # Verify decode was called the expected number of times
+        self.assertEqual(self.mock_tokenizer.decode.call_count, 4)
+
+    def test_add_texts_integration_batch_processing(self):
+        """Integration test for batch processing with mixed content."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        # Mix of strings and TextUnits
+        texts_or_units = [
+            "First string text",
+            TextUnit(text_id="existing", text="Existing unit", source="manual",
+                     distance=0.0),
+            "Second string text",
+            TextUnit(text_id="another", text="Another unit", author="Jane",
+                     distance=0.0)
+        ]
+
+        # Mock tokenizer for realistic chunking
+        self.mock_tokenizer.encode.return_value = list(range(75))
+        # Provide decode results for each text
+        self.mock_tokenizer.decode.side_effect = [
+            "First string text", "Existing unit", "Second string text",
+            "Another unit"
+        ]
+
+        result = manager.add_texts(texts_or_units, base_id="batch-test")
+
+        # Verify all were processed
+        self.assertEqual(len(result), 4)
+        self.assertEqual(self.mock_ragstore.store_text.call_count, 4)
+
+        # Verify metadata preservation for TextUnits
+        call_args_list = self.mock_ragstore.store_text.call_args_list
+
+        # Check that TextUnit metadata was preserved
+        unit_1_call = call_args_list[1][0][0]  # Second call (first TextUnit)
+        self.assertEqual(unit_1_call.source, "manual")
+
+        unit_3_call = call_args_list[3][0][0]  # Fourth call (second TextUnit)
+        self.assertEqual(unit_3_call.author, "Jane")
+
+    @patch('ragl.manager._LOG')
+    def test_delete_texts_success(self, mock_log):
+        """Test deleting multiple texts successfully."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+        text_ids = ['text-1', 'text-2', 'text-3']
+
+        # Mock existing texts and successful deletion
+        self.mock_ragstore.list_texts.return_value = ['text-1', 'text-2',
+                                                      'text-3', 'text-4']
+        self.mock_ragstore.delete_texts.return_value = 3
+
+        result = manager.delete_texts(text_ids)
+
+        self.assertEqual(result, 3)
+        self.mock_ragstore.delete_texts.assert_called_once_with(text_ids)
+        mock_log.debug.assert_any_call('Deleting texts: %s', text_ids)
+        mock_log.info.assert_called_with('Deleted %d texts', 3)
+
+    @patch('ragl.manager._LOG')
+    def test_delete_texts_partial_exists(self, mock_log):
+        """Test deleting texts where only some exist."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+        text_ids = ['text-1', 'nonexistent', 'text-3']
+
+        # Mock existing texts (missing 'nonexistent')
+        self.mock_ragstore.list_texts.return_value = ['text-1', 'text-2',
+                                                      'text-3']
+        self.mock_ragstore.delete_texts.return_value = 2
+
+        result = manager.delete_texts(text_ids)
+
+        self.assertEqual(result, 2)
+        # Should only delete the existing ones
+        self.mock_ragstore.delete_texts.assert_called_once_with(
+            ['text-1', 'text-3'])
+
+    @patch('ragl.manager._LOG')
+    def test_delete_texts_none_exist(self, mock_log):
+        """Test deleting texts where none exist."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+        text_ids = ['nonexistent-1', 'nonexistent-2']
+
+        # Mock existing texts (none of the requested IDs exist)
+        self.mock_ragstore.list_texts.return_value = ['text-1', 'text-2']
+
+        result = manager.delete_texts(text_ids)
+
+        self.assertEqual(result, 0)
+        self.mock_ragstore.delete_texts.assert_not_called()
+        mock_log.warning.assert_called_with(
+            'No valid text IDs found for deletion')
+
+    def test_delete_texts_empty_list(self):
+        """Test deleting empty list of texts."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        self.mock_ragstore.list_texts.return_value = ['text-1', 'text-2']
+
+        with patch('ragl.manager._LOG') as mock_log:
+            result = manager.delete_texts([])
+
+            self.assertEqual(result, 0)
+            self.mock_ragstore.delete_texts.assert_not_called()
+            mock_log.warning.assert_called_with(
+                'No valid text IDs found for deletion')
+
+    def test_add_texts_integration_batch_processing(self):
+        """Integration test for batch processing with mixed content."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        # Mix of strings and TextUnits
+        texts_or_units = [
+            "First string text",
+            TextUnit(text_id="existing", text="Existing unit", source="manual",
+                     distance=0.0),
+            "Second string text",
+            TextUnit(text_id="another", text="Another unit", author="Jane",
+                     distance=0.0)
+        ]
+
+        # Mock tokenizer for realistic chunking
+        self.mock_tokenizer.encode.return_value = list(range(75))
+        self.mock_tokenizer.decode.side_effect = [
+            "First string text", "Existing unit", "Second string text",
+            "Another unit"
+        ]
+
+        result = manager.add_texts(texts_or_units, base_id="batch-test")
+
+        # Verify all were processed
+        self.assertEqual(len(result), 4)
+        self.assertEqual(self.mock_ragstore.store_text.call_count, 4)
+
+        # Verify metadata preservation for TextUnits
+        call_args_list = self.mock_ragstore.store_text.call_args_list
+
+        # Check that TextUnit metadata was preserved
+        unit_1_call = call_args_list[1][0][0]  # Second call (first TextUnit)
+        self.assertEqual(unit_1_call.source, "manual")
+
+        unit_3_call = call_args_list[3][0][0]  # Fourth call (second TextUnit)
+        self.assertEqual(unit_3_call.author, "Jane")
+
+    def test_delete_texts_integration_with_tracking(self):
+        """Integration test for delete_texts with operation tracking."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+        text_ids = ['text-1', 'text-2', 'text-3']
+
+        self.mock_ragstore.list_texts.return_value = text_ids
+        self.mock_ragstore.delete_texts.return_value = 3
+
+        # Perform deletion and check metrics
+        with patch('time.time',
+                   side_effect=[1000.0, 1002.0]):  # 2 second operation
+            result = manager.delete_texts(text_ids)
+
+        self.assertEqual(result, 3)
+
+        # Check that operation was tracked
+        metrics = manager.get_performance_metrics('delete_texts')
+        self.assertIn('delete_texts', metrics)
+        self.assertEqual(metrics['delete_texts']['total_calls'], 1)
+        self.assertEqual(metrics['delete_texts']['failure_count'], 0)
 
     @patch('ragl.manager._LOG')
     def test_delete_text(self, mock_log):
