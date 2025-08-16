@@ -583,6 +583,110 @@ class TestRAGManager(unittest.TestCase):
         # Verify decode was called the expected number of times
         self.assertEqual(self.mock_tokenizer.decode.call_count, 4)
 
+    def test_add_texts_filters_empty_chunks(self):
+        """Test that empty chunks are filtered out during processing."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        # Mock tokenizer to return chunks where some decode to empty/whitespace
+        self.mock_tokenizer.encode.return_value = list(range(150))
+        chunks = [
+            "Valid chunk",  # First chunk - valid]
+            "",  # Second chunk - empty
+            "   \t\n   ",  # Third chunk - whitespace only
+            "Another valid chunk"  # Fourth chunk - valid
+        ]
+
+        self.mock_tokenizer.decode.side_effect = chunks
+        result = manager.add_texts(["Test text", 'another'])
+
+        # Should only store the 2 valid chunks, empty ones filtered out
+        self.assertEqual(len(result), 2)
+        self.assertEqual(self.mock_ragstore.store_text.call_count, 2)
+
+        # Verify the stored chunks contain valid text
+        call_args_list = self.mock_ragstore.store_text.call_args_list
+        stored_texts = [call[0][0].text for call in call_args_list]
+        self.assertIn("Valid chunk", stored_texts)
+        self.assertIn("Another valid chunk", stored_texts)
+
+    def test_add_texts_text_id_without_base_id(self):
+        """Test text_id generation when no base_id is provided."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        texts = ["First text", "Second text"]
+
+        # Mock tokenizer to create multiple chunks per text
+        self.mock_tokenizer.encode.return_value = list(range(150))
+        self.mock_tokenizer.decode.side_effect = [
+            "First chunk of first text",
+            "Second chunk of first text",
+            "First chunk of second text",
+            "Second chunk of second text"
+        ]
+
+        result = manager.add_texts(texts)  # No base_id provided
+
+        # Verify text_ids use global counter format
+        call_args_list = self.mock_ragstore.store_text.call_args_list
+        expected_ids = ['txt:doc-0-0', 'txt:doc-0-1',
+                        'txt:doc-1-0', 'txt:doc-1-1']
+
+        for i, call in enumerate(call_args_list):
+            stored_unit = call[0][0]
+            self.assertEqual(stored_unit.text_id, expected_ids[i])
+
+    def test_add_texts_text_id_with_base_id_hierarchical(self):
+        """Test hierarchical text_id generation when base_id is provided."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        texts = ["First text", "Second text"]
+        base_id = "batch-123"
+
+        # Mock tokenizer to create multiple chunks per text
+        self.mock_tokenizer.encode.return_value = list(range(150))
+        self.mock_tokenizer.decode.side_effect = [
+            "First chunk of first text",
+            "Second chunk of first text",
+            "First chunk of second text",
+            "Second chunk of second text"
+        ]
+
+        result = manager.add_texts(texts, base_id=base_id)
+
+        # Verify hierarchical text_ids: txt:base_id-text_index-chunk_position
+        call_args_list = self.mock_ragstore.store_text.call_args_list
+        expected_ids = [
+            'txt:batch-123-0-0',  # First text, first chunk
+            'txt:batch-123-0-1',  # First text, second chunk
+            'txt:batch-123-1-0',  # Second text, first chunk
+            'txt:batch-123-1-1'  # Second text, second chunk
+        ]
+
+        for i, call in enumerate(call_args_list):
+            stored_unit = call[0][0]
+            self.assertEqual(stored_unit.text_id, expected_ids[i])
+            self.assertEqual(stored_unit.parent_id, base_id)
+
+    def test_add_texts_all_chunks_empty_raises_error(self):
+        """Test that DataError is raised when all chunks are empty."""
+        manager = RAGManager(self.config, self.mock_ragstore,
+                             tokenizer=self.mock_tokenizer)
+
+        # Mock tokenizer to return only empty/whitespace chunks
+        self.mock_tokenizer.encode.return_value = list(range(100))
+        self.mock_tokenizer.decode.side_effect = ["", "   ", "\t\n",
+                                                  "  \r\n  "]
+
+        with self.assertRaises(DataError) as cm:
+            manager.add_texts(["Some text"])
+
+        self.assertIn('No valid chunks stored', str(cm.exception))
+        # store_text should never be called since all chunks are filtered out
+        self.mock_ragstore.store_text.assert_not_called()
+
     def test_add_texts_integration_batch_processing(self):
         """Integration test for batch processing with mixed content."""
         manager = RAGManager(self.config, self.mock_ragstore,
