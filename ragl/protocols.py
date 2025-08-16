@@ -146,7 +146,7 @@ class RAGStoreProtocol(Protocol):
         # pylint: disable=missing-function-docstring
         ...
 
-    def store_texts(self, texts: list[TextUnit]) -> list[TextUnit]:
+    def store_texts(self, text_units: list[TextUnit]) -> list[TextUnit]:
         # pylint: disable=missing-function-docstring
         ...
 
