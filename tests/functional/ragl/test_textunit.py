@@ -97,9 +97,9 @@ class TestTextUnit(unittest.TestCase):
         with patch('time.time', return_value=2000000000):
             unit = TextUnit.from_dict({})
 
-        self.assertEqual(unit.text_id, '')
+        self.assertEqual(unit.text_id, None)
         self.assertEqual(unit.text, '')
-        self.assertEqual(unit.distance, 0.0)
+        self.assertEqual(unit.distance, 1.0)
         self.assertIsNone(unit.chunk_position)
         self.assertIsNone(unit.parent_id)
         self.assertIsNone(unit.source)
@@ -290,6 +290,91 @@ class TestTextUnit(unittest.TestCase):
         self.assertEqual(unit1.section, unit2.section)
         self.assertEqual(unit1.author, unit2.author)
         self.assertEqual(unit1.timestamp, unit2.timestamp)
+
+    def test_eq_identical_units(self):
+        """Test equality between identical TextUnits."""
+        unit1 = TextUnit(
+            text_id='test_id',
+            text='Sample text',
+            chunk_position=0,
+            parent_id='parent_1',
+            source='test_source',
+            timestamp=1234567890,
+            tags=['tag1', 'tag2'],
+            confidence=0.95,
+            language='en',
+            section='intro',
+            author='test_author',
+            distance=0.5
+        )
+
+        unit2 = TextUnit(
+            text_id='test_id',
+            text='Sample text',
+            chunk_position=0,
+            parent_id='parent_1',
+            source='test_source',
+            timestamp=1234567890,
+            tags=['tag1', 'tag2'],
+            confidence=0.95,
+            language='en',
+            section='intro',
+            author='test_author',
+            distance=0.5
+        )
+
+        self.assertEqual(unit1, unit2)
+
+    def test_eq_different_text_ids(self):
+        """Test inequality when text_ids differ."""
+        unit1 = TextUnit(text_id='id1', text='Same text')
+        unit2 = TextUnit(text_id='id2', text='Same text')
+
+        self.assertNotEqual(unit1, unit2)
+
+    def test_eq_different_text_content(self):
+        """Test inequality when text content differs."""
+        unit1 = TextUnit(text_id='same_id', text='Text one')
+        unit2 = TextUnit(text_id='same_id', text='Text two')
+
+        self.assertNotEqual(unit1, unit2)
+
+    def test_eq_different_metadata(self):
+        """Test inequality when metadata differs."""
+        unit1 = TextUnit(text_id='id', text='text', source='source1')
+        unit2 = TextUnit(text_id='id', text='text', source='source2')
+
+        self.assertNotEqual(unit1, unit2)
+
+    def test_eq_with_non_textunit(self):
+        """Test inequality when comparing with non-TextUnit object."""
+        unit = TextUnit(text_id='id', text='text')
+
+        self.assertNotEqual(unit, 'string')
+        self.assertNotEqual(unit, {'text_id': 'id', 'text': 'text'})
+        self.assertNotEqual(unit, None)
+
+    def test_len_returns_text_length(self):
+        """Test that len() returns the length of the text content."""
+        unit = TextUnit(text_id='id', text='Hello world')
+        self.assertEqual(len(unit), 11)
+
+    def test_len_empty_text(self):
+        """Test len() with empty text."""
+        unit = TextUnit(text_id='id', text='')
+        self.assertEqual(len(unit), 0)
+
+    def test_len_multiline_text(self):
+        """Test len() with multiline text."""
+        text = 'Line one\nLine two\nLine three'
+        unit = TextUnit(text_id='id', text=text)
+        self.assertEqual(len(unit), len(text))
+
+    def test_len_unicode_text(self):
+        """Test len() with unicode characters."""
+        text = 'Hello 世界 🌍'
+        unit = TextUnit(text_id='id', text=text)
+        self.assertEqual(len(unit), len(text))
 
 
 if __name__ == '__main__':

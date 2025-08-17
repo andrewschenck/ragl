@@ -563,6 +563,7 @@ class RedisVectorStore:
             text_id = text_unit.text_id
             if text_id is None:
                 text_id = self._generate_text_id()
+                text_unit.text_id = text_id
 
             self._validate_input_sizes(text, text_data)
             self._validate_text_id(text_id)

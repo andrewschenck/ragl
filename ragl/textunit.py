@@ -27,16 +27,16 @@ class TextUnit:
 
 
     Attributes:
-        text_id:
-            Unique identifier.
         text:
             Text content.
-        distance:
-            Similarity distance.
-        chunk_position:
-            Position in parent text.
+        text_id:
+            Unique identifier.
         parent_id:
             ID of parent document.
+        chunk_position:
+            Position in parent text.
+        distance:
+            Similarity distance.
         source:
             Source of the text.
         confidence:
@@ -54,11 +54,11 @@ class TextUnit:
     """
 
     # pylint: disable=too-many-instance-attributes
-    text_id: str
     text: str
-    distance: float
-    chunk_position: int | None = None
+    text_id: str | None = None
     parent_id: str | None = None
+    chunk_position: int | None = None
+    distance: float = 1.0
     source: str | None = None
     confidence: float | str | None = None
     language: str | None = None
@@ -89,11 +89,11 @@ class TextUnit:
             # Clean up tags by removing quotes and brackets
             tags = [str(tag).strip("[]'\" ") for tag in tags]
         return cls(
-            text_id=data.get('text_id', ''),
             text=data.get('text', ''),
-            distance=data.get('distance', 0.0),
-            chunk_position=data.get('chunk_position'),
+            text_id=data.get('text_id'),
             parent_id=data.get('parent_id'),
+            chunk_position=data.get('chunk_position'),
+            distance=data.get('distance', 1.0),
             source=data.get('source'),
             confidence=data.get('confidence'),
             language=data.get('language'),
@@ -113,11 +113,11 @@ class TextUnit:
             A dict representation of the instance.
         """
         return {
-            'text_id':              self.text_id,
             'text':                 self.text,
-            'distance':             self.distance,
-            'chunk_position':       self.chunk_position,
+            'text_id':              self.text_id,
             'parent_id':            self.parent_id,
+            'chunk_position':       self.chunk_position,
+            'distance':             self.distance,
             'source':               self.source,
             'confidence':           self.confidence,
             'language':             self.language,
@@ -126,6 +126,44 @@ class TextUnit:
             'tags':                 self.tags,
             'timestamp':            self.timestamp,
         }
+
+    def __eq__(self, other: Any) -> bool:
+        """
+        Check equality with another object.
+
+        Compares text_id and text attributes for equality.
+
+        Args:
+            other:
+                Object to compare against.
+
+        Returns:
+            True if both objects are TextUnit instances with the
+            same values for key attributes, False otherwise.
+        """
+        if not isinstance(other, TextUnit):
+            return NotImplemented
+        return (self.text == other.text and
+                self.text_id == other.text_id and
+                self.parent_id == other.parent_id and
+                self.chunk_position == other.chunk_position and
+                self.distance == other.distance and
+                self.source == other.source and
+                self.confidence == other.confidence and
+                self.language == other.language and
+                self.section == other.section and
+                self.author == other.author and
+                self.tags == other.tags and
+                self.timestamp == other.timestamp)
+
+    def __len__(self) -> int:
+        """
+        Get the length of the text content.
+
+        Returns:
+            Length of the text string.
+        """
+        return len(self.text)
 
     def __str__(self) -> str:
         """
