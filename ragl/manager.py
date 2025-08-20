@@ -457,7 +457,6 @@ class RAGManager:
                         'text_id':        text_id,
                         'text':           chunk,
                         'chunk_position': chunk_position,
-                        'parent_id':      parent_id,  # todo this doesn't look necessary
                         'distance':       0.0,
                     })
                     text_unit = TextUnit.from_dict(chunk_data)
