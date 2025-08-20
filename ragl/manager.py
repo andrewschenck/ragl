@@ -245,7 +245,7 @@ class RAGManager:
             for performance tracking.
     """
 
-    DEFAULT_BASE_ID: ClassVar[str] = 'doc'
+    DEFAULT_PARENT_ID: ClassVar[str] = 'doc'
     MAX_QUERY_LENGTH: ClassVar[int] = 8192
     MAX_INPUT_LENGTH: ClassVar[int] = (1024 * 1024) * 10
 
@@ -303,7 +303,6 @@ class RAGManager:
             self,
             text_or_unit: str | TextUnit,
             *,
-            base_id: str | None = None,
             chunk_size: int | None = None,
             overlap: int | None = None,
             split: bool = True,
@@ -318,12 +317,6 @@ class RAGManager:
         Args:
             text_or_unit:
                 Text or TextUnit to add.
-            base_id:
-                Optional base ID for chunks, used to determine
-                parent_id. If base_id is unset, parent_id is
-                auto-generated and may collide after deletes;
-                specify for uniqueness (e.g., UUID) if critical
-                for grouping.
             chunk_size:
                 Optional chunk size override.
             overlap:
@@ -345,7 +338,6 @@ class RAGManager:
         with self.track_operation('add_text'):
             results = self.add_texts(
                 texts_or_units=[text_or_unit],
-                base_id=base_id,
                 chunk_size=chunk_size,
                 overlap=overlap,
                 split=split,
@@ -357,14 +349,11 @@ class RAGManager:
             self,
             texts_or_units: list[str | TextUnit],
             *,
-            base_id: str | None = None,
             chunk_size: int | None = None,
             overlap: int | None = None,
             split: bool = True,
     ) -> list[TextUnit]:
-        # pylint: disable=too-many-arguments
         # pylint: disable=too-many-locals
-        # pylint: disable=too-many-branches
         """
         Add multiple texts to the store.
 
@@ -374,14 +363,6 @@ class RAGManager:
         Args:
             texts_or_units:
                 List of texts or TextUnit objects to add.
-            base_id:
-                Optional base ID for chunks, sets parent_id. If unset,
-                parent_id is auto-generated and may collide after
-                deletes; specify for uniqueness (e.g., UUID) if critical
-                for grouping.
-
-                This parameter is uneccessary if using TextUnit objects,
-                as TextUnit.parent_id will be used instead.
             chunk_size:
                 Optional chunk size override.
             overlap:
@@ -401,59 +382,64 @@ class RAGManager:
         with self.track_operation('add_texts'):
             _LOG.debug('Adding texts: %d items', len(texts_or_units))
 
-            # Validate inputs
             if not texts_or_units:
                 _LOG.error('texts_or_units cannot be empty')
                 raise ValidationError('texts_or_units cannot be empty')
 
-            # Use provided parameters or instance defaults
             effective_chunk_size = chunk_size or self.chunk_size
             effective_overlap = overlap or self.overlap
             self._validate_chunking(effective_chunk_size, effective_overlap)
 
-            # Generate base_id if not provided
-            if base_id is None:
-                base_id = f'{self.DEFAULT_BASE_ID}'
-
             text_units_to_store = []
+            batch_timestamp = int(time.time_ns() // 1000)
 
-            for text_index, unit in enumerate(texts_or_units):
+            for text_index, item in enumerate(texts_or_units):
 
-                # Validate individual items
-                if isinstance(unit, str):
-                    if not unit or not unit.strip():
+                if isinstance(item, str):
+                    if not item or not item.strip():
                         msg = 'text_or_unit cannot be empty or zero-length'
                         _LOG.error(msg)
                         raise ValidationError(msg)
 
-                    unit = self._sanitize_text(unit)
+                    sanitized_text = self._sanitize_text(item)
+                    unit = TextUnit(
+                        text=sanitized_text,
+                        parent_id=self.DEFAULT_PARENT_ID,
+                    )
 
-                elif isinstance(unit, TextUnit):
-                    if not unit.text or not unit.text.strip():
+                elif isinstance(item, TextUnit):
+                    if not item.text or not item.text.strip():
                         msg = 'text_or_unit cannot be empty or zero-length'
                         _LOG.error(msg)
                         raise ValidationError(msg)
 
-                    unit.text = self._sanitize_text(unit.text)
+                    # Create a copy to avoid modifying the original
+                    unit = TextUnit(
+                        text=self._sanitize_text(item.text),
+                        text_id=item.text_id,
+                        parent_id=item.parent_id or self.DEFAULT_PARENT_ID,
+                        chunk_position=item.chunk_position,
+                        distance=item.distance,
+                        source=item.source,
+                        confidence=item.confidence,
+                        language=item.language,
+                        section=item.section,
+                        author=item.author,
+                        tags=item.tags,
+                        timestamp=item.timestamp,
+                    )
 
                 else:
                     _LOG.error('Invalid text type, must be str or TextUnit')
                     raise ValidationError(
                         'Invalid text type, must be str or TextUnit')
 
-                # Get chunks for this text
+                # Get chunks for this TextUnit
                 chunks = self._get_chunks(unit, effective_chunk_size,
                                           effective_overlap, split)
 
-                # Prepare base data for this text
-                if isinstance(unit, TextUnit) and unit.parent_id:
-                    # TextUnit has its own parent_id, use it
-                    parent_id = unit.parent_id
-                else:
-                    # Use provided or generated base_id
-                    parent_id = base_id
-
-                base_data = self._prepare_base_data(unit, parent_id)
+                parent_id = unit.parent_id
+                base_data = unit.to_dict()
 
                 # Create TextUnit objects for each chunk
                 for chunk_position, chunk in enumerate(chunks):
@@ -462,9 +448,8 @@ class RAGManager:
                     if not chunk.strip():
                         continue
 
-                    # Generate hierarchical text_id when base_id is provided
-                    text_id = (f'{TEXT_ID_PREFIX}{base_id}-'
-                               f'{text_index}-{chunk_position}')
+                    text_id = (f'{TEXT_ID_PREFIX}{parent_id}-{batch_timestamp}'
+                               f'-{text_index}-{chunk_position}')
 
                     # Create TextUnit and add to list
                     chunk_data = base_data.copy()
@@ -472,16 +457,16 @@ class RAGManager:
                         'text_id':        text_id,
                         'text':           chunk,
                         'chunk_position': chunk_position,
-                        'parent_id':      parent_id,
                         'distance':       0.0,
                     })
                     text_unit = TextUnit.from_dict(chunk_data)
                     text_units_to_store.append(text_unit)
 
             if not text_units_to_store:
-                raise DataError('No valid chunks stored')
+                msg = 'No valid chunks stored'
+                _LOG.error(msg)
+                raise DataError(msg)
 
-            # Store all TextUnits in a single batch operation
             stored_units = self.ragstore.store_texts(text_units_to_store)
 
             _LOG.info('Added %d texts resulting in %d chunks',
