@@ -290,25 +290,25 @@ class TestRAGManager(unittest.TestCase):
         with self.assertRaises(ValidationError):
             manager.add_text("   \n\t   ")
 
-    def test_add_text_with_base_id(self):
-        """Test adding text with custom base_id."""
-        manager = RAGManager(self.config, self.mock_ragstore,
-                             tokenizer=self.mock_tokenizer)
-        text = "Test text"
-        base_id = "custom-base"
-
-        self.mock_tokenizer.encode.return_value = list(range(50))
-        self.mock_tokenizer.decode.return_value = text
-
-        manager.add_text(text, base_id=base_id)
-
-        call_args = self.mock_ragstore.store_texts.call_args
-        [stored_textunit] = call_args[0][0]
-
-        self.assertEqual(stored_textunit.parent_id, base_id)
-        self.assertEqual(stored_textunit.text, text)
-        self.assertEqual(stored_textunit.chunk_position, 0)
-        self.assertEqual(stored_textunit.text_id, 'txt:custom-base-0-0')
+    # def test_add_text_with_base_id(self):
+    #     """Test adding text with custom base_id."""
+    #     manager = RAGManager(self.config, self.mock_ragstore,
+    #                          tokenizer=self.mock_tokenizer)
+    #     text = "Test text"
+    #     base_id = "custom-base"
+    #
+    #     self.mock_tokenizer.encode.return_value = list(range(50))
+    #     self.mock_tokenizer.decode.return_value = text
+    #
+    #     manager.add_text(text, base_id=base_id)
+    #
+    #     call_args = self.mock_ragstore.store_texts.call_args
+    #     [stored_textunit] = call_args[0][0]
+    #
+    #     self.assertEqual(stored_textunit.parent_id, base_id)
+    #     self.assertEqual(stored_textunit.text, text)
+    #     self.assertEqual(stored_textunit.chunk_position, 0)
+    #     self.assertEqual(stored_textunit.text_id, 'txt:custom-base-0-0')
 
     def test_add_text_custom_chunk_params(self):
         """Test adding text with custom chunk size and overlap."""
@@ -497,30 +497,30 @@ class TestRAGManager(unittest.TestCase):
             mock_log.error.assert_called_with(
                 'Invalid text type, must be str or TextUnit')
 
-    def test_add_texts_with_base_id(self):
-        """Test adding texts with custom base_id."""
-        manager = RAGManager(self.config, self.mock_ragstore,
-                             tokenizer=self.mock_tokenizer)
-        texts = ["First text", "Second text"]
-        base_id = "custom-batch"
-
-        self.mock_tokenizer.encode.return_value = list(range(50))
-        self.mock_tokenizer.decode.side_effect = texts
-
-        # Mock store_texts to return TextUnit objects with proper parent_id
-        def mock_store_texts(text_units):
-            return text_units  # Return the input TextUnits as-is
-
-        self.mock_ragstore.store_texts.side_effect = mock_store_texts
-
-        result = manager.add_texts(texts, base_id=base_id)
-
-        # Verify all texts have the same parent_id (base_id)
-        for unit in result:
-            self.assertEqual(unit.parent_id, base_id)
-
-        # Verify the correct number of chunks
-        self.assertEqual(len(result), 2)
+    # def test_add_texts_with_base_id(self):
+    #     """Test adding texts with custom base_id."""
+    #     manager = RAGManager(self.config, self.mock_ragstore,
+    #                          tokenizer=self.mock_tokenizer)
+    #     texts = ["First text", "Second text"]
+    #     base_id = "custom-batch"
+    #
+    #     self.mock_tokenizer.encode.return_value = list(range(50))
+    #     self.mock_tokenizer.decode.side_effect = texts
+    #
+    #     # Mock store_texts to return TextUnit objects with proper parent_id
+    #     def mock_store_texts(text_units):
+    #         return text_units  # Return the input TextUnits as-is
+    #
+    #     self.mock_ragstore.store_texts.side_effect = mock_store_texts
+    #
+    #     result = manager.add_texts(texts, base_id=base_id)
+    #
+    #     # Verify all texts have the same parent_id (base_id)
+    #     for unit in result:
+    #         self.assertEqual(unit.parent_id, base_id)
+    #
+    #     # Verify the correct number of chunks
+    #     self.assertEqual(len(result), 2)
 
     def test_add_texts_custom_chunk_params(self):
         """Test adding texts with custom chunk parameters."""
@@ -571,7 +571,7 @@ class TestRAGManager(unittest.TestCase):
         self.mock_tokenizer.encode.return_value = list(range(50))
         self.mock_tokenizer.decode.return_value = text_unit.text
 
-        result = manager.add_texts(texts, base_id="ignored-base")
+        result = manager.add_texts(texts)
 
         # TextUnit's parent_id should be used, not base_id
         [stored_unit] = self.mock_ragstore.store_texts.call_args[0][0]
@@ -639,38 +639,38 @@ class TestRAGManager(unittest.TestCase):
             stored_unit = call[0][0]
             self.assertEqual(stored_unit.text_id, expected_ids[i])
 
-    def test_add_texts_text_id_with_base_id_hierarchical(self):
-        """Test hierarchical text_id generation when base_id is provided."""
-        manager = RAGManager(self.config, self.mock_ragstore,
-                             tokenizer=self.mock_tokenizer)
-
-        texts = ["First text", "Second text"]
-        base_id = "batch-123"
-
-        # Mock tokenizer to create multiple chunks per text
-        self.mock_tokenizer.encode.return_value = list(range(150))
-        self.mock_tokenizer.decode.side_effect = [
-            "First chunk of first text",
-            "Second chunk of first text",
-            "First chunk of second text",
-            "Second chunk of second text"
-        ]
-
-        result = manager.add_texts(texts, base_id=base_id)
-
-        # Verify hierarchical text_ids: txt:base_id-text_index-chunk_position
-        call_args_list = self.mock_ragstore.store_text.call_args_list
-        expected_ids = [
-            'txt:batch-123-0-0',  # First text, first chunk
-            'txt:batch-123-0-1',  # First text, second chunk
-            'txt:batch-123-1-0',  # Second text, first chunk
-            'txt:batch-123-1-1'  # Second text, second chunk
-        ]
-
-        for i, call in enumerate(call_args_list):
-            stored_unit = call[0][0]
-            self.assertEqual(stored_unit.text_id, expected_ids[i])
-            self.assertEqual(stored_unit.parent_id, base_id)
+    # def test_add_texts_text_id_with_base_id_hierarchical(self):
+    #     """Test hierarchical text_id generation when base_id is provided."""
+    #     manager = RAGManager(self.config, self.mock_ragstore,
+    #                          tokenizer=self.mock_tokenizer)
+    #
+    #     texts = ["First text", "Second text"]
+    #     base_id = "batch-123"
+    #
+    #     # Mock tokenizer to create multiple chunks per text
+    #     self.mock_tokenizer.encode.return_value = list(range(150))
+    #     self.mock_tokenizer.decode.side_effect = [
+    #         "First chunk of first text",
+    #         "Second chunk of first text",
+    #         "First chunk of second text",
+    #         "Second chunk of second text"
+    #     ]
+    #
+    #     result = manager.add_texts(texts, base_id=base_id)
+    #
+    #     # Verify hierarchical text_ids: txt:base_id-text_index-chunk_position
+    #     call_args_list = self.mock_ragstore.store_text.call_args_list
+    #     expected_ids = [
+    #         'txt:batch-123-0-0',  # First text, first chunk
+    #         'txt:batch-123-0-1',  # First text, second chunk
+    #         'txt:batch-123-1-0',  # Second text, first chunk
+    #         'txt:batch-123-1-1'  # Second text, second chunk
+    #     ]
+    #
+    #     for i, call in enumerate(call_args_list):
+    #         stored_unit = call[0][0]
+    #         self.assertEqual(stored_unit.text_id, expected_ids[i])
+    #         self.assertEqual(stored_unit.parent_id, base_id)
 
     def test_add_texts_all_chunks_empty_raises_error(self):
         """Test that DataError is raised when all chunks are empty."""
@@ -723,7 +723,7 @@ class TestRAGManager(unittest.TestCase):
         ]
         self.mock_ragstore.store_texts.return_value = mock_text_units
 
-        result = manager.add_texts(texts_or_units, base_id="batch-test")
+        result = manager.add_texts(texts_or_units)
 
         # Verify all were processed
         self.assertEqual(len(result), 4)
@@ -2087,7 +2087,7 @@ class TestRAGManager(unittest.TestCase):
 
     def test_constants(self):
         """Test that class constants are properly defined."""
-        self.assertEqual(RAGManager.DEFAULT_BASE_ID, 'doc')
+        self.assertEqual(RAGManager.DEFAULT_PARENT_ID, 'doc')
         self.assertEqual(RAGManager.MAX_QUERY_LENGTH, 8192)
         self.assertEqual(RAGManager.MAX_INPUT_LENGTH, (1024 * 1024) * 10)
 

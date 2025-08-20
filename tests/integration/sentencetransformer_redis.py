@@ -1,5 +1,5 @@
 """
-Comprehensive integration tests for RAGL against live Redis container.
+Comprehensive integration tests for ragl against live Redis container.
 Assumes Redis is running and accessible.
 """
 import logging
@@ -18,7 +18,7 @@ from ragl.textunit import TextUnit
 logging.basicConfig(level=logging.INFO)
 
 
-class TestRAGLIntegration:
+class TestRaglIntegration:
     """Integration tests for RAGL with live Redis."""
 
     @classmethod
@@ -57,7 +57,6 @@ class TestRAGLIntegration:
         text = "Python is a high-level programming language."
         docs = self.manager.add_text(
             text_or_unit=text,
-            base_id="doc:python_intro"
         )
 
         assert len(docs) == 1
@@ -83,7 +82,6 @@ class TestRAGLIntegration:
 
         docs = self.manager.add_text(
             text_or_unit=large_text,
-            base_id="doc:ai_overview"
         )
 
         assert len(docs) > 1, "Large text should be chunked"
@@ -91,7 +89,6 @@ class TestRAGLIntegration:
         # Verify chunks have proper positioning
         for i, doc in enumerate(docs):
             assert doc.chunk_position == i
-            assert doc.parent_id == "doc:ai_overview"
 
     def test_multiple_documents_retrieval(self):
         """Test retrieval across multiple documents."""
@@ -106,7 +103,6 @@ class TestRAGLIntegration:
         for i, text in enumerate(texts):
             docs = self.manager.add_text(
                 text_or_unit=text,
-                base_id=f"doc:language_{i}"
             )
             all_docs.extend(docs)
 
@@ -126,7 +122,6 @@ class TestRAGLIntegration:
         text = "This document will be deleted."
         docs = self.manager.add_text(
             text_or_unit=text,
-            base_id="doc:to_delete"
         )
 
         text_id = docs[0].text_id
@@ -155,7 +150,6 @@ class TestRAGLIntegration:
         for text, tags in texts_with_tags:
             self.manager.add_text(
                 text_or_unit=text,
-                base_id=f"doc:{text[:10].replace(' ', '_')}",
             )
 
         # Test listing all texts
@@ -179,7 +173,6 @@ class TestRAGLIntegration:
 
         _ = self.manager.add_text(
             text_or_unit=reference_text,
-            base_id="doc:ml_definition"
         )
 
         # Test exact match query
@@ -225,7 +218,6 @@ class TestRAGLIntegration:
 
         docs = large_chunk_manager.add_text(
             text_or_unit=tiny_text,
-            base_id="doc:tiny"
         )
 
         assert len(docs) == 1
@@ -261,7 +253,6 @@ class TestRAGLIntegration:
 
             docs = manager.add_text(
                 text_or_unit=medium_text,
-                base_id=f"doc:medium_{chunk_size}_{overlap}"
             )
 
             # Verify chunking behavior - account for token-based chunking
@@ -303,7 +294,6 @@ class TestRAGLIntegration:
 
         docs = small_chunk_manager.add_text(
             text_or_unit=large_text,
-            base_id="doc:very_large"
         )
 
         # Should create many chunks
@@ -317,7 +307,6 @@ class TestRAGLIntegration:
             token_count = len(tokenizer.encode(doc.text))
             # Allow for overlap and merging tolerance
             assert token_count <= 70  # chunk_size + overlap + merging tolerance
-            assert doc.parent_id == "doc:very_large"
 
         # Test retrieval across many chunks
         contexts = small_chunk_manager.get_context(
@@ -347,7 +336,6 @@ class TestRAGLIntegration:
 
         docs = zero_overlap_manager.add_text(
             text_or_unit=text,
-            base_id="doc:zero_overlap"
         )
 
         # Should create multiple chunks with no overlap
@@ -382,7 +370,6 @@ class TestRAGLIntegration:
 
         docs = high_overlap_manager.add_text(
             text_or_unit=text,
-            base_id="doc:high_overlap"
         )
 
         # High overlap should create more chunks
@@ -410,7 +397,6 @@ class TestRAGLIntegration:
             if text:  # Skip empty text as it raises ValidationError
                 docs = self.manager.add_text(
                     text_or_unit=text,
-                    base_id=f"doc:edge_{case_name}"
                 )
 
                 assert len(docs) >= 1
@@ -440,7 +426,7 @@ class TestRAGLIntegration:
 
         all_doc_ids = []
         for text, doc_id in documents:
-            docs = self.manager.add_text(text_or_unit=text, base_id=doc_id)
+            docs = self.manager.add_text(text_or_unit=text)
             all_doc_ids.extend([doc.text_id for doc in docs])
 
         # Test retrieval that should match across different document sizes
@@ -479,7 +465,6 @@ class TestRAGLIntegration:
 
         docs = boundary_manager.add_text(
             text_or_unit=boundary_text,
-            base_id="doc:boundary_test"
         )
 
         # Should create multiple chunks due to length
@@ -516,7 +501,6 @@ class TestRAGLIntegration:
 
         docs = token_manager.add_text(
             text_or_unit=text,
-            base_id="doc:token_test"
         )
 
         tokenizer = token_manager.tokenizer
@@ -549,7 +533,6 @@ class TestRAGLIntegration:
 
         docs = min_chunk_manager.add_text(
             text_or_unit=text,
-            base_id="doc:min_chunk_test"
         )
 
         tokenizer = min_chunk_manager.tokenizer
@@ -688,10 +671,9 @@ class TestRAGLIntegration:
         text2 = "Deep learning uses neural networks with multiple layers."
 
         # Add texts to generate add_text metrics
-        self.manager.add_text(text_or_unit=text1,
-                              base_id="doc:metrics_test1")
-        self.manager.add_text(text_or_unit=text2,
-                              base_id="doc:metrics_test2")
+        self.manager.add_text(text_or_unit=text1)
+
+        self.manager.add_text(text_or_unit=text2)
 
         # Perform queries to generate get_context metrics
         self.manager.get_context(query="machine learning", top_k=1)
@@ -756,8 +738,7 @@ class TestRAGLIntegration:
     def test_metrics_reset_functionality(self):
         """Test metrics reset functionality."""
         # Perform operations to generate metrics
-        self.manager.add_text("Test text for metrics",
-                              base_id="doc:metrics_reset")
+        self.manager.add_text("Test text for metrics")
         self.manager.get_context("test query", top_k=1)
 
         # Verify metrics exist
@@ -786,7 +767,7 @@ class TestRAGLIntegration:
     def test_operation_failure_tracking(self):
         """Test that operation failures are properly tracked in metrics."""
         # Perform a valid operation first
-        self.manager.add_text("Valid text", base_id="doc:failure_test")
+        self.manager.add_text("Valid text")
 
         # Attempt operations that should fail
         try:
@@ -829,8 +810,7 @@ class TestRAGLIntegration:
         """Test that performance metrics maintain appropriate precision."""
         # Perform multiple operations to get more stable metrics
         for i in range(5):
-            self.manager.add_text(f"Test text {i}",
-                                  base_id=f"doc:precision_test_{i}")
+            self.manager.add_text(f"Test text {i}")
             self.manager.get_context(f"query {i}", top_k=1)
 
         metrics = self.manager.get_performance_metrics()
@@ -871,15 +851,10 @@ class TestRAGLIntegration:
         # Test batch addition
         docs = self.manager.add_texts(
             texts_or_units=texts,
-            base_id="batch:programming_languages"
         )
 
         # Verify all texts were stored
         assert len(docs) >= len(texts)  # May be more due to chunking
-
-        # Verify parent_id consistency
-        for doc in docs:
-            assert doc.parent_id == "batch:programming_languages"
 
         # Verify text content preservation
         stored_texts = [doc.text for doc in docs]
@@ -992,7 +967,6 @@ class TestRAGLIntegration:
 
         docs = self.manager.add_texts(
             texts_or_units=large_texts,
-            base_id="batch:large_documents",
             chunk_size=50,  # Small chunks to force splitting
             overlap=10
         )
@@ -1027,7 +1001,6 @@ class TestRAGLIntegration:
 
         docs = self.manager.add_texts(
             texts_or_units=texts,
-            base_id="batch:to_delete"
         )
 
         # Get text IDs for deletion
@@ -1058,7 +1031,6 @@ class TestRAGLIntegration:
         texts = ["Valid text one.", "Valid text two."]
         docs = self.manager.add_texts(
             texts_or_units=texts,
-            base_id="batch:partial_delete"
         )
 
         valid_ids = [doc.text_id for doc in docs]
@@ -1108,7 +1080,6 @@ class TestRAGLIntegration:
 
         docs = self.manager.add_texts(
             texts_or_units=texts,
-            base_id="batch:no_split",
             split=False
         )
 
@@ -1126,7 +1097,6 @@ class TestRAGLIntegration:
 
         docs = self.manager.add_texts(
             texts_or_units=[text],
-            base_id="batch:custom_params",
             chunk_size=15,  # Small chunk size
             overlap=3
         )
@@ -1143,8 +1113,7 @@ class TestRAGLIntegration:
         """Test that batch operations are tracked in performance metrics."""
         # Perform batch operations
         texts = [f"Performance test text {i}" for i in range(5)]
-        docs = self.manager.add_texts(texts_or_units=texts,
-                                      base_id="batch:perf")
+        docs = self.manager.add_texts(texts_or_units=texts)
 
         text_ids = [doc.text_id for doc in docs]
         self.manager.delete_texts(text_ids)
@@ -1173,7 +1142,6 @@ class TestRAGLIntegration:
         start_time = time.time()
         docs = self.manager.add_texts(
             texts_or_units=large_batch,
-            base_id="batch:large_test"
         )
         add_duration = time.time() - start_time
 
@@ -1198,7 +1166,7 @@ class TestRAGLIntegration:
 
 if __name__ == "__main__":
     import sys
-    test_suite = TestRAGLIntegration()
+    test_suite = TestRaglIntegration()
     test_suite.setup_class()
 
     test_methods = [
