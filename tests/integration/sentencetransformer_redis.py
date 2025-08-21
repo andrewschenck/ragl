@@ -1069,7 +1069,7 @@ class TestRaglIntegration:
             self.manager.add_texts(texts_or_units=texts_with_empty)
             assert False, "Should have raised ValidationError"
         except ValidationError as e:
-            assert "cannot be empty" in str(e)
+            assert "cannot be whitespace-only or zero-length" in str(e)
 
     def test_add_texts_no_split_option(self):
         """Test add_texts with split=False option."""
