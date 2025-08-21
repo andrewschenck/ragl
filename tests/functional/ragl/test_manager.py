@@ -515,6 +515,50 @@ class TestTextUnitChunker(unittest.TestCase):
                 min_chunk_size=30
             )
 
+    def test_str_representation(self):
+        """Test string representation of TextUnitChunker."""
+        chunker = TextUnitChunker(
+            tokenizer=self.mock_tokenizer,
+            chunk_size=256,
+            overlap=50,
+            min_chunk_size=25,
+            split=True
+        )
+
+        expected = ('TextUnitChunker(chunk_size=256, overlap=50, '
+                    'min_chunk_size=25, split=True)')
+        self.assertEqual(str(chunker), expected)
+
+    def test_str_representation_with_none_min_chunk_size(self):
+        """Test string representation with None min_chunk_size."""
+        chunker = TextUnitChunker(
+            tokenizer=self.mock_tokenizer,
+            chunk_size=512,
+            overlap=100,
+            min_chunk_size=None,
+            split=False
+        )
+
+        expected = ('TextUnitChunker(chunk_size=512, overlap=100, '
+                    'min_chunk_size=None, split=False)')
+        self.assertEqual(str(chunker), expected)
+
+    def test_repr_representation(self):
+        """Test repr representation of TextUnitChunker."""
+        chunker = TextUnitChunker(
+            tokenizer=self.mock_tokenizer,
+            chunk_size=128,
+            overlap=25,
+            min_chunk_size=10,
+            split=True
+        )
+
+        # __repr__ calls __str__, so they should be identical
+        expected = ('TextUnitChunker(chunk_size=128, overlap=25, '
+                    'min_chunk_size=10, split=True)')
+        self.assertEqual(repr(chunker), expected)
+        self.assertEqual(str(chunker), repr(chunker))
+
 
 class TestRAGManager(unittest.TestCase):
     """Test cases for RAGManager class."""
