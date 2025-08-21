@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 
 from ragl.config import ManagerConfig
 from ragl.exceptions import DataError, ValidationError, ConfigurationError
-from ragl.manager import RAGManager, RAGTelemetry
+from ragl.manager import RAGManager, RAGTelemetry, TextUnitChunker
 from ragl.protocols import RAGStoreProtocol, TokenizerProtocol
 from ragl.textunit import TextUnit
 from ragl.tokenizer import TiktokenTokenizer
@@ -128,6 +128,392 @@ class TestRAGTelemetry(unittest.TestCase):
         self.assertEqual(len(self.telemetry.recent_durations), 100)
         self.assertEqual(list(self.telemetry.recent_durations)[:5],
                          [50, 51, 52, 53, 54])
+
+
+class TestTextUnitChunker(unittest.TestCase):
+    """Test cases for TextUnitChunker class."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.mock_tokenizer = Mock(spec=TokenizerProtocol)
+        self.chunker = TextUnitChunker(self.mock_tokenizer)
+
+        # Create a basic TextUnit for testing
+        self.base_unit = TextUnit(
+            text="This is a test text for chunking",
+            parent_id="test-doc",
+            source="test_source.txt"
+        )
+
+    def test_init_valid_tokenizer(self):
+        """Test TextUnitChunker initialization with valid tokenizer."""
+        chunker = TextUnitChunker(self.mock_tokenizer)
+        self.assertEqual(chunker.tokenizer, self.mock_tokenizer)
+
+    def test_chunk_text_unit_no_split_single_chunk(self):
+        """Test chunking with split=False returns single chunk."""
+        with patch('time.time_ns', return_value=1000000000):
+            result = list(self.chunker.chunk_text_unit(
+                unit=self.base_unit,
+                chunk_size=100,
+                overlap=10,
+                split=False,
+                text_index=0
+            ))
+
+        self.assertEqual(len(result), 1)
+        chunk = result[0]
+        self.assertEqual(chunk.text, self.base_unit.text)
+        self.assertEqual(chunk.parent_id, "test-doc")
+        self.assertEqual(chunk.chunk_position, 0)
+        self.assertEqual(chunk.distance, 0.0)
+        self.assertTrue(chunk.text_id.startswith(
+            'txt:test-doc-1000000-0-0'))  # Changed from 1 to 1000000
+
+    def test_chunk_text_unit_no_split_with_custom_timestamp(self):
+        """Test chunking with split=False and custom batch_timestamp."""
+        custom_timestamp = 5000
+        result = list(self.chunker.chunk_text_unit(
+            unit=self.base_unit,
+            chunk_size=100,
+            overlap=10,
+            split=False,
+            batch_timestamp=custom_timestamp,
+            text_index=2
+        ))
+
+        self.assertEqual(len(result), 1)
+        chunk = result[0]
+        expected_text_id = f'txt:test-doc-{custom_timestamp}-2-0'
+        self.assertEqual(chunk.text_id, expected_text_id)
+
+    def test_chunk_text_unit_split_single_chunk_short_text(self):
+        """Test chunking with split=True but text shorter than chunk_size."""
+        # Mock tokenizer to return fewer tokens than chunk_size
+        self.mock_tokenizer.encode.return_value = list(range(50))
+        self.mock_tokenizer.decode.return_value = self.base_unit.text
+
+        result = list(self.chunker.chunk_text_unit(
+            unit=self.base_unit,
+            chunk_size=100,
+            overlap=10,
+            split=True,
+            text_index=0
+        ))
+
+        self.assertEqual(len(result), 1)
+        chunk = result[0]
+        self.assertEqual(chunk.text, self.base_unit.text)
+        self.assertEqual(chunk.chunk_position, 0)
+
+    def test_chunk_text_unit_split_multiple_chunks(self):
+        """Test chunking with split=True creating multiple chunks."""
+        # Mock tokenizer to return enough tokens to create multiple chunks
+        self.mock_tokenizer.encode.return_value = list(range(250))
+        self.mock_tokenizer.decode.side_effect = [
+            "First chunk text",
+            "Second chunk text",
+            "Third chunk text"
+        ]
+
+        # Mock _split_text to return multiple chunks
+        with patch.object(self.chunker, '_split_text') as mock_split:
+            mock_split.return_value = [
+                "First chunk text",
+                "Second chunk text",
+                "Third chunk text"
+            ]
+
+            result = list(self.chunker.chunk_text_unit(
+                unit=self.base_unit,
+                chunk_size=100,
+                overlap=10,
+                split=True,
+                text_index=1
+            ))
+
+        self.assertEqual(len(result), 3)
+
+        # Verify chunk positions and text_ids
+        for i, chunk in enumerate(result):
+            self.assertEqual(chunk.chunk_position, i)
+            self.assertTrue(chunk.text_id.endswith(f'-1-{i}'))
+            self.assertEqual(chunk.parent_id, "test-doc")
+            self.assertEqual(chunk.distance, 0.0)
+
+    def test_chunk_text_unit_skips_empty_chunks(self):
+        """Test that empty chunks are skipped during iteration."""
+        # Mock _split_text to return mix of valid and empty chunks
+        with patch.object(self.chunker, '_split_text') as mock_split:
+            mock_split.return_value = [
+                "Valid chunk 1",
+                "",  # Empty chunk
+                "   ",  # Whitespace only
+                "Valid chunk 2",
+                "\t\n",  # More whitespace
+                "Valid chunk 3"
+            ]
+
+            result = list(self.chunker.chunk_text_unit(
+                unit=self.base_unit,
+                chunk_size=100,
+                overlap=10,
+                split=True,
+                text_index=0
+            ))
+
+        # Should only return valid chunks
+        self.assertEqual(len(result), 3)
+        expected_texts = ["Valid chunk 1", "Valid chunk 2", "Valid chunk 3"]
+        actual_texts = [chunk.text for chunk in result]
+        self.assertEqual(actual_texts, expected_texts)
+
+        # Verify chunk positions are sequential despite skipped chunks
+        expected_positions = [0, 1, 2, 3, 4, 5]  # Original positions
+        actual_positions = [chunk.chunk_position for chunk in result]
+        self.assertEqual(actual_positions,
+                         [0, 3, 5])  # Positions of valid chunks
+
+    def test_chunk_text_unit_preserves_metadata(self):
+        """Test that all TextUnit metadata is preserved in chunks."""
+        rich_unit = TextUnit(
+            text="Text with rich metadata",
+            parent_id="rich-doc",
+            source="rich_source.txt",
+            confidence=0.95,
+            language="en",
+            section="chapter1",
+            author="test_author",
+            tags=["tag1", "tag2"]
+        )
+
+        # Mock for single chunk
+        self.mock_tokenizer.encode.return_value = list(range(50))
+        self.mock_tokenizer.decode.return_value = rich_unit.text
+
+        result = list(self.chunker.chunk_text_unit(
+            unit=rich_unit,
+            chunk_size=100,
+            overlap=10,
+            split=True,
+            text_index=0
+        ))
+
+        self.assertEqual(len(result), 1)
+        chunk = result[0]
+
+        # Verify all metadata is preserved
+        self.assertEqual(chunk.parent_id, "rich-doc")
+        self.assertEqual(chunk.source, "rich_source.txt")
+        self.assertEqual(chunk.confidence, 0.95)
+        self.assertEqual(chunk.language, "en")
+        self.assertEqual(chunk.section, "chapter1")
+        self.assertEqual(chunk.author, "test_author")
+        self.assertEqual(chunk.tags, ["tag1", "tag2"])
+
+    def test_split_text_short_text_single_chunk(self):
+        """Test _split_text with text shorter than chunk_size."""
+        text = "Short text"
+        self.mock_tokenizer.encode.return_value = list(range(20))
+
+        result = self.chunker._split_text(
+            text=text,
+            chunk_size=100,
+            overlap=10
+        )
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0], text)
+
+    def test_split_text_long_text_multiple_chunks(self):
+        """Test _split_text with text longer than chunk_size."""
+        text = "Long text that needs splitting"
+        # Mock tokenizer to simulate long text
+        self.mock_tokenizer.encode.return_value = list(range(250))
+        self.mock_tokenizer.decode.side_effect = [
+            "First chunk",
+            "Second chunk",
+            "Third chunk",
+            "Fourth chunk"  # Added 4th chunk
+        ]
+
+        result = self.chunker._split_text(
+            text=text,
+            chunk_size=100,
+            overlap=20
+        )
+
+        self.assertEqual(len(result), 4)  # Changed from 3 to 4
+        self.assertEqual(result, ["First chunk", "Second chunk", "Third chunk",
+                                  "Fourth chunk"])
+
+        # Verify tokenizer calls - should be called once for encoding
+        # self.mock_tokenizer.encode.assert_called_once_with(text)
+        self.assertTrue(self.mock_tokenizer.encode.call_count >= 1)
+
+        # Decode should be called for each chunk
+        self.assertEqual(self.mock_tokenizer.decode.call_count,
+                         4)  # Changed from 3 to 4
+
+    def test_split_text_merge_short_last_chunk(self):
+        """Test _split_text merges last chunk if it's too short."""
+        text = "Text that creates a short last chunk"
+
+        # Create scenario where last chunk is too short
+        # With 150 tokens, chunk_size=100, overlap=20 (step=80):
+        # Chunks: [0:100], [80:150] (70 tokens)
+        tokens = list(range(150))
+
+        # Mock encode to return tokens initially, then short token count for last chunk
+        encode_calls = []
+
+        def mock_encode(text_input):
+            encode_calls.append(text_input)
+            if "short_last" in text_input:  # When checking last chunk length
+                return list(range(15))  # Short chunk (< 25 min_chunk_size)
+            return tokens
+
+        self.mock_tokenizer.encode.side_effect = mock_encode
+
+        # Mock decode for the chunking process
+        self.mock_tokenizer.decode.side_effect = [
+            "First chunk content",
+            "short_last"  # Last chunk that should be merged
+        ]
+
+        result = self.chunker._split_text(
+            text=text,
+            chunk_size=100,
+            overlap=20,
+            min_chunk_size=25
+        )
+
+        # Should have fewer chunks due to merging
+        self.assertEqual(len(result), 1)  # Merged into single chunk
+        # The merged chunk should contain both parts
+        self.assertIn("First chunk content", result[0])
+        self.assertIn("short_last", result[0])
+
+        # Verify encode was called for both initial text and last chunk check
+        self.assertEqual(len(encode_calls), 2)
+        self.assertEqual(encode_calls[0], text)  # Initial encoding
+        self.assertEqual(encode_calls[1],
+                         "short_last")  # Last chunk size check
+
+    def test_split_text_removes_empty_chunks(self):
+        """Test _split_text removes empty chunks after decoding."""
+        text = "Text with some empty decoded chunks"
+        self.mock_tokenizer.encode.return_value = list(range(200))
+        self.mock_tokenizer.decode.side_effect = [
+            "Valid chunk 1",
+            "",  # Empty after decode
+            "Valid chunk 2",
+            "   ",  # Whitespace only
+            "Valid chunk 3"
+        ]
+
+        result = self.chunker._split_text(
+            text=text,
+            chunk_size=50,
+            overlap=10
+        )
+
+        # Should only return non-empty chunks
+        expected = ["Valid chunk 1", "Valid chunk 2", "Valid chunk 3"]
+        self.assertEqual(result, expected)
+
+    def test_split_text_default_min_chunk_size(self):
+        """Test _split_text uses default min_chunk_size when not provided."""
+        text = "Text for testing default min chunk size"
+        self.mock_tokenizer.encode.return_value = list(range(80))
+
+        # Should use overlap // 2 as default min_chunk_size
+        result = self.chunker._split_text(
+            text=text,
+            chunk_size=80,
+            overlap=20  # Default min_chunk_size should be 10
+        )
+
+        # Verify it doesn't crash and returns expected result
+        self.assertIsInstance(result, list)
+        self.assertEqual(result, ["Text for testing default min chunk size"])
+
+    def test_split_text_custom_min_chunk_size(self):
+        """Test _split_text with custom min_chunk_size."""
+        text = "Text for testing custom min chunk size"
+
+        # Setup tokens to create scenario for merging
+        tokens = list(range(120))
+        self.mock_tokenizer.encode.return_value = tokens
+
+        # Mock decode to simulate chunk creation
+        def mock_decode(chunk_tokens):
+            if len(chunk_tokens) < 15:  # Short chunk
+                return "short_chunk"
+            return f"normal_chunk_{len(chunk_tokens)}"
+
+        self.mock_tokenizer.decode.side_effect = mock_decode
+
+        result = self.chunker._split_text(
+            text=text,
+            chunk_size=50,
+            overlap=10,
+            min_chunk_size=30  # Custom minimum
+        )
+
+        # Verify result is a list
+        self.assertIsInstance(result, list)
+
+    def test_chunk_text_unit_text_id_generation(self):
+        """Test text_id generation format."""
+        with patch('time.time_ns', return_value=1234567890000):
+            result = list(self.chunker.chunk_text_unit(
+                unit=self.base_unit,
+                chunk_size=100,
+                overlap=10,
+                split=False,
+                text_index=5
+            ))
+
+        expected_text_id = 'txt:test-doc-1234567890-5-0'
+        self.assertEqual(result[0].text_id, expected_text_id)
+
+    def test_chunk_text_unit_all_chunks_empty_returns_empty(self):
+        """Test that if all chunks are empty, no chunks are returned."""
+        with patch.object(self.chunker, '_split_text') as mock_split:
+            mock_split.return_value = ["", "   ",
+                                       "\t\n"]  # All empty/whitespace
+
+            result = list(self.chunker.chunk_text_unit(
+                unit=self.base_unit,
+                chunk_size=100,
+                overlap=10,
+                split=True,
+                text_index=0
+            ))
+
+        self.assertEqual(len(result), 0)
+
+    def test_chunk_text_unit_passes_min_chunk_size(self):
+        """Test that min_chunk_size is passed to _split_text."""
+        with patch.object(self.chunker, '_split_text') as mock_split:
+            mock_split.return_value = ["Test chunk"]
+
+            list(self.chunker.chunk_text_unit(
+                unit=self.base_unit,
+                chunk_size=100,
+                overlap=10,
+                min_chunk_size=25,
+                split=True,
+                text_index=0
+            ))
+
+            mock_split.assert_called_once_with(
+                text=self.base_unit.text,
+                chunk_size=100,
+                overlap=10,
+                min_chunk_size=25
+            )
 
 
 class TestRAGManager(unittest.TestCase):
@@ -289,26 +675,6 @@ class TestRAGManager(unittest.TestCase):
 
         with self.assertRaises(ValidationError):
             manager.add_text("   \n\t   ")
-
-    # def test_add_text_with_base_id(self):
-    #     """Test adding text with custom base_id."""
-    #     manager = RAGManager(self.config, self.mock_ragstore,
-    #                          tokenizer=self.mock_tokenizer)
-    #     text = "Test text"
-    #     base_id = "custom-base"
-    #
-    #     self.mock_tokenizer.encode.return_value = list(range(50))
-    #     self.mock_tokenizer.decode.return_value = text
-    #
-    #     manager.add_text(text, base_id=base_id)
-    #
-    #     call_args = self.mock_ragstore.store_texts.call_args
-    #     [stored_textunit] = call_args[0][0]
-    #
-    #     self.assertEqual(stored_textunit.parent_id, base_id)
-    #     self.assertEqual(stored_textunit.text, text)
-    #     self.assertEqual(stored_textunit.chunk_position, 0)
-    #     self.assertEqual(stored_textunit.text_id, 'txt:custom-base-0-0')
 
     def test_add_text_custom_chunk_params(self):
         """Test adding text with custom chunk size and overlap."""
@@ -614,39 +980,6 @@ class TestRAGManager(unittest.TestCase):
             stored_unit = call[0][0]
             self.assertEqual(stored_unit.text_id, expected_ids[i])
 
-    # def test_add_texts_text_id_with_base_id_hierarchical(self):
-    #     """Test hierarchical text_id generation when base_id is provided."""
-    #     manager = RAGManager(self.config, self.mock_ragstore,
-    #                          tokenizer=self.mock_tokenizer)
-    #
-    #     texts = ["First text", "Second text"]
-    #     base_id = "batch-123"
-    #
-    #     # Mock tokenizer to create multiple chunks per text
-    #     self.mock_tokenizer.encode.return_value = list(range(150))
-    #     self.mock_tokenizer.decode.side_effect = [
-    #         "First chunk of first text",
-    #         "Second chunk of first text",
-    #         "First chunk of second text",
-    #         "Second chunk of second text"
-    #     ]
-    #
-    #     result = manager.add_texts(texts, base_id=base_id)
-    #
-    #     # Verify hierarchical text_ids: txt:base_id-text_index-chunk_position
-    #     call_args_list = self.mock_ragstore.store_text.call_args_list
-    #     expected_ids = [
-    #         'txt:batch-123-0-0',  # First text, first chunk
-    #         'txt:batch-123-0-1',  # First text, second chunk
-    #         'txt:batch-123-1-0',  # Second text, first chunk
-    #         'txt:batch-123-1-1'  # Second text, second chunk
-    #     ]
-    #
-    #     for i, call in enumerate(call_args_list):
-    #         stored_unit = call[0][0]
-    #         self.assertEqual(stored_unit.text_id, expected_ids[i])
-    #         self.assertEqual(stored_unit.parent_id, base_id)
-
     def test_add_texts_all_chunks_empty_raises_error(self):
         """Test that DataError is raised when all chunks are empty."""
         manager = RAGManager(self.config, self.mock_ragstore,
@@ -802,8 +1135,6 @@ class TestRAGManager(unittest.TestCase):
             source="test",
             distance=0.0
         )
-
-
 
         with patch('ragl.textunit._LOG') as mock_log:
             with self.assertRaises(ValidationError) as cm:
@@ -1042,44 +1373,51 @@ class TestRAGManager(unittest.TestCase):
         self.mock_ragstore.store_texts.assert_called_once()
 
     def test_add_text_skips_empty_chunks_from_get_chunks(self):
-        """Test that empty chunks returned by _get_chunks are properly skipped."""
+        """Test that empty chunks returned by chunker are properly skipped."""
         manager = RAGManager(self.config, self.mock_ragstore,
                              tokenizer=self.mock_tokenizer)
 
         text = "Text that will produce some empty chunks"
 
-        # Mock _get_chunks to return a mix of valid and empty chunks
-        with patch.object(manager, '_get_chunks') as mock_get_chunks:
-            mock_get_chunks.return_value = [
-                "Valid chunk 1",
-                "",  # Empty chunk - should be skipped
-                "Valid chunk 2",
-                "   ",  # Whitespace only - should be skipped
-                "Valid chunk 3",
-                "\n\t\r",  # Whitespace only - should be skipped
-            ]
+        # Mock TextUnitChunker class to simulate empty chunk filtering
+        with patch('ragl.manager.TextUnitChunker') as mock_chunker_class:
+            mock_chunker_instance = Mock()
+            mock_chunker_class.return_value = mock_chunker_instance
 
-            # Mock store_texts to return what we pass to it
-            self.mock_ragstore.store_texts.side_effect = lambda x: x
+            # Simulate the chunker's actual behavior - it filters out empty chunks
+            # and only yields valid ones (mimics the chunker's internal filtering)
+            def mock_chunk_generator(*args, **kwargs):
+                # Only yield valid chunks (empty ones are filtered internally)
+                yield TextUnit(text="Valid chunk 1", parent_id="doc",
+                               text_id="txt:doc-1-0-0")
+                yield TextUnit(text="Valid chunk 2", parent_id="doc",
+                               text_id="txt:doc-1-0-3")
+
+            mock_chunker_instance.chunk_text_unit.return_value = mock_chunk_generator()
+
+            # Mock ragstore to accept and return units
+            self.mock_ragstore.store_texts.return_value = [
+                TextUnit(text="Valid chunk 1", parent_id="doc",
+                         text_id="txt:doc-1-0-0"),
+                TextUnit(text="Valid chunk 2", parent_id="doc",
+                         text_id="txt:doc-1-0-3")
+            ]
 
             result = manager.add_text(text)
 
-            # Should only have 3 valid chunks, empty ones skipped
-            self.assertEqual(len(result), 3)
+            # Should only have valid chunks (empty ones filtered out by chunker)
+            self.assertEqual(len(result), 2)
+            stored_texts = [unit.text for unit in result]
+            self.assertEqual(stored_texts, ["Valid chunk 1", "Valid chunk 2"])
 
             # Verify store_texts was called with only valid chunks
-            call_args = self.mock_ragstore.store_texts.call_args[0][0]
-            self.assertEqual(len(call_args), 3)
+            store_call_args = self.mock_ragstore.store_texts.call_args[0][0]
+            stored_chunk_texts = [unit.text for unit in store_call_args]
+            self.assertEqual(stored_chunk_texts,
+                             ["Valid chunk 1", "Valid chunk 2"])
 
-            # Verify the text content of stored chunks
-            stored_texts = [unit.text for unit in call_args]
-            expected_texts = ["Valid chunk 1", "Valid chunk 2",
-                              "Valid chunk 3"]
-            self.assertEqual(stored_texts, expected_texts)
-
-            # Verify chunk positions are still sequential (0, 1, 2) despite skipped chunks
-            stored_positions = [unit.chunk_position for unit in call_args]
-            self.assertEqual(stored_positions, [0, 2, 4])
+            # Verify chunker was called
+            mock_chunker_instance.chunk_text_unit.assert_called_once()
 
     @patch('ragl.manager._LOG')
     def test_delete_texts_success(self, mock_log):
@@ -1562,91 +1900,6 @@ class TestRAGManager(unittest.TestCase):
         mock_log.debug.assert_called_with('Recording failed operation')
 
     @patch('ragl.manager._LOG')
-    def test_format_context(self, mock_log):
-        """Test formatting context from text chunks."""
-        text_units = [
-            TextUnit(text_id="1", text="First chunk", source="test", distance=0.00),
-            TextUnit(text_id="2", text="Second chunk", source="test", distance=0.01),
-        ]
-
-        result = RAGManager._format_context(text_units)
-
-        expected = "First chunk\n\nSecond chunk"
-        self.assertEqual(result, expected)
-        mock_log.debug.assert_called_with('Formatting chunks')
-
-    def test_format_context_custom_separator(self):
-        """Test formatting context with custom separator."""
-        text_units = [
-            TextUnit(text_id="1", text="First chunk", source="test", distance=0.00),
-            TextUnit(text_id="2", text="Second chunk", source="test", distance=0.01),
-        ]
-
-        result = RAGManager._format_context(text_units, separator=" | ")
-
-        expected = "First chunk | Second chunk"
-        self.assertEqual(result, expected)
-
-    @patch('ragl.manager._LOG')
-    def test_get_chunks_with_split(self, mock_log):
-        """Test getting chunks with splitting enabled."""
-        manager = RAGManager(self.config, self.mock_ragstore,
-                             tokenizer=self.mock_tokenizer)
-        text = "Test text to split"
-
-        # Mock tokenizer to return more tokens than chunk_size to force splitting
-        self.mock_tokenizer.encode.return_value = list(
-            range(150))  # More than chunk_size
-
-        # Mock _split_text method
-        with patch.object(manager, '_split_text',
-                          return_value=['chunk1', 'chunk2']) as mock_split:
-            result = manager._get_chunks(text, 100, 20, True)
-
-        self.assertEqual(result, ['chunk1', 'chunk2'])
-        mock_split.assert_called_once_with(text, 100, 20)
-        mock_log.debug.assert_called_with('Getting chunks')
-
-    def test_get_chunks_without_split_string(self):
-        """Test getting chunks without splitting for string input."""
-        manager = RAGManager(self.config, self.mock_ragstore,
-                             tokenizer=self.mock_tokenizer)
-        text = "Test text no split"
-
-        result = manager._get_chunks(text, 100, 20, False)
-
-        self.assertEqual(result, [text])
-
-    def test_get_chunks_without_split_textunit(self):
-        """Test getting chunks without splitting for TextUnit input."""
-        manager = RAGManager(self.config, self.mock_ragstore,
-                             tokenizer=self.mock_tokenizer)
-        text_unit = TextUnit(text_id="test", text="Test text no split",
-                             source="test", distance=0.1)
-
-        result = manager._get_chunks(text_unit, 100, 20, False)
-
-        self.assertEqual(result, [text_unit.text])
-
-    def test_get_chunks_with_split_textunit(self):
-        """Test getting chunks with splitting for TextUnit input."""
-        manager = RAGManager(self.config, self.mock_ragstore,
-                             tokenizer=self.mock_tokenizer)
-        text_unit = TextUnit(text_id="test", text="Test text to split",
-                             source="test", distance=0.1)
-
-        # Mock tokenizer to return more tokens than chunk_size to force splitting
-        self.mock_tokenizer.encode.return_value = list(
-            range(150))  # More than chunk_size
-
-        with patch.object(manager, '_split_text',
-                          return_value=['chunk1', 'chunk2']) as mock_split:
-            result = manager._get_chunks(text_unit, 100, 20, True)
-
-        self.assertEqual(result, ['chunk1', 'chunk2'])
-        mock_split.assert_called_once_with(text_unit.text, 100, 20)
-
-    @patch('ragl.manager._LOG')
     def test_sanitize_text_input_normal(self, mock_log):
         """Test sanitizing normal text input."""
         manager = RAGManager(self.config, self.mock_ragstore,
@@ -1685,71 +1938,6 @@ class TestRAGManager(unittest.TestCase):
         expected = "Text with alert('xss') dangerous chars!"
         self.assertEqual(result, expected)
 
-    @patch('ragl.manager._LOG')
-    def test_split_text_last_chunk_too_small(self, mock_log):
-        """Test splitting text where last chunk gets merged."""
-        manager = RAGManager(self.config, self.mock_ragstore,
-                             tokenizer=self.mock_tokenizer)
-        text = (
-                         "Artificial Intelligence (AI) is a broad field encompassing various techniques. "
-                         "Machine Learning (ML) is a subset of AI that focuses on training models with data. "
-                         "Deep Learning (DL), a further subset, uses neural networks with many layers."
-                     ) * 2
-
-        encode_calls = [
-            list(range(64)),
-            list(range(10))
-        ]
-        self.mock_tokenizer.encode.side_effect = encode_calls
-
-        decode_calls = [
-            "First chunk content",
-            "Small last chunk"
-        ]
-        self.mock_tokenizer.decode.side_effect = decode_calls
-
-        result = manager._split_text(text, chunk_size=64, overlap=32)
-
-        self.assertEqual(len(result), 1)
-        self.assertIn("First chunk content", result[0])
-        self.assertIn("Small last chunk", result[0])
-        mock_log.debug.assert_called_with('Merging last chunk due to short length')
-
-    @patch('ragl.manager._LOG')
-    def test_split_text(self, mock_log):
-        """Test splitting text into chunks."""
-        manager = RAGManager(self.config, self.mock_ragstore,
-                             tokenizer=self.mock_tokenizer)
-        text = "This is a test text to split"
-
-        # Mock tokenizer behavior
-        tokens = list(range(220))  # 220 tokens
-        self.mock_tokenizer.encode.return_value = tokens
-
-        result = manager._split_text(text, chunk_size=100, overlap=25)
-
-        # Should create 3 chunks: 0-100, 80-180, 160-220
-        self.assertEqual(len(result), 3)
-        self.assertEqual(self.mock_tokenizer.decode.call_count, 3)
-        mock_log.debug.assert_called_with('Splitting text')
-
-    def test_split_text_empty_chunks_filtered(self):
-        """Test that empty chunks are filtered out during splitting."""
-        manager = RAGManager(self.config, self.mock_ragstore,
-                             tokenizer=self.mock_tokenizer)
-        text = "Test text"
-
-        # Mock tokenizer to return some empty decoded chunks
-        tokens = list(range(100))
-        self.mock_tokenizer.encode.return_value = tokens
-        self.mock_tokenizer.decode.side_effect = lambda \
-            x: "valid chunk" if len(x) > 50 else "   "
-
-        result = manager._split_text(text, chunk_size=60, overlap=10)
-
-        # Only non-empty chunks should be included
-        self.assertTrue(all(chunk.strip() for chunk in result))
-
     def test_add_text_filters_empty_chunks(self):
         """Test that empty chunks are filtered out in add_text."""
         manager = RAGManager(self.config, self.mock_ragstore,
@@ -1776,137 +1964,6 @@ class TestRAGManager(unittest.TestCase):
 
         # Verify store_text was called only once (for the valid chunk)
         self.assertEqual(self.mock_ragstore.store_texts.call_count, 1)
-
-    def test_split_text_filters_whitespace_chunks(self):
-        """Test that whitespace-only chunks are filtered out during splitting."""
-        manager = RAGManager(self.config, self.mock_ragstore,
-                             tokenizer=self.mock_tokenizer)
-        text = "Test text with whitespace chunks"
-
-        # Mock tokenizer to return tokens that will create chunks
-        self.mock_tokenizer.encode.return_value = list(
-            range(100))  # Reduced to 100 tokens
-
-        # Mock decode to return mix of valid and whitespace-only chunks
-        # With chunk_size=30, overlap=5, step=25, and 100 tokens:
-        # Iterations: [0, 25, 50, 75] = 4 chunks
-        self.mock_tokenizer.decode.side_effect = [
-            "Valid chunk 1",
-            "   ",  # whitespace only
-            "Valid chunk 2",
-            "\n\t\r",  # whitespace only
-        ]
-
-        result = manager._split_text(text, chunk_size=30, overlap=5)
-
-        # Only non-whitespace chunks should be included
-        self.assertEqual(len(result), 2)
-        self.assertEqual(result[0], "Valid chunk 1")
-        self.assertEqual(result[1], "Valid chunk 2")
-
-        # Verify all returned chunks are non-empty after stripping
-        self.assertTrue(all(chunk.strip() for chunk in result))
-
-    @patch('time.time')
-    @patch('ragl.manager._LOG')
-    def test_store_chunk(self, mock_log, mock_time):
-        """Test storing a single chunk."""
-        manager = RAGManager(self.config, self.mock_ragstore,
-                             tokenizer=self.mock_tokenizer)
-
-        mock_time.return_value = 12345
-
-        chunk = "Test chunk text"
-        base_data = {
-            'source':     'test',
-            'timestamp':  12345,
-            'tags':       ['test'],
-            'confidence': 0.8,
-            'language':   'en',
-            'section':    'intro',
-            'author':     'test_author',
-            'parent_id':  'parent-1',
-        }
-        text_id = "text-id-1"
-
-        result = manager._store_chunk(
-            chunk=chunk,
-            base_data=base_data,
-            text_id=text_id,
-            i=0,
-            parent_id="parent-1"
-        )
-
-        self.assertIsInstance(result, TextUnit)
-        self.assertEqual(result.text, chunk)
-        self.assertEqual(result.text_id, 'text-id-1')  # Mocked return value
-        self.assertEqual(result.chunk_position, 0)
-        self.assertEqual(result.parent_id, "parent-1")
-
-        # Verify ragstore.store_text was called correctly - now with TextUnit
-        self.mock_ragstore.store_text.assert_called_once()
-        call_args = self.mock_ragstore.store_text.call_args
-        stored_textunit = call_args[0][0]  # First positional argument
-
-        self.assertIsInstance(stored_textunit, TextUnit)
-        self.assertEqual(stored_textunit.text, chunk)
-        self.assertEqual(stored_textunit.text_id, text_id)
-        self.assertEqual(stored_textunit.chunk_position, 0)
-        self.assertEqual(stored_textunit.parent_id, "parent-1")
-
-    @patch('time.time')
-    @patch('ragl.manager._LOG')
-    def test_prepare_base_data_textunit(self, mock_log, mock_time):
-        """Test preparing base data from TextUnit."""
-        manager = RAGManager(self.config, self.mock_ragstore,
-                             tokenizer=self.mock_tokenizer)
-
-        text_unit = TextUnit(
-            text_id="test-id",
-            text="Test text",
-            source="test_source",
-            timestamp=54321,
-            tags=["tag1", "tag2"],
-            confidence=0.9,
-            language="en",
-            section="chapter1",
-            author="test_author",
-            parent_id="original_parent",
-            distance=0.01
-        )
-
-        result = manager._prepare_base_data(text_unit, "new_parent")
-
-        # Should return the TextUnit's dict representation
-        expected = text_unit.to_dict()
-        self.assertEqual(result, expected)
-        mock_log.debug.assert_called_with('Preparing base metadata')
-
-    @patch('time.time')
-    @patch('ragl.manager._LOG')
-    def test_prepare_base_data_string(self, mock_log, mock_time):
-        """Test preparing base data from string."""
-        manager = RAGManager(self.config, self.mock_ragstore,
-                             tokenizer=self.mock_tokenizer)
-
-        mock_time.return_value = 98765
-        text = "Test text string"
-        parent_id = "parent-123"
-
-        result = manager._prepare_base_data(text, parent_id)
-
-        expected = {
-            'source':     'unknown',
-            'timestamp':  98765,
-            'tags':       [],
-            'confidence': None,
-            'language':   'unknown',
-            'section':    'unknown',
-            'author':     'unknown',
-            'parent_id':  parent_id,
-        }
-        self.assertEqual(result, expected)
-        mock_log.debug.assert_called_with('Preparing base metadata')
 
     @patch('ragl.manager._LOG')
     def test_validate_chunking_valid(self, mock_log):

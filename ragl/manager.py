@@ -41,7 +41,7 @@ from ragl.tokenizer import TiktokenTokenizer
 __all__ = (
     'RAGManager',
     'RAGTelemetry',
-    'TextChunker',
+    'TextUnitChunker',
 )
 
 
@@ -192,13 +192,13 @@ class RAGTelemetry:
         }
 
 
-class TextChunker:
+class TextUnitChunker:
     # pylint: disable=too-few-public-methods
 
     def __init__(self, tokenizer: TokenizerProtocol):
         self.tokenizer = tokenizer
 
-    def chunk_text_unit(
+    def chunk_text_unit(  # todo move params to __init__
             self,
             *,
             unit: TextUnit,
@@ -336,8 +336,6 @@ class RAGManager:
         _metrics:
             Dictionary of operation names to RAGTelemetry instances
             for performance tracking.
-        _chunker:
-            TextChunker instance for splitting text into chunks.
     """
 
     DEFAULT_PARENT_ID: ClassVar[str] = 'doc'
@@ -351,7 +349,6 @@ class RAGManager:
     min_chunk_size: int | None
     paranoid: bool
     _metrics: dict[str, RAGTelemetry]
-    _chunker: TextChunker
 
     def __init__(
             self,
@@ -394,7 +391,6 @@ class RAGManager:
         self.min_chunk_size = config.min_chunk_size
         self.paranoid = config.paranoid
         self._metrics = defaultdict(RAGTelemetry)
-        self._chunker = TextChunker(self.tokenizer)
 
     def add_text(
             self,
@@ -500,7 +496,7 @@ class RAGManager:
 
                 elif isinstance(item, TextUnit):
                     # Create a copy to avoid modifying the original
-                    unit = TextUnit(
+                    unit = TextUnit(  # todo do we need this?
                         text=self._sanitize_text(item.text),
                         text_id=item.text_id,
                         parent_id=item.parent_id or self.DEFAULT_PARENT_ID,
@@ -520,7 +516,8 @@ class RAGManager:
                     _LOG.error(msg)
                     raise ValidationError(msg)
 
-                chunk_units = self._chunker.chunk_text_unit(
+                chunker = TextUnitChunker(self.tokenizer)
+                chunk_units = chunker.chunk_text_unit(
                     unit=unit,
                     chunk_size=effective_chunk_size,
                     overlap=effective_overlap,
@@ -531,33 +528,6 @@ class RAGManager:
                 )
 
                 text_units_to_store.extend(chunk_units)
-
-                # chunks = self._get_chunks(unit, effective_chunk_size,   # todo
-                #                           effective_overlap, split)
-                #
-                # parent_id = unit.parent_id
-                # base_data = unit.to_dict()
-                #
-                # # Create TextUnit objects for each chunk
-                # for chunk_position, chunk in enumerate(chunks):
-                #
-                #     # Skip empty chunks
-                #     if not chunk.strip():
-                #         continue
-                #
-                #     text_id = (f'{TEXT_ID_PREFIX}{parent_id}-{batch_timestamp}'
-                #                f'-{text_index}-{chunk_position}')
-                #
-                #     # Create TextUnit and add to list
-                #     chunk_data = base_data.copy()
-                #     chunk_data.update({
-                #         'text_id':        text_id,
-                #         'text':           chunk,
-                #         'chunk_position': chunk_position,
-                #         'distance':       0.0,
-                #     })
-                #     text_unit = TextUnit.from_dict(chunk_data)
-                #     text_units_to_store.append(text_unit)
 
             if not text_units_to_store:
                 msg = 'No valid chunks stored'
@@ -781,10 +751,7 @@ class RAGManager:
         _LOG.info('Metrics reset')
 
     @contextmanager
-    def track_operation(
-            self,
-            operation_name: str,
-    ) -> Iterator[None]:
+    def track_operation(self, operation_name: str) -> Iterator[None]:
         """
         Return a context manager which tracks RAG performance metrics.
 
@@ -814,70 +781,6 @@ class RAGManager:
             _LOG.critical('Operation failed: %s (%.3fs) - %s', operation_name,
                           duration, e)
             raise
-
-    # @staticmethod  # todo dead code
-    # def _format_context(
-    #         chunks: list[TextUnit],
-    #         separator: str = '\n\n',
-    # ) -> str:
-    #     """
-    #     Format text chunks into a string.
-    #
-    #     Formats a list of TextUnit instances into a single string
-    #     with a specified separator between chunks. This is useful
-    #     for preparing context for queries or responses.
-    #
-    #     Args:
-    #         chunks:
-    #             List of TextUnit instances.
-    #         separator:
-    #             Separator between chunks.
-    #
-    #     Returns:
-    #         Formatted context string.
-    #     """
-    #     _LOG.debug('Formatting chunks')
-    #     return separator.join(str(chunk) for chunk in chunks)
-
-    # def _get_chunks( . # todo
-    #         self,
-    #         text_or_doc: str | TextUnit,
-    #         cs: int,
-    #         ov: int,
-    #         split: bool,
-    # ) -> list[str]:
-    #     """
-    #     Get text chunks based on split option.
-    #
-    #     Args:
-    #         text_or_doc:
-    #             Text or TextUnit to chunk.
-    #         cs:
-    #             Chunk size.
-    #         ov:
-    #             Overlap size.
-    #         split:
-    #             Whether to split the text.
-    #
-    #     Returns:
-    #         List of text chunks.
-    #     """
-    #     _LOG.debug('Getting chunks')
-    #     if split:
-    #         if isinstance(text_or_doc, TextUnit):
-    #             text = text_or_doc.text
-    #         else:
-    #             text = text_or_doc
-    #
-    #         # Only split if text is long enough to warrant chunking
-    #         tokens = self.tokenizer.encode(text)
-    #         if len(tokens) <= cs:
-    #             return [text]
-    #         return self._split_text(text, cs, ov)
-    #
-    #     if isinstance(text_or_doc, TextUnit):
-    #         return [text_or_doc.text]
-    #     return [text_or_doc]
 
     def _sanitize_text(self, text: str) -> str:
         """
@@ -909,153 +812,8 @@ class RAGManager:
 
         return text
 
-    # def _split_text( . # todo
-    #         self,
-    #         text: str,
-    #         chunk_size: int,
-    #         overlap: int,
-    # ) -> list[str]:
-    #     """
-    #     Split text into chunks.
-    #
-    #     Splits the input text into smaller chunks of specified size
-    #     with a defined overlap. This is useful for processing large
-    #     texts in manageable pieces for storage and retrieval.
-    #
-    #     Args:
-    #         text:
-    #             Text to split.
-    #         chunk_size:
-    #             Size of each chunk.
-    #         overlap:
-    #             Overlap between chunks.
-    #
-    #     Returns:
-    #         List of text chunks.
-    #     """
-    #     _LOG.debug('Splitting text')
-    #
-    #     # tokens = self.tokenizer.encode(text) # todo
-    #     # chunks = []
-    #     # step = chunk_size - overlap
-    #     # for i in range(0, len(tokens), step):
-    #     #     chunk_tokens = tokens[i:min(i + chunk_size, len(tokens))]
-    #     #     chunk_text = self.tokenizer.decode(chunk_tokens)
-    #     #
-    #     #     if chunk_text.strip():
-    #     #         chunks.append(chunk_text)
-    #     #
-    #     # return chunks
-    #
-    #     min_chunk_size = (
-    #         self.min_chunk_size
-    #         if self.min_chunk_size is not None
-    #         else overlap // 2
-    #     )
-    #     tokens = self.tokenizer.encode(text)
-    #     chunks = []
-    #     step = chunk_size - overlap
-    #
-    #     for i in range(0, len(tokens), step):
-    #         chunk_tokens = tokens[i:min(i + chunk_size, len(tokens))]
-    #         chunk_text = self.tokenizer.decode(chunk_tokens).strip()
-    #         if chunk_text:
-    #             chunks.append(chunk_text)
-    #
-    #     # Merge the last chunk if it's too short
-    #     if len(chunks) > 1:
-    #         last_tokens = self.tokenizer.encode(chunks[-1])
-    #         if len(last_tokens) < min_chunk_size:
-    #             _LOG.debug('Merging last chunk due to short length')
-    #             chunks[-2] += ' ' + chunks[-1]
-    #             chunks.pop()
-    #
-    #     return chunks
-
-    # def _store_chunk(  # todo dead code
-    #         self,
-    #         *,
-    #         chunk: str,
-    #         base_data: dict[str, Any],
-    #         text_id: str,
-    #         i: int,
-    #         parent_id: str,
-    # ) -> TextUnit:
-    #     # pylint: disable=too-many-arguments
-    #     """
-    #     Store a single text chunk.
-    #
-    #     Stores a text chunk with metadata in the ragstore.
-    #
-    #     Args:
-    #         chunk:
-    #             Text chunk to store.
-    #         base_data:
-    #             Base metadata dict.
-    #         text_id:
-    #             ID for the chunk.
-    #         i:
-    #             Position of the chunk.
-    #         parent_id:
-    #             ID of parent document.
-    #
-    #     Returns:
-    #         Stored TextUnit instance.
-    #     """
-    #     _LOG.debug('Storing chunk')
-    #     chunk_data = base_data.copy()
-    #     chunk_data.update({
-    #         'text_id':        text_id,
-    #         'text':           chunk,
-    #         'chunk_position': i,
-    #         'parent_id':      parent_id,
-    #         'distance':       0.0,
-    #     })
-    #
-    #     text_unit = TextUnit.from_dict(chunk_data)
-    #     return self.ragstore.store_text(text_unit)
-
-    # @staticmethod  # todo dead code
-    # def _prepare_base_data(
-    #         text_or_doc: str | TextUnit,
-    #         parent_id: str,
-    # ) -> dict[str, Any]:
-    #     """
-    #     Prepare base metadata for store.
-    #
-    #     Creates a base metadata dictionary for a text or TextUnit,
-    #     including source, timestamp, tags, and other fields.
-    #
-    #
-    #     Args:
-    #         text_or_doc:
-    #             Text or TextUnit to process.
-    #         parent_id:
-    #             ID of parent document.
-    #
-    #     Returns:
-    #         Base metadata dict.
-    #     """
-    #     _LOG.debug('Preparing base metadata')
-    #     if isinstance(text_or_doc, TextUnit):
-    #         return text_or_doc.to_dict()
-    #
-    #     return {
-    #         'source':           'unknown',
-    #         'timestamp':        int(time.time()),
-    #         'tags':             [],
-    #         'confidence':       None,
-    #         'language':         'unknown',
-    #         'section':          'unknown',
-    #         'author':           'unknown',
-    #         'parent_id':        parent_id,
-    #     }
-
     @staticmethod
-    def _validate_chunking(
-            chunk_size: int,
-            overlap: int,
-    ) -> None:
+    def _validate_chunking(chunk_size: int, overlap: int) -> None:
         """
         Validate chunk size and overlap.
 
