@@ -10,6 +10,8 @@ Classes:
         Performance monitoring and metrics collection
     RAGManager:
         Main class for managing RAG operations
+    TextUnitChunker:
+        Utility for chunking TextUnit instances
 
 Features:
     - Text chunking with configurable size and overlap
@@ -194,30 +196,76 @@ class RAGTelemetry:
 
 class TextUnitChunker:
     # pylint: disable=too-few-public-methods
+    """
+    Chunk a TextUnit into smaller pieces.
 
-    def __init__(self, tokenizer: TokenizerProtocol):
-        self.tokenizer = tokenizer
+    This class handles the splitting of a TextUnit's text payload
+    into smaller TextUnit instances based on specified chunk size
+    and overlap.
+    """
 
-    def chunk_text_unit(  # todo move params to __init__
+    def __init__(
             self,
             *,
-            unit: TextUnit,
+            tokenizer: TokenizerProtocol,
             chunk_size: int,
             overlap: int,
             min_chunk_size: int | None = None,
             split: bool = True,
             batch_timestamp: int | None = None,
             text_index: int = 0,
-    ) -> Iterator[TextUnit]:
+    ):
         # pylint: disable=too-many-arguments
-        # pylint: disable=too-many-locals
+        """
+        Initialize the TextUnitChunker.
 
-        timestamp = batch_timestamp or int(time.time_ns() // 1000)
+        Args:
+            tokenizer:
+                Tokenizer for text splitting.
+            chunk_size:
+                Size of text chunks.
+            overlap:
+                Overlap between chunks.
+            min_chunk_size:
+                Minimum size of a chunk, if specified.
+            split:
+                Whether to split the text into chunks.
+            batch_timestamp:
+                Timestamp for the batch, used in text_id generation.
+            text_index:
+                Index of the text in the batch, used in text_id generation.
+        """
+        self.tokenizer = tokenizer
+        self.chunk_size = chunk_size
+        self.overlap = overlap
+        self.min_chunk_size = min_chunk_size
+        self.split = split
+        self.timestamp = batch_timestamp or int(time.time_ns() // 1000)
+        self.text_index = text_index
 
-        if not split:
+    def chunk_text_unit(self, unit: TextUnit) -> Iterator[TextUnit]:
+        """
+        Chunk a TextUnit into smaller TextUnits.
+
+        If self.split is False, yields the original TextUnit with
+        updated text_id and chunk_position set to 0.
+
+        If self.split is True, splits the text of the given TextUnit
+        into smaller chunks based on the specified chunk size and overlap.
+        Each chunk is yielded as a new TextUnit instance with updated
+        metadata.
+
+        Args:
+            unit:
+                TextUnit to chunk.
+
+        Yields:
+            Chunked TextUnit instances.
+        """
+        if not self.split:
             # Create a copy with proper chunk_position and text_id
-            text_id = (f'{TEXT_ID_PREFIX}{unit.parent_id}-{timestamp}'
-                       f'-{text_index}-0')
+            text_id = (f'{TEXT_ID_PREFIX}{unit.parent_id}-'
+                       f'{self.timestamp}-{self.text_index}-0')
             unit_data = unit.to_dict()
             unit_data.update({
                 'text_id':        text_id,
@@ -229,18 +277,19 @@ class TextUnitChunker:
             return
 
         chunks = self._split_text(
+            tokenizer=self.tokenizer,
             text=unit.text,
-            chunk_size=chunk_size,
-            overlap=overlap,
-            min_chunk_size=min_chunk_size,
+            chunk_size=self.chunk_size,
+            overlap=self.overlap,
+            min_chunk_size=self.min_chunk_size,
         )
         base_data = unit.to_dict()
         for chunk_position, chunk in enumerate(chunks):
             if not chunk.strip():
                 continue
 
-            text_id = (f'{TEXT_ID_PREFIX}{unit.parent_id}-{timestamp}'
-                       f'-{text_index}-{chunk_position}')
+            text_id = (f'{TEXT_ID_PREFIX}{unit.parent_id}-'
+                       f'{self.timestamp}-{self.text_index}-{chunk_position}')
             chunk_data = base_data.copy()
             chunk_data.update({
                 'text_id':        text_id,
@@ -251,15 +300,32 @@ class TextUnitChunker:
 
             yield TextUnit.from_dict(chunk_data)
 
+    @staticmethod
     def _split_text(
-            self,
+            *,
+            tokenizer: TokenizerProtocol,
             text: str,
             chunk_size: int,
             overlap: int,
             min_chunk_size: int | None = None,
     ) -> list[str]:
+        """
+        Split text into chunks based on chunk size and overlap.
+
+        Args:
+            tokenizer:
+                Tokenizer for text splitting.
+            text:
+                Text to split.
+            chunk_size:
+                Size of text chunks.
+            overlap:
+                Overlap between chunks.
+            min_chunk_size:
+                Minimum size of a chunk, if specified.
+        """
         min_chunk_size = min_chunk_size or overlap // 2
-        tokens = self.tokenizer.encode(text)
+        tokens = tokenizer.encode(text)
 
         # If text is shorter than chunk size, return as single chunk
         if len(tokens) <= chunk_size:
@@ -270,13 +336,13 @@ class TextUnitChunker:
 
         for i in range(0, len(tokens), step):
             chunk_tokens = tokens[i:min(i + chunk_size, len(tokens))]
-            chunk_text = self.tokenizer.decode(chunk_tokens).strip()
+            chunk_text = tokenizer.decode(chunk_tokens).strip()
             if chunk_text:
                 chunks.append(chunk_text)
 
         # Merge the last chunk if it's too short
         if len(chunks) > 1:
-            last_tokens = self.tokenizer.encode(chunks[-1])
+            last_tokens = tokenizer.encode(chunks[-1])
             if len(last_tokens) < min_chunk_size:
                 chunks[-2] += ' ' + chunks[-1]
                 chunks.pop()
@@ -496,7 +562,7 @@ class RAGManager:
 
                 elif isinstance(item, TextUnit):
                     # Create a copy to avoid modifying the original
-                    unit = TextUnit(  # todo do we need this?
+                    unit = TextUnit(
                         text=self._sanitize_text(item.text),
                         text_id=item.text_id,
                         parent_id=item.parent_id or self.DEFAULT_PARENT_ID,
@@ -516,9 +582,8 @@ class RAGManager:
                     _LOG.error(msg)
                     raise ValidationError(msg)
 
-                chunker = TextUnitChunker(self.tokenizer)
-                chunk_units = chunker.chunk_text_unit(
-                    unit=unit,
+                chunker = TextUnitChunker(
+                    tokenizer=self.tokenizer,
                     chunk_size=effective_chunk_size,
                     overlap=effective_overlap,
                     min_chunk_size=self.min_chunk_size,
@@ -526,8 +591,7 @@ class RAGManager:
                     batch_timestamp=batch_timestamp,
                     text_index=text_index,
                 )
-
-                text_units_to_store.extend(chunk_units)
+                text_units_to_store.extend(chunker.chunk_text_unit(unit))
 
             if not text_units_to_store:
                 msg = 'No valid chunks stored'

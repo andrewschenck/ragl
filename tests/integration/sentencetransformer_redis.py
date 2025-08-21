@@ -825,14 +825,16 @@ class TestRaglIntegration:
                 # Check that value has at most 4 decimal places
                 decimal_places = len(str(value).split('.')[-1]) if '.' in str(
                     value) else 0
-                assert decimal_places <= 4, f"{operation_name}.{field} has too many decimal places: {value}"
+                assert decimal_places <= 4, (f"{operation_name}.{field} has too many "
+                                             f"decimal places: {value}")
 
             # Check success_rate precision (should be rounded to 4 decimal places)
             success_rate = operation_metrics['success_rate']
             decimal_places = len(
                 str(success_rate).split('.')[-1]) if '.' in str(
                 success_rate) else 0
-            assert decimal_places <= 4, f"{operation_name}.success_rate has too many decimal places: {success_rate}"
+            assert decimal_places <= 4, (f"{operation_name}.success_rate has too "
+                                         f"many decimal places: {success_rate}")
 
             # Verify success_rate is between 0 and 1
             assert 0.0 <= success_rate <= 1.0
@@ -958,11 +960,17 @@ class TestRaglIntegration:
         """Test that add_texts properly chunks large texts."""
         large_texts = [
             (
-                    "Machine learning is a subset of artificial intelligence that enables computers to learn and improve from experience without being explicitly programmed. " * 10),
+                    "Machine learning is a subset of artificial intelligence that "
+                    "enables computers to learn and improve from experience without "
+                    "being explicitly programmed. " * 10),
             (
-                    "Data science is an interdisciplinary field that uses scientific methods, processes, algorithms and systems to extract knowledge and insights from data. " * 8),
+                    "Data science is an interdisciplinary field that uses scientific "
+                    "methods, processes, algorithms and systems to extract knowledge "
+                    "and insights from data. " * 8),
             (
-                    "Cloud computing delivers computing services over the internet to offer faster innovation, flexible resources, and economies of scale. " * 12)
+                    "Cloud computing delivers computing services over the internet to "
+                    "offer faster innovation, flexible resources, and "
+                    "economies of scale. " * 12)
         ]
 
         docs = self.manager.add_texts(
@@ -1093,7 +1101,8 @@ class TestRaglIntegration:
 
     def test_add_texts_custom_chunk_parameters(self):
         """Test add_texts with custom chunk size and overlap."""
-        text = "This is a moderately long text that will be chunked using custom parameters to test the flexibility of the add_texts method."
+        text = ("This is a moderately long text that will be chunked using custom "
+                "parameters to test the flexibility of the add_texts method.")
 
         docs = self.manager.add_texts(
             texts_or_units=[text],
@@ -1162,6 +1171,144 @@ class TestRaglIntegration:
         remaining_texts = self.manager.list_texts()
         for text_id in text_ids:
             assert text_id not in remaining_texts
+
+    def test_chunking_validation_with_token_verification(self):
+        """Test that chunking produces expected token counts and proper overlap."""
+        text = "Machine learning algorithms analyze patterns in data. " * 20
+
+        chunk_size = 30
+        overlap = 10
+
+        docs = self.manager.add_text(
+            text_or_unit=text,
+            chunk_size=chunk_size,
+            overlap=overlap
+        )
+
+        tokenizer = self.manager.tokenizer
+
+        # Verify each chunk respects token limits
+        for i, doc in enumerate(docs):
+            tokens = tokenizer.encode(doc.text)
+
+            # First chunk should be close to chunk_size
+            if i == 0:
+                assert len(tokens) <= chunk_size + 5  # Small tolerance
+
+            # Verify overlap between consecutive chunks
+            if i > 0:
+                prev_doc = docs[i - 1]
+                prev_tokens = tokenizer.encode(prev_doc.text)
+
+                # Check for actual text overlap (not just token count)
+                overlap_words = set(doc.text.split()) & set(
+                    prev_doc.text.split())
+                assert len(
+                    overlap_words) > 0, "No actual word overlap between chunks"
+
+    def test_semantic_retrieval_quality(self):
+        """Test that semantic retrieval returns truly relevant results."""
+        documents = [
+            "Python is a programming language used for web development",
+            "Machine learning models require large datasets for training",
+            "Cats are popular pets that require daily feeding",
+            "Neural networks are inspired by biological brain structures",
+            "Cooking pasta requires boiling water and proper timing"
+        ]
+
+        self.manager.add_texts(texts_or_units=documents)
+
+        # Test semantic similarity - should return ML/AI related docs
+        contexts = self.manager.get_context(
+            query="artificial intelligence and data science",
+            top_k=3
+        )
+
+        # Verify semantic relevance
+        relevant_docs = [ctx for ctx in contexts if any(
+            keyword in ctx.text.lower()
+            for keyword in ["machine", "learning", "neural", "data"]
+        )]
+
+        # Should find at least 2 ML-related documents
+        assert len(relevant_docs) >= 2
+
+        # Verify distance scores are reasonable
+        for ctx in contexts:
+            assert 0.0 <= ctx.distance <= 1.0
+
+        # More relevant docs should have lower distances
+        distances = [ctx.distance for ctx in contexts]
+        assert distances == sorted(
+            distances), "Results not sorted by relevance"
+
+    def test_chunk_boundary_semantic_preservation(self):
+        """Test that chunking preserves semantic coherence."""
+        # Text with clear semantic boundaries
+        text = (
+            "Introduction to Machine Learning. Machine learning is a subset of AI. "
+            "It enables computers to learn from data without explicit programming. "
+            "Chapter 2: Supervised Learning. Supervised learning uses labeled data. "
+            "The algorithm learns from input-output pairs. Common examples include "
+            "classification and regression tasks. Chapter 3: Unsupervised Learning. "
+            "Unsupervised learning finds patterns in unlabeled data."
+        )
+
+        docs = self.manager.add_text(
+            text_or_unit=text,
+            chunk_size=25,  # Force chunking
+            overlap=8
+        )
+
+        assert len(docs) > 1
+
+        # Test that related concepts can be retrieved together
+        contexts = self.manager.get_context(
+            query="supervised learning classification",
+            top_k=3
+        )
+
+        # Should retrieve chunks containing supervised learning content
+        supervised_chunks = [
+            ctx for ctx in contexts
+            if "supervised" in ctx.text.lower()
+        ]
+        assert len(supervised_chunks) >= 1
+
+    def test_distance_threshold_filtering(self):
+        """Test that very dissimilar documents have high distances."""
+        self.manager.add_texts([
+            "Machine learning algorithms for data analysis",
+            "Recipe for chocolate chip cookies"
+        ])
+
+        contexts = self.manager.get_context("artificial intelligence", top_k=2)
+
+        # ML document should have much lower distance than cookie recipe
+        ml_distance = min(ctx.distance for ctx in contexts
+                          if "machine" in ctx.text.lower())
+        cookie_distance = min(ctx.distance for ctx in contexts
+                              if "cookie" in ctx.text.lower())
+
+        assert ml_distance < cookie_distance
+
+    def test_chunk_overlap_content_preservation(self):
+        """Verify that overlapping chunks maintain context continuity."""
+        text = ("The machine learning model training process involves data "
+                "preprocessing, feature selection, model training, and "
+                "evaluation phases.")
+
+        docs = self.manager.add_text(text_or_unit=text, chunk_size=15,
+                                     overlap=5)
+
+        if len(docs) > 1:
+            # Check that consecutive chunks share meaningful content
+            for i in range(len(docs) - 1):
+                current_words = set(docs[i].text.lower().split())
+                next_words = set(docs[i + 1].text.lower().split())
+                shared_words = current_words & next_words
+                assert len(
+                    shared_words) > 0, "No word overlap between consecutive chunks"
 
 
 if __name__ == "__main__":

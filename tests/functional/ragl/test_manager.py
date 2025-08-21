@@ -136,7 +136,14 @@ class TestTextUnitChunker(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         self.mock_tokenizer = Mock(spec=TokenizerProtocol)
-        self.chunker = TextUnitChunker(self.mock_tokenizer)
+        self.chunker = TextUnitChunker(
+            tokenizer=self.mock_tokenizer,
+            chunk_size=100,
+            overlap=20,
+            min_chunk_size=25,
+            split=True,
+            text_index=0
+        )
 
         # Create a basic TextUnit for testing
         self.base_unit = TextUnit(
@@ -147,19 +154,27 @@ class TestTextUnitChunker(unittest.TestCase):
 
     def test_init_valid_tokenizer(self):
         """Test TextUnitChunker initialization with valid tokenizer."""
-        chunker = TextUnitChunker(self.mock_tokenizer)
+        chunker = TextUnitChunker(
+            tokenizer=self.mock_tokenizer,
+            chunk_size=100,
+            overlap=20
+        )
         self.assertEqual(chunker.tokenizer, self.mock_tokenizer)
+        self.assertEqual(chunker.chunk_size, 100)
+        self.assertEqual(chunker.overlap, 20)
 
     def test_chunk_text_unit_no_split_single_chunk(self):
         """Test chunking with split=False returns single chunk."""
-        with patch('time.time_ns', return_value=1000000000):
-            result = list(self.chunker.chunk_text_unit(
-                unit=self.base_unit,
-                chunk_size=100,
-                overlap=10,
-                split=False,
-                text_index=0
-            ))
+        chunker = TextUnitChunker(
+            tokenizer=self.mock_tokenizer,
+            chunk_size=100,
+            overlap=10,
+            split=False,
+            text_index=0,
+            batch_timestamp=1000000
+        )
+
+        result = list(chunker.chunk_text_unit(unit=self.base_unit))
 
         self.assertEqual(len(result), 1)
         chunk = result[0]
@@ -167,117 +182,106 @@ class TestTextUnitChunker(unittest.TestCase):
         self.assertEqual(chunk.parent_id, "test-doc")
         self.assertEqual(chunk.chunk_position, 0)
         self.assertEqual(chunk.distance, 0.0)
-        self.assertTrue(chunk.text_id.startswith(
-            'txt:test-doc-1000000-0-0'))  # Changed from 1 to 1000000
+        self.assertTrue(chunk.text_id.startswith('txt:test-doc-1000000-0-0'))
 
     def test_chunk_text_unit_no_split_with_custom_timestamp(self):
-        """Test chunking with split=False and custom batch_timestamp."""
-        custom_timestamp = 5000
-        result = list(self.chunker.chunk_text_unit(
-            unit=self.base_unit,
+        """Test chunking with custom timestamp."""
+        chunker = TextUnitChunker(
+            tokenizer=self.mock_tokenizer,
             chunk_size=100,
             overlap=10,
             split=False,
-            batch_timestamp=custom_timestamp,
-            text_index=2
-        ))
+            text_index=2,
+            batch_timestamp=9999999
+        )
+
+        result = list(chunker.chunk_text_unit(unit=self.base_unit))
 
         self.assertEqual(len(result), 1)
-        chunk = result[0]
-        expected_text_id = f'txt:test-doc-{custom_timestamp}-2-0'
-        self.assertEqual(chunk.text_id, expected_text_id)
+        expected_text_id = 'txt:test-doc-9999999-2-0'
+        self.assertEqual(result[0].text_id, expected_text_id)
 
     def test_chunk_text_unit_split_single_chunk_short_text(self):
-        """Test chunking with split=True but text shorter than chunk_size."""
-        # Mock tokenizer to return fewer tokens than chunk_size
+        """Test chunking short text that fits in single chunk."""
         self.mock_tokenizer.encode.return_value = list(range(50))
         self.mock_tokenizer.decode.return_value = self.base_unit.text
 
-        result = list(self.chunker.chunk_text_unit(
-            unit=self.base_unit,
-            chunk_size=100,
-            overlap=10,
-            split=True,
-            text_index=0
-        ))
+        result = list(self.chunker.chunk_text_unit(unit=self.base_unit))
 
         self.assertEqual(len(result), 1)
-        chunk = result[0]
-        self.assertEqual(chunk.text, self.base_unit.text)
-        self.assertEqual(chunk.chunk_position, 0)
+        self.assertEqual(result[0].text, self.base_unit.text)
 
     def test_chunk_text_unit_split_multiple_chunks(self):
-        """Test chunking with split=True creating multiple chunks."""
-        # Mock tokenizer to return enough tokens to create multiple chunks
+        """Test chunking long text into multiple chunks."""
+        # Mock long text that needs splitting
         self.mock_tokenizer.encode.return_value = list(range(250))
         self.mock_tokenizer.decode.side_effect = [
             "First chunk text",
             "Second chunk text",
-            "Third chunk text"
+            "Third chunk text",
+            "Fourth chunk text"  # Added missing fourth chunk
         ]
 
-        # Mock _split_text to return multiple chunks
-        with patch.object(self.chunker, '_split_text') as mock_split:
-            mock_split.return_value = [
-                "First chunk text",
-                "Second chunk text",
-                "Third chunk text"
-            ]
+        result = list(self.chunker.chunk_text_unit(unit=self.base_unit))
 
-            result = list(self.chunker.chunk_text_unit(
-                unit=self.base_unit,
-                chunk_size=100,
-                overlap=10,
-                split=True,
-                text_index=1
-            ))
-
-        self.assertEqual(len(result), 3)
-
-        # Verify chunk positions and text_ids
+        self.assertEqual(len(result), 4)  # Updated expected count
         for i, chunk in enumerate(result):
             self.assertEqual(chunk.chunk_position, i)
-            self.assertTrue(chunk.text_id.endswith(f'-1-{i}'))
             self.assertEqual(chunk.parent_id, "test-doc")
-            self.assertEqual(chunk.distance, 0.0)
+
+    def test_chunk_text_unit_skips_empty_chunks_with_continue(self):
+        """Test that empty or whitespace-only chunks trigger the continue statement."""
+        # Force splitting by using more tokens than chunk_size
+        self.mock_tokenizer.encode.return_value = list(range(250))
+
+        # Mock decode to return mix of empty/whitespace chunks that should be skipped
+        self.mock_tokenizer.decode.side_effect = [
+            "",  # Empty string - should trigger continue
+            "   \n\t   ",  # Whitespace only - should trigger continue
+            "Valid chunk"  # Valid chunk - should be processed
+        ]
+
+        # Mock _split_text to return the chunks that decode will produce
+        with patch.object(self.chunker, '_split_text') as mock_split:
+            mock_split.return_value = ["", "   \n\t   ", "Valid chunk"]
+
+            result = list(self.chunker.chunk_text_unit(unit=self.base_unit))
+
+        # Should only return 1 chunk (the valid one), empty/whitespace chunks skipped
+        self.assertEqual(len(result), 1)
+
+        # Verify the valid chunk was processed correctly
+        chunk = result[0]
+        self.assertEqual(chunk.text, "Valid chunk")
+        self.assertEqual(chunk.chunk_position,
+                         2)  # Position from original enumeration
+        self.assertEqual(chunk.parent_id, "test-doc")
+        self.assertEqual(chunk.distance, 0.0)
+
+        # Verify text_id reflects the original chunk_position (2)
+        self.assertTrue(chunk.text_id.endswith('-2'))
 
     def test_chunk_text_unit_skips_empty_chunks(self):
-        """Test that empty chunks are skipped during iteration."""
-        # Mock _split_text to return mix of valid and empty chunks
-        with patch.object(self.chunker, '_split_text') as mock_split:
-            mock_split.return_value = [
-                "Valid chunk 1",
-                "",  # Empty chunk
-                "   ",  # Whitespace only
-                "Valid chunk 2",
-                "\t\n",  # More whitespace
-                "Valid chunk 3"
-            ]
+        """Test that empty chunks are skipped."""
+        # Mock scenario where some chunks decode to empty strings
+        self.mock_tokenizer.encode.return_value = list(range(200))
+        self.mock_tokenizer.decode.side_effect = [
+            "Valid chunk 1",
+            "",  # Empty chunk
+            "Valid chunk 2"
+        ]
 
-            result = list(self.chunker.chunk_text_unit(
-                unit=self.base_unit,
-                chunk_size=100,
-                overlap=10,
-                split=True,
-                text_index=0
-            ))
+        result = list(self.chunker.chunk_text_unit(unit=self.base_unit))
 
-        # Should only return valid chunks
-        self.assertEqual(len(result), 3)
-        expected_texts = ["Valid chunk 1", "Valid chunk 2", "Valid chunk 3"]
-        actual_texts = [chunk.text for chunk in result]
-        self.assertEqual(actual_texts, expected_texts)
-
-        # Verify chunk positions are sequential despite skipped chunks
-        expected_positions = [0, 1, 2, 3, 4, 5]  # Original positions
-        actual_positions = [chunk.chunk_position for chunk in result]
-        self.assertEqual(actual_positions,
-                         [0, 3, 5])  # Positions of valid chunks
+        # Only non-empty chunks should be returned
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0].text, "Valid chunk 1")
+        self.assertEqual(result[1].text, "Valid chunk 2")
 
     def test_chunk_text_unit_preserves_metadata(self):
-        """Test that all TextUnit metadata is preserved in chunks."""
+        """Test that TextUnit metadata is preserved in chunks."""
         rich_unit = TextUnit(
-            text="Text with rich metadata",
+            text="Rich text with metadata",
             parent_id="rich-doc",
             source="rich_source.txt",
             confidence=0.95,
@@ -287,17 +291,10 @@ class TestTextUnitChunker(unittest.TestCase):
             tags=["tag1", "tag2"]
         )
 
-        # Mock for single chunk
         self.mock_tokenizer.encode.return_value = list(range(50))
         self.mock_tokenizer.decode.return_value = rich_unit.text
 
-        result = list(self.chunker.chunk_text_unit(
-            unit=rich_unit,
-            chunk_size=100,
-            overlap=10,
-            split=True,
-            text_index=0
-        ))
+        result = list(self.chunker.chunk_text_unit(unit=rich_unit))
 
         self.assertEqual(len(result), 1)
         chunk = result[0]
@@ -317,9 +314,10 @@ class TestTextUnitChunker(unittest.TestCase):
         self.mock_tokenizer.encode.return_value = list(range(20))
 
         result = self.chunker._split_text(
+            tokenizer=self.mock_tokenizer,
             text=text,
             chunk_size=100,
-            overlap=10
+            overlap=20
         )
 
         self.assertEqual(len(result), 1)
@@ -334,54 +332,45 @@ class TestTextUnitChunker(unittest.TestCase):
             "First chunk",
             "Second chunk",
             "Third chunk",
-            "Fourth chunk"  # Added 4th chunk
+            "Fourth chunk"
         ]
 
         result = self.chunker._split_text(
+            tokenizer=self.mock_tokenizer,
             text=text,
             chunk_size=100,
             overlap=20
         )
 
-        self.assertEqual(len(result), 4)  # Changed from 3 to 4
+        self.assertEqual(len(result), 4)
         self.assertEqual(result, ["First chunk", "Second chunk", "Third chunk",
                                   "Fourth chunk"])
 
-        # Verify tokenizer calls - should be called once for encoding
-        # self.mock_tokenizer.encode.assert_called_once_with(text)
+        # Verify tokenizer calls
         self.assertTrue(self.mock_tokenizer.encode.call_count >= 1)
-
-        # Decode should be called for each chunk
-        self.assertEqual(self.mock_tokenizer.decode.call_count,
-                         4)  # Changed from 3 to 4
+        self.assertEqual(self.mock_tokenizer.decode.call_count, 4)
 
     def test_split_text_merge_short_last_chunk(self):
         """Test _split_text merges last chunk if it's too short."""
         text = "Text that creates a short last chunk"
 
-        # Create scenario where last chunk is too short
-        # With 150 tokens, chunk_size=100, overlap=20 (step=80):
-        # Chunks: [0:100], [80:150] (70 tokens)
         tokens = list(range(150))
-
-        # Mock encode to return tokens initially, then short token count for last chunk
         encode_calls = []
 
         def mock_encode(text_input):
             encode_calls.append(text_input)
-            if "short_last" in text_input:  # When checking last chunk length
-                return list(range(15))  # Short chunk (< 25 min_chunk_size)
+            if "short_last" in text_input:
+                return list(range(15))  # Short chunk
             return tokens
 
         self.mock_tokenizer.encode.side_effect = mock_encode
-
-        # Mock decode for the chunking process
         self.mock_tokenizer.decode.side_effect = [
             "First chunk content",
-            "short_last"  # Last chunk that should be merged
+            "short_last"
         ]
 
         result = self.chunker._split_text(
+            tokenizer=self.mock_tokenizer,
             text=text,
             chunk_size=100,
             overlap=20,
@@ -389,33 +378,34 @@ class TestTextUnitChunker(unittest.TestCase):
         )
 
         # Should have fewer chunks due to merging
-        self.assertEqual(len(result), 1)  # Merged into single chunk
-        # The merged chunk should contain both parts
+        self.assertEqual(len(result), 1)
         self.assertIn("First chunk content", result[0])
         self.assertIn("short_last", result[0])
 
-        # Verify encode was called for both initial text and last chunk check
+        # Verify encode calls
         self.assertEqual(len(encode_calls), 2)
-        self.assertEqual(encode_calls[0], text)  # Initial encoding
-        self.assertEqual(encode_calls[1],
-                         "short_last")  # Last chunk size check
+        self.assertEqual(encode_calls[0], text)
+        self.assertEqual(encode_calls[1], "short_last")
 
     def test_split_text_removes_empty_chunks(self):
         """Test _split_text removes empty chunks after decoding."""
         text = "Text with some empty decoded chunks"
-        self.mock_tokenizer.encode.return_value = list(range(200))
+        # Use more tokens to force more chunks
+        self.mock_tokenizer.encode.return_value = list(
+            range(400))  # Increased from 200
         self.mock_tokenizer.decode.side_effect = [
             "Valid chunk 1",
-            "",  # Empty after decode
+            "",  # Empty
             "Valid chunk 2",
             "   ",  # Whitespace only
             "Valid chunk 3"
         ]
 
         result = self.chunker._split_text(
+            tokenizer=self.mock_tokenizer,
             text=text,
-            chunk_size=50,
-            overlap=10
+            chunk_size=100,
+            overlap=20
         )
 
         # Should only return non-empty chunks
@@ -424,95 +414,105 @@ class TestTextUnitChunker(unittest.TestCase):
 
     def test_split_text_default_min_chunk_size(self):
         """Test _split_text uses default min_chunk_size when not provided."""
+        chunker = TextUnitChunker(
+            tokenizer=self.mock_tokenizer,
+            chunk_size=100,
+            overlap=20,
+            min_chunk_size=None  # Should default to overlap // 2 = 10
+        )
+
         text = "Text for testing default min chunk size"
         self.mock_tokenizer.encode.return_value = list(range(80))
 
-        # Should use overlap // 2 as default min_chunk_size
-        result = self.chunker._split_text(
+        result = chunker._split_text(
+            tokenizer=self.mock_tokenizer,
             text=text,
-            chunk_size=80,
-            overlap=20  # Default min_chunk_size should be 10
+            chunk_size=100,
+            overlap=20
         )
 
-        # Verify it doesn't crash and returns expected result
         self.assertIsInstance(result, list)
         self.assertEqual(result, ["Text for testing default min chunk size"])
 
     def test_split_text_custom_min_chunk_size(self):
         """Test _split_text with custom min_chunk_size."""
-        text = "Text for testing custom min chunk size"
+        chunker = TextUnitChunker(
+            tokenizer=self.mock_tokenizer,
+            chunk_size=100,
+            overlap=20,
+            min_chunk_size=50
+        )
 
-        # Setup tokens to create scenario for merging
+        text = "Text for testing custom min chunk size"
         tokens = list(range(120))
         self.mock_tokenizer.encode.return_value = tokens
 
-        # Mock decode to simulate chunk creation
         def mock_decode(chunk_tokens):
-            if len(chunk_tokens) < 15:  # Short chunk
-                return "short_chunk"
-            return f"normal_chunk_{len(chunk_tokens)}"
+            if len(chunk_tokens) < 50:
+                return "short"
+            return f"chunk_{len(chunk_tokens)}"
 
         self.mock_tokenizer.decode.side_effect = mock_decode
 
-        result = self.chunker._split_text(
+        result = chunker._split_text(
+            tokenizer=self.mock_tokenizer,
             text=text,
-            chunk_size=50,
-            overlap=10,
-            min_chunk_size=30  # Custom minimum
+            chunk_size=100,
+            overlap=20,
+            min_chunk_size=50
         )
 
-        # Verify result is a list
         self.assertIsInstance(result, list)
 
     def test_chunk_text_unit_text_id_generation(self):
         """Test text_id generation format."""
-        with patch('time.time_ns', return_value=1234567890000):
-            result = list(self.chunker.chunk_text_unit(
-                unit=self.base_unit,
-                chunk_size=100,
-                overlap=10,
-                split=False,
-                text_index=5
-            ))
+        chunker = TextUnitChunker(
+            tokenizer=self.mock_tokenizer,
+            chunk_size=100,
+            overlap=20,
+            text_index=5,
+            batch_timestamp=1234567890
+        )
+
+        self.mock_tokenizer.encode.return_value = list(range(50))
+        self.mock_tokenizer.decode.return_value = self.base_unit.text
+
+        result = list(chunker.chunk_text_unit(unit=self.base_unit))
 
         expected_text_id = 'txt:test-doc-1234567890-5-0'
         self.assertEqual(result[0].text_id, expected_text_id)
 
     def test_chunk_text_unit_all_chunks_empty_returns_empty(self):
         """Test that if all chunks are empty, no chunks are returned."""
-        with patch.object(self.chunker, '_split_text') as mock_split:
-            mock_split.return_value = ["", "   ",
-                                       "\t\n"]  # All empty/whitespace
+        # Force splitting by using more tokens than chunk_size
+        self.mock_tokenizer.encode.return_value = list(
+            range(150))  # > chunk_size
+        self.mock_tokenizer.decode.side_effect = ["", "   ", ""]  # All empty
 
-            result = list(self.chunker.chunk_text_unit(
-                unit=self.base_unit,
-                chunk_size=100,
-                overlap=10,
-                split=True,
-                text_index=0
-            ))
+        result = list(self.chunker.chunk_text_unit(unit=self.base_unit))
 
         self.assertEqual(len(result), 0)
 
     def test_chunk_text_unit_passes_min_chunk_size(self):
-        """Test that min_chunk_size is passed to _split_text."""
-        with patch.object(self.chunker, '_split_text') as mock_split:
-            mock_split.return_value = ["Test chunk"]
+        """Test that min_chunk_size from constructor is used in _split_text."""
+        chunker = TextUnitChunker(
+            tokenizer=self.mock_tokenizer,
+            chunk_size=100,
+            overlap=20,
+            min_chunk_size=30
+        )
 
-            list(self.chunker.chunk_text_unit(
-                unit=self.base_unit,
-                chunk_size=100,
-                overlap=10,
-                min_chunk_size=25,
-                split=True,
-                text_index=0
-            ))
+        with patch.object(chunker, '_split_text') as mock_split:
+            mock_split.return_value = ["chunk1", "chunk2"]
+
+            list(chunker.chunk_text_unit(unit=self.base_unit))
 
             mock_split.assert_called_once_with(
+                tokenizer=self.mock_tokenizer,
                 text=self.base_unit.text,
                 chunk_size=100,
-                overlap=10,
-                min_chunk_size=25
+                overlap=20,
+                min_chunk_size=30
             )
 
 
