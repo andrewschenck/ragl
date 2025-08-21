@@ -282,11 +282,11 @@ class RAGManager:
         """
         if not isinstance(ragstore, RAGStoreProtocol):
             msg = 'ragstore must implement RAGStoreProtocol'
-            _LOG.critical(msg)
+            _LOG.error(msg)
             raise TypeError(msg)
         if not isinstance(tokenizer, TokenizerProtocol):
             msg = 'tokenizer must implement TokenizerProtocol'
-            _LOG.critical(msg)
+            _LOG.error(msg)
             raise TypeError(msg)
 
         self._validate_chunking(config.chunk_size, config.overlap)
@@ -307,7 +307,6 @@ class RAGManager:
             overlap: int | None = None,
             split: bool = True,
     ) -> list[TextUnit]:
-        # pylint: disable=too-many-arguments
         """
         Add text to the store.
 
@@ -396,11 +395,6 @@ class RAGManager:
             for text_index, item in enumerate(texts_or_units):
 
                 if isinstance(item, str):
-                    if not item or not item.strip():
-                        msg = 'text_or_unit cannot be empty or zero-length'
-                        _LOG.error(msg)
-                        raise ValidationError(msg)
-
                     sanitized_text = self._sanitize_text(item)
                     unit = TextUnit(
                         text=sanitized_text,
@@ -408,11 +402,6 @@ class RAGManager:
                     )
 
                 elif isinstance(item, TextUnit):
-                    if not item.text or not item.text.strip():
-                        msg = 'text_or_unit cannot be empty or zero-length'
-                        _LOG.error(msg)
-                        raise ValidationError(msg)
-
                     # Create a copy to avoid modifying the original
                     unit = TextUnit(
                         text=self._sanitize_text(item.text),
@@ -430,9 +419,9 @@ class RAGManager:
                     )
 
                 else:
-                    _LOG.error('Invalid text type, must be str or TextUnit')
-                    raise ValidationError(
-                        'Invalid text type, must be str or TextUnit')
+                    msg = 'Invalid text type, must be str or TextUnit'
+                    _LOG.error(msg)
+                    raise ValidationError(msg)
 
                 # Get chunks for this TextUnit
                 chunks = self._get_chunks(unit, effective_chunk_size,
