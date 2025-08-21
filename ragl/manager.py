@@ -350,6 +350,17 @@ class TextUnitChunker:
 
         return chunks
 
+    def __str__(self):
+        """Return a string representation of the TextUnitChunker."""
+        return (f'TextUnitChunker(chunk_size={self.chunk_size}, '
+                f'overlap={self.overlap}, '
+                f'min_chunk_size={self.min_chunk_size}, '
+                f'split={self.split})')
+
+    def __repr__(self):
+        """Return a detailed string representation of the TextUnitChunker."""
+        return self.__str__()
+
 
 class RAGManager:
     # pylint: disable=too-many-instance-attributes
