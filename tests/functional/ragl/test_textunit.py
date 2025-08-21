@@ -1,5 +1,7 @@
 import unittest
 from unittest.mock import patch
+
+from ragl.exceptions import ValidationError
 from ragl.textunit import TextUnit
 
 
@@ -55,7 +57,7 @@ class TestTextUnit(unittest.TestCase):
 
     def test_textunit_creation_minimal_fields(self):
         """Test creating TextUnit with only required fields."""
-        with patch('time.time', return_value=1500000000):
+        with patch('time.time_ns', return_value=1500000000000):
             unit = TextUnit(
                 text_id='minimal_id',
                 text='Minimal content',
@@ -92,24 +94,6 @@ class TestTextUnit(unittest.TestCase):
         self.assertEqual(unit.author, 'test_author')
         self.assertEqual(unit.timestamp, 1234567890)
 
-    def test_from_dict_empty_data(self):
-        """Test creating TextUnit from empty dictionary."""
-        with patch('time.time', return_value=2000000000):
-            unit = TextUnit.from_dict({})
-
-        self.assertEqual(unit.text_id, None)
-        self.assertEqual(unit.text, '')
-        self.assertEqual(unit.distance, 1.0)
-        self.assertIsNone(unit.chunk_position)
-        self.assertIsNone(unit.parent_id)
-        self.assertIsNone(unit.source)
-        self.assertIsNone(unit.tags)
-        self.assertIsNone(unit.confidence)
-        self.assertIsNone(unit.language)
-        self.assertIsNone(unit.section)
-        self.assertIsNone(unit.author)
-        self.assertEqual(unit.timestamp, 2000000000)
-
     def test_from_dict_partial_data(self):
         """Test creating TextUnit from dictionary with partial data."""
         partial_data = {
@@ -119,7 +103,7 @@ class TestTextUnit(unittest.TestCase):
             'tags':     ['single_tag']
         }
 
-        with patch('time.time', return_value=1700000000):
+        with patch('time.time_ns', return_value=1700000000000):
             unit = TextUnit.from_dict(partial_data)
 
         self.assertEqual(unit.text_id, 'partial_id')
@@ -127,24 +111,6 @@ class TestTextUnit(unittest.TestCase):
         self.assertEqual(unit.distance, 0.7)
         self.assertEqual(unit.tags, ['single_tag'])
         self.assertEqual(unit.timestamp, 1700000000)
-
-    def test_from_dict_tags_not_list(self):
-        """Test handling non-list tags in from_dict."""
-        data = {'tags': 'single_tag'}
-        unit = TextUnit.from_dict(data)
-        self.assertEqual(unit.tags, ['single_tag'])
-
-    def test_from_dict_tags_with_quotes_and_brackets(self):
-        """Test cleaning tags with quotes and brackets."""
-        data = {'tags': ["'tag1'", '"tag2"', '[tag3]', " tag4 "]}
-        unit = TextUnit.from_dict(data)
-        self.assertEqual(unit.tags, ['tag1', 'tag2', 'tag3', 'tag4'])
-
-    def test_from_dict_tags_none(self):
-        """Test handling None tags in from_dict."""
-        data = {'tags': None}
-        unit = TextUnit.from_dict(data)
-        self.assertIsNone(unit.tags)
 
     def test_to_dict(self):
         """Test converting TextUnit to dictionary."""
@@ -201,11 +167,6 @@ class TestTextUnit(unittest.TestCase):
                         distance=0.0)
         self.assertEqual(str(unit), 'String test content')
 
-    def test_str_method_empty_text(self):
-        """Test string representation with empty text."""
-        unit = TextUnit(text_id='empty_str', text='', distance=0.0)
-        self.assertEqual(str(unit), '')
-
     def test_repr_method_short_text(self):
         """Test repr method with text shorter than 50 characters."""
         unit = TextUnit(
@@ -218,19 +179,12 @@ class TestTextUnit(unittest.TestCase):
 
         result = repr(unit)
         expected = (
-            "TextUnit(text_id='repr_test', "
-            "text=\"'Short text'\", "
+            "TextUnit(text=\"'Short text'\", "
+            "text_id='repr_test', "
+            "parent_id='parent_repr', "
             "distance=0.6, "
-            "chunk_position=5, "
-            "parent_id='parent_repr')"
+            "chunk_position=5)"
         )
-        # expected = (
-        #     "TextUnit(text_id='repr_test', "
-        #     "text='Short text', "
-        #     "distance=0.6, "
-        #     "chunk_position=5, "
-        #     "parent_id='parent_repr')"
-        # )
         self.assertEqual(result, expected)
 
     def test_repr_method_long_text(self):
@@ -246,18 +200,17 @@ class TestTextUnit(unittest.TestCase):
 
         result = repr(unit)
         expected = (
-            "TextUnit(text_id='long_repr', "
-            "text=\"'This is a very long text that exceeds fifty charac'...\", "
+            "TextUnit(text=\"'This is a very long text that exceeds fifty charac'...\", "
+            "text_id='long_repr', "
+            "parent_id=None, "
             "distance=0.8, "
-            "chunk_position=None, "
-            "parent_id=None)"
+            "chunk_position=None)"
         )
-        print(result)
         self.assertEqual(result, expected)
 
     def test_timestamp_default_factory(self):
         """Test that timestamp uses current time when not specified."""
-        with patch('time.time', return_value=1600000000):
+        with patch('time.time_ns', return_value=1600000000000):
             unit = TextUnit(text_id='time_test', text='Time test',
                             distance=0.0)
             self.assertEqual(unit.timestamp, 1600000000)
@@ -359,11 +312,6 @@ class TestTextUnit(unittest.TestCase):
         unit = TextUnit(text_id='id', text='Hello world')
         self.assertEqual(len(unit), 11)
 
-    def test_len_empty_text(self):
-        """Test len() with empty text."""
-        unit = TextUnit(text_id='id', text='')
-        self.assertEqual(len(unit), 0)
-
     def test_len_multiline_text(self):
         """Test len() with multiline text."""
         text = 'Line one\nLine two\nLine three'
@@ -375,6 +323,384 @@ class TestTextUnit(unittest.TestCase):
         text = 'Hello 世界 🌍'
         unit = TextUnit(text_id='id', text=text)
         self.assertEqual(len(unit), len(text))
+
+    def test_text_setter_validation_none(self):
+        """Test text setter raises ValidationError for None."""
+        unit = TextUnit(text_id='test', text='initial')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.text = None
+
+            self.assertIn('text must be a string', str(cm.exception))
+            mock_log.error.assert_called_with('text must be a string')
+
+    def test_text_setter_validation_non_string(self):
+        """Test text setter raises ValidationError for non-string."""
+        unit = TextUnit(text_id='test', text='initial')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.text = 123
+
+            self.assertIn('text must be a string', str(cm.exception))
+            mock_log.error.assert_called_with('text must be a string')
+
+    def test_text_setter_validation_empty_string(self):
+        """Test text setter raises ValidationError for empty string."""
+        unit = TextUnit(text_id='test', text='initial')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.text = ''
+
+            self.assertIn('text cannot be whitespace-only or zero-length',
+                          str(cm.exception))
+            mock_log.error.assert_called_with(
+                'text cannot be whitespace-only or zero-length')
+
+    def test_text_setter_validation_whitespace_only(self):
+        """Test text setter raises ValidationError for whitespace-only string."""
+        unit = TextUnit(text_id='test', text='initial')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.text = '   \t\n  '
+
+            self.assertIn('text cannot be whitespace-only or zero-length',
+                          str(cm.exception))
+            mock_log.error.assert_called_with(
+                'text cannot be whitespace-only or zero-length')
+
+    def test_text_id_setter_validation_non_string(self):
+        """Test text_id setter raises ValidationError for non-string."""
+        unit = TextUnit(text_id='test', text='content')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.text_id = 123
+
+            self.assertIn('text_id must be a string', str(cm.exception))
+            mock_log.error.assert_called_with('text_id must be a string')
+
+    def test_text_id_setter_validation_empty_string(self):
+        """Test text_id setter raises ValidationError for empty string."""
+        unit = TextUnit(text_id='test', text='content')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.text_id = ''
+
+            self.assertIn('text_id cannot be empty or whitespace-only',
+                          str(cm.exception))
+            mock_log.error.assert_called_with(
+                'text_id cannot be empty or whitespace-only')
+
+    def test_text_id_setter_validation_whitespace_only(self):
+        """Test text_id setter raises ValidationError for whitespace-only string."""
+        unit = TextUnit(text_id='test', text='content')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.text_id = '   '
+
+            self.assertIn('text_id cannot be empty or whitespace-only',
+                          str(cm.exception))
+            mock_log.error.assert_called_with(
+                'text_id cannot be empty or whitespace-only')
+
+    def test_text_id_setter_none_allowed(self):
+        """Test text_id setter allows None."""
+        unit = TextUnit(text_id='test', text='content')
+        unit.text_id = None
+        self.assertIsNone(unit.text_id)
+
+    def test_distance_setter_validation_non_numeric(self):
+        """Test distance setter raises ValidationError for non-numeric."""
+        unit = TextUnit(text_id='test', text='content')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.distance = 'invalid'
+
+            self.assertIn('Distance must be a number', str(cm.exception))
+            mock_log.error.assert_called_with('Distance must be a number')
+
+    def test_distance_setter_validation_below_range(self):
+        """Test distance setter raises ValidationError for value below 0.0."""
+        unit = TextUnit(text_id='test', text='content')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.distance = -0.1
+
+            self.assertIn('distance must be between 0.0 and 1.0',
+                          str(cm.exception))
+            mock_log.error.assert_called_with(
+                'distance must be between 0.0 and 1.0')
+
+    def test_distance_setter_validation_above_range(self):
+        """Test distance setter raises ValidationError for value above 1.0."""
+        unit = TextUnit(text_id='test', text='content')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.distance = 1.1
+
+            self.assertIn('distance must be between 0.0 and 1.0',
+                          str(cm.exception))
+            mock_log.error.assert_called_with(
+                'distance must be between 0.0 and 1.0')
+
+    def test_distance_setter_accepts_int(self):
+        """Test distance setter accepts integer values."""
+        unit = TextUnit(text_id='test', text='content')
+        unit.distance = 1
+        self.assertEqual(unit.distance, 1.0)
+
+    def test_parent_id_setter_validation_non_string(self):
+        """Test parent_id setter raises ValidationError for non-string."""
+        unit = TextUnit(text_id='test', text='content')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.parent_id = 123
+
+            self.assertIn('parent_id must be a string', str(cm.exception))
+            mock_log.error.assert_called_with('parent_id must be a string')
+
+    def test_parent_id_setter_validation_empty_string(self):
+        """Test parent_id setter raises ValidationError for empty string."""
+        unit = TextUnit(text_id='test', text='content')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.parent_id = ''
+
+            self.assertIn('parent_id cannot be empty or whitespace-only',
+                          str(cm.exception))
+            mock_log.error.assert_called_with(
+                'parent_id cannot be empty or whitespace-only')
+
+    def test_parent_id_setter_validation_whitespace_only(self):
+        """Test parent_id setter raises ValidationError for whitespace-only string."""
+        unit = TextUnit(text_id='test', text='content')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.parent_id = '   '
+
+            self.assertIn('parent_id cannot be empty or whitespace-only',
+                          str(cm.exception))
+            mock_log.error.assert_called_with(
+                'parent_id cannot be empty or whitespace-only')
+
+    def test_chunk_position_setter_validation_non_int(self):
+        """Test chunk_position setter raises ValidationError for non-integer."""
+        unit = TextUnit(text_id='test', text='content')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.chunk_position = 'invalid'
+
+            self.assertIn('chunk_position must be an integer',
+                          str(cm.exception))
+            mock_log.error.assert_called_with(
+                'chunk_position must be an integer')
+
+    def test_chunk_position_setter_validation_negative(self):
+        """Test chunk_position setter raises ValidationError for negative value."""
+        unit = TextUnit(text_id='test', text='content')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.chunk_position = -1
+
+            self.assertIn('chunk_position must be non-negative',
+                          str(cm.exception))
+            mock_log.error.assert_called_with(
+                'chunk_position must be non-negative')
+
+    def test_author_setter_validation_non_string(self):
+        """Test author setter raises ValidationError for non-string."""
+        unit = TextUnit(text_id='test', text='content')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.author = 123
+
+            self.assertIn('author must be a string', str(cm.exception))
+            mock_log.error.assert_called_with('author must be a string')
+
+    def test_source_setter_validation_non_string(self):
+        """Test source setter raises ValidationError for non-string."""
+        unit = TextUnit(text_id='test', text='content')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.source = 123
+
+            self.assertIn('source must be a string', str(cm.exception))
+            mock_log.error.assert_called_with('source must be a string')
+
+    def test_language_setter_validation_non_string(self):
+        """Test language setter raises ValidationError for non-string."""
+        unit = TextUnit(text_id='test', text='content')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.language = 123
+
+            self.assertIn('language must be a string', str(cm.exception))
+            mock_log.error.assert_called_with('language must be a string')
+
+    def test_section_setter_validation_non_string(self):
+        """Test section setter raises ValidationError for non-string."""
+        unit = TextUnit(text_id='test', text='content')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.section = 123
+
+            self.assertIn('section must be a string', str(cm.exception))
+            mock_log.error.assert_called_with('section must be a string')
+
+    def test_confidence_setter_validation_non_string_non_numeric(self):
+        """Test confidence setter raises ValidationError for invalid type."""
+        unit = TextUnit(text_id='test', text='content')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.confidence = []
+
+            self.assertIn('confidence must be a string or number',
+                          str(cm.exception))
+            mock_log.error.assert_called_with(
+                'confidence must be a string or number')
+
+    def test_confidence_setter_validation_empty_string(self):
+        """Test confidence setter raises ValidationError for empty string."""
+        unit = TextUnit(text_id='test', text='content')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.confidence = ''
+
+            self.assertIn('confidence cannot be empty or whitespace-only',
+                          str(cm.exception))
+            mock_log.error.assert_called_with(
+                'confidence cannot be empty or whitespace-only')
+
+    def test_confidence_setter_validation_whitespace_only_string(self):
+        """Test confidence setter raises ValidationError for whitespace-only string."""
+        unit = TextUnit(text_id='test', text='content')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.confidence = '   '
+
+            self.assertIn('confidence cannot be empty or whitespace-only',
+                          str(cm.exception))
+            mock_log.error.assert_called_with(
+                'confidence cannot be empty or whitespace-only')
+
+    def test_tags_setter_validation_non_list(self):
+        """Test tags setter raises ValidationError for non-list."""
+        unit = TextUnit(text_id='test', text='content')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.tags = 'not a list'
+
+            self.assertIn('Tags must be a list of strings', str(cm.exception))
+            mock_log.error.assert_called_with('Tags must be a list of strings')
+
+    def test_tags_setter_validation_non_string_elements(self):
+        """Test tags setter raises ValidationError for non-string list elements."""
+        unit = TextUnit(text_id='test', text='content')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.tags = ['valid', 123, 'also_valid']
+
+            self.assertIn('tags must be strings', str(cm.exception))
+            mock_log.error.assert_called_with('tags must be strings')
+
+    def test_tags_setter_validation_empty_string_elements(self):
+        """Test tags setter raises ValidationError for empty string elements."""
+        unit = TextUnit(text_id='test', text='content')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.tags = ['valid', '', 'also_valid']
+
+            self.assertIn('tags cannot be empty or whitespace-only',
+                          str(cm.exception))
+            mock_log.error.assert_called_with(
+                'tags cannot be empty or whitespace-only')
+
+    def test_tags_setter_validation_whitespace_only_elements(self):
+        """Test tags setter raises ValidationError for whitespace-only string elements."""
+        unit = TextUnit(text_id='test', text='content')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.tags = ['valid', '   ', 'also_valid']
+
+            self.assertIn('tags cannot be empty or whitespace-only',
+                          str(cm.exception))
+            mock_log.error.assert_called_with(
+                'tags cannot be empty or whitespace-only')
+
+    def test_timestamp_setter_validation_non_int(self):
+        """Test timestamp setter raises ValidationError for non-integer."""
+        unit = TextUnit(text_id='test', text='content')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.timestamp = 'invalid'
+
+            self.assertIn('Timestamp must be an int', str(cm.exception))
+            mock_log.error.assert_called_with('Timestamp must be an int')
+
+    def test_timestamp_setter_validation_negative(self):
+        """Test timestamp setter raises ValidationError for negative value."""
+        unit = TextUnit(text_id='test', text='content')
+
+        with patch('ragl.textunit._LOG') as mock_log:
+            with self.assertRaises(ValidationError) as cm:
+                unit.timestamp = -1
+
+            self.assertIn('timestamp must be a positive integer',
+                          str(cm.exception))
+            mock_log.error.assert_called_with(
+                'timestamp must be a positive integer')
+
+    def test_all_optional_setters_allow_none(self):
+        """Test that all optional fields accept None values."""
+        unit = TextUnit(text_id='test', text='content')
+
+        # These should not raise exceptions
+        unit.text_id = None
+        unit.parent_id = None
+        unit.chunk_position = None
+        unit.author = None
+        unit.source = None
+        unit.language = None
+        unit.section = None
+        unit.confidence = None
+        unit.tags = None
+
+        # Verify all are None
+        self.assertIsNone(unit.text_id)
+        self.assertIsNone(unit.parent_id)
+        self.assertIsNone(unit.chunk_position)
+        self.assertIsNone(unit.author)
+        self.assertIsNone(unit.source)
+        self.assertIsNone(unit.language)
+        self.assertIsNone(unit.section)
+        self.assertIsNone(unit.confidence)
+        self.assertIsNone(unit.tags)
 
 
 if __name__ == '__main__':

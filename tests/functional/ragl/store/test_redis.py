@@ -664,12 +664,6 @@ class TestRedisVectorStore(unittest.TestCase):
     def test_store_text_empty_text(self, mock_validate_sync):
         """Test storing empty text."""
 
-        text_unit = TextUnit(
-            text="",
-            text_id='test-id',
-            distance=0.0,
-        )
-
         with patch.object(RedisVectorStore, '_enforce_schema_version'):
             store = RedisVectorStore(
                 redis_client=self.mock_redis_client,
@@ -680,17 +674,17 @@ class TestRedisVectorStore(unittest.TestCase):
         embedding = np.random.rand(self.dimensions)
 
         with self.assertRaises(ValidationError):
+            text_unit = TextUnit(
+                text="",
+                text_id='test-id',
+                distance=0.0,
+            )
             store.store_text(text_unit, embedding)
 
     @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
     def test_store_text_whitespace_only(self, mock_validate_sync):
         """Test storing whitespace-only text."""
         text = "   \n\t   "
-        text_unit = TextUnit(
-            text=text,
-            text_id='test-id',
-            distance=0.0,
-        )
         with patch.object(RedisVectorStore, '_enforce_schema_version'):
             store = RedisVectorStore(
                 redis_client=self.mock_redis_client,
@@ -701,6 +695,11 @@ class TestRedisVectorStore(unittest.TestCase):
         embedding = np.random.rand(self.dimensions)
 
         with self.assertRaises(ValidationError):
+            text_unit = TextUnit(
+                text=text,
+                text_id='test-id',
+                distance=0.0,
+            )
             store.store_text(text_unit, embedding)
 
     @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
@@ -849,11 +848,11 @@ class TestRedisVectorStore(unittest.TestCase):
                 index_name=self.index_name
             )
 
-        text_unit = TextUnit(text="", text_id=None, distance=0.0)
         embedding = np.random.rand(self.dimensions)
-        text_embedding_pairs = [(text_unit, embedding)]
 
         with self.assertRaises(ValidationError):
+            text_unit = TextUnit(text="", text_id=None, distance=0.0)
+            text_embedding_pairs = [(text_unit, embedding)]
             store.store_texts(text_embedding_pairs)
 
     @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
@@ -866,12 +865,30 @@ class TestRedisVectorStore(unittest.TestCase):
                 index_name=self.index_name
             )
 
-        text_unit = TextUnit(text="   \n\t   ", text_id=None, distance=0.0)
-        embedding = np.random.rand(self.dimensions)
-        text_embedding_pairs = [(text_unit, embedding)]
 
         with self.assertRaises(ValidationError):
+            text_unit = TextUnit(text="   \n\t   ", text_id=None, distance=0.0)
+            embedding = np.random.rand(self.dimensions)
+            text_embedding_pairs = [(text_unit, embedding)]
             store.store_texts(text_embedding_pairs)
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_store_texts_empty_text_after_strip(self, mock_validate_sync):
+        """Test that store_texts raises ValidationError for whitespace-only text."""
+        text_unit = TextUnit(
+            text="valid text",  # Start with valid text
+            text_id="test_id",
+            distance=0.0
+        )
+        # Bypass TextUnit validation by setting the private attribute directly
+        text_unit._text = "   \n\t   "  # whitespace-only text
+
+        embedding = np.random.rand(self.dimensions).astype(np.float32)
+
+        with self.assertRaises(ValidationError) as cm:
+            self.store.store_texts([(text_unit, embedding)])
+
+        self.assertIn('text cannot be empty', str(cm.exception))
 
     @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
     def test_store_texts_large_batch(self, mock_validate_sync):

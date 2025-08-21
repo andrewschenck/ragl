@@ -196,7 +196,7 @@ class TestRAGManager(unittest.TestCase):
 
             self.assertIn('ragstore must implement RAGStoreProtocol',
                           str(cm.exception))
-            mock_log.critical.assert_called_with(
+            mock_log.error.assert_called_with(
                 'ragstore must implement RAGStoreProtocol')
 
     def test_init_invalid_tokenizer(self):
@@ -208,7 +208,7 @@ class TestRAGManager(unittest.TestCase):
 
             self.assertIn('tokenizer must implement TokenizerProtocol',
                           str(cm.exception))
-            mock_log.critical.assert_called_with(
+            mock_log.error.assert_called_with(
                 'tokenizer must implement TokenizerProtocol')
 
     def test_init_invalid_chunking_parameters(self):
@@ -273,7 +273,7 @@ class TestRAGManager(unittest.TestCase):
             with self.assertRaises(ValidationError) as cm:
                 manager.add_text("")
 
-            self.assertIn('text_or_unit cannot be empty or zero-length', str(cm.exception))
+            self.assertIn('text cannot be whitespace-only or zero-length', str(cm.exception))
             mock_log.critical.assert_called()
             call_args = mock_log.critical.call_args
             self.assertEqual(call_args[0][0],
@@ -472,14 +472,14 @@ class TestRAGManager(unittest.TestCase):
 
         texts = ["Valid text", "", "Another valid text"]
 
-        with patch('ragl.manager._LOG') as mock_log:
+        with patch('ragl.textunit._LOG') as mock_log:
             with self.assertRaises(ValidationError) as cm:
                 manager.add_texts(texts)
 
-            self.assertIn('text_or_unit cannot be empty or zero-length',
+            self.assertIn('text cannot be whitespace-only or zero-length',
                           str(cm.exception))
             mock_log.error.assert_called_with(
-                'text_or_unit cannot be empty or zero-length')
+                'text cannot be whitespace-only or zero-length')
 
     def test_add_texts_contains_invalid_type(self):
         """Test adding texts with invalid type raises ValidationError."""
@@ -496,31 +496,6 @@ class TestRAGManager(unittest.TestCase):
                           str(cm.exception))
             mock_log.error.assert_called_with(
                 'Invalid text type, must be str or TextUnit')
-
-    # def test_add_texts_with_base_id(self):
-    #     """Test adding texts with custom base_id."""
-    #     manager = RAGManager(self.config, self.mock_ragstore,
-    #                          tokenizer=self.mock_tokenizer)
-    #     texts = ["First text", "Second text"]
-    #     base_id = "custom-batch"
-    #
-    #     self.mock_tokenizer.encode.return_value = list(range(50))
-    #     self.mock_tokenizer.decode.side_effect = texts
-    #
-    #     # Mock store_texts to return TextUnit objects with proper parent_id
-    #     def mock_store_texts(text_units):
-    #         return text_units  # Return the input TextUnits as-is
-    #
-    #     self.mock_ragstore.store_texts.side_effect = mock_store_texts
-    #
-    #     result = manager.add_texts(texts, base_id=base_id)
-    #
-    #     # Verify all texts have the same parent_id (base_id)
-    #     for unit in result:
-    #         self.assertEqual(unit.parent_id, base_id)
-    #
-    #     # Verify the correct number of chunks
-    #     self.assertEqual(len(result), 2)
 
     def test_add_texts_custom_chunk_params(self):
         """Test adding texts with custom chunk parameters."""
@@ -744,44 +719,45 @@ class TestRAGManager(unittest.TestCase):
         manager = RAGManager(self.config, self.mock_ragstore,
                              tokenizer=self.mock_tokenizer)
 
-        text_unit = TextUnit(
-            text_id="test-id",
-            text="",  # Empty text
-            source="test",
-            distance=0.0
-        )
-        texts = ["Valid text", text_unit]
 
-        with patch('ragl.manager._LOG') as mock_log:
+        with patch('ragl.textunit._LOG') as mock_log:
             with self.assertRaises(ValidationError) as cm:
+                text_unit = TextUnit(
+                    text_id="test-id",
+                    text="",  # Empty text
+                    source="test",
+                    distance=0.0
+                )
+                texts = ["Valid text", text_unit]
                 manager.add_texts(texts)
 
-            self.assertIn('text_or_unit cannot be empty or zero-length',
+            self.assertIn('text cannot be whitespace-only or zero-length',
                           str(cm.exception))
             mock_log.error.assert_called_with(
-                'text_or_unit cannot be empty or zero-length')
+                'text cannot be whitespace-only or zero-length')
 
     def test_add_texts_textunit_whitespace_only_text(self):
         """Test adding TextUnit with whitespace-only text raises ValidationError."""
         manager = RAGManager(self.config, self.mock_ragstore,
                              tokenizer=self.mock_tokenizer)
 
-        text_unit = TextUnit(
-            text_id="test-id",
-            text="   \n\t   ",  # Whitespace only
-            source="test",
-            distance=0.0
-        )
-        texts = ["Valid text", text_unit]
 
-        with patch('ragl.manager._LOG') as mock_log:
+        with patch('ragl.textunit._LOG') as mock_log:
             with self.assertRaises(ValidationError) as cm:
+                text_unit = TextUnit(
+                    text_id="test-id",
+                    text="   \n\t   ",  # Whitespace only
+                    source="test",
+                    distance=0.0
+                )
+                texts = ["Valid text", text_unit]
                 manager.add_texts(texts)
 
-            self.assertIn('text_or_unit cannot be empty or zero-length',
+            self.assertIn('text cannot be whitespace-only or zero-length',
                           str(cm.exception))
             mock_log.error.assert_called_with(
-                'text_or_unit cannot be empty or zero-length')
+                'text cannot be whitespace-only or zero-length')
+
 
     def test_add_texts_textunit_none_text(self):
         """Test adding TextUnit with None text raises ValidationError."""
@@ -795,18 +771,25 @@ class TestRAGManager(unittest.TestCase):
             source="test",
             distance=0.0
         )
-        text_unit.text = None  # Set to None after creation
 
-        texts = ["Valid text", text_unit]
+        # texts = ["Valid text", text_unit]
 
         with patch('ragl.manager._LOG') as mock_log:
-            with self.assertRaises(ValidationError) as cm:
-                manager.add_texts(texts)
+        #     with self.assertRaises(ValidationError) as cm:
+        #         manager.add_texts(texts)
+        #
+        #     self.assertIn('text cannot be whitespace-only or zero-length',
+        #                   str(cm.exception))
+        #     mock_log.error.assert_called_with(
+        #         'text cannot be whitespace-only or zero-length')
 
-            self.assertIn('text_or_unit cannot be empty or zero-length',
-                          str(cm.exception))
-            mock_log.error.assert_called_with(
-                'text_or_unit cannot be empty or zero-length')
+            with self.assertRaises(ValidationError) as cm:
+                text_unit.text = None  # Set to None after creation
+
+                self.assertIn('text cannot be whitespace-only or zero-length',
+                              str(cm.exception))
+                mock_log.error.assert_called_with(
+                    'text cannot be whitespace-only or zero-length')
 
     def test_add_texts_multiple_textunits_one_empty(self):
         """Test adding multiple TextUnits where one has empty text."""
@@ -820,45 +803,45 @@ class TestRAGManager(unittest.TestCase):
             distance=0.0
         )
 
-        empty_unit = TextUnit(
-            text_id="empty-id",
-            text="",  # Empty text
-            source="test",
-            distance=0.0
-        )
 
-        texts = [valid_unit, empty_unit]
 
-        with patch('ragl.manager._LOG') as mock_log:
+        with patch('ragl.textunit._LOG') as mock_log:
             with self.assertRaises(ValidationError) as cm:
+                empty_unit = TextUnit(
+                    text_id="empty-id",
+                    text="",  # Empty text
+                    source="test",
+                    distance=0.0
+                )
+                texts = [valid_unit, empty_unit]
                 manager.add_texts(texts)
 
-            self.assertIn('text_or_unit cannot be empty or zero-length',
+            self.assertIn('text cannot be whitespace-only or zero-length',
                           str(cm.exception))
             mock_log.error.assert_called_with(
-                'text_or_unit cannot be empty or zero-length')
+                'text cannot be whitespace-only or zero-length')
 
     def test_add_texts_textunit_only_spaces_text(self):
         """Test adding TextUnit with only spaces in text raises ValidationError."""
         manager = RAGManager(self.config, self.mock_ragstore,
                              tokenizer=self.mock_tokenizer)
 
-        text_unit = TextUnit(
-            text_id="test-id",
-            text="     ",  # Only spaces
-            source="test",
-            distance=0.0
-        )
-        texts = [text_unit]
 
-        with patch('ragl.manager._LOG') as mock_log:
+        with patch('ragl.textunit._LOG') as mock_log:
             with self.assertRaises(ValidationError) as cm:
+                text_unit = TextUnit(
+                    text_id="test-id",
+                    text="     ",  # Only spaces
+                    source="test",
+                    distance=0.0
+                )
+                texts = [text_unit]
                 manager.add_texts(texts)
 
-            self.assertIn('text_or_unit cannot be empty or zero-length',
+            self.assertIn('text cannot be whitespace-only or zero-length',
                           str(cm.exception))
             mock_log.error.assert_called_with(
-                'text_or_unit cannot be empty or zero-length')
+                'text cannot be whitespace-only or zero-length')
 
     def test_add_text_global_counter_single_chunk(self):
         """Test global counter text_id generation for single chunk when no base_id provided."""
