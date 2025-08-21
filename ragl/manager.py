@@ -511,7 +511,6 @@ class RAGManager:
             overlap: int | None = None,
             split: bool = True,
     ) -> list[TextUnit]:
-        # pylint: disable=too-many-locals
         """
         Add multiple texts to the store.
 
@@ -540,69 +539,289 @@ class RAGManager:
         with self.track_operation('add_texts'):
             _LOG.debug('Adding texts: %d items', len(texts_or_units))
 
-            if not texts_or_units:
-                _LOG.error('texts_or_units cannot be empty')
-                raise ValidationError('texts_or_units cannot be empty')
+            self._validate_texts_input(texts_or_units)
 
-            effective_chunk_size = chunk_size or self.chunk_size
-            effective_overlap = overlap or self.overlap
-            self._validate_chunking(effective_chunk_size, effective_overlap)
-
-            text_units_to_store: list[TextUnit] = []
-            batch_timestamp = int(time.time_ns() // 1000)
-
-            for text_index, item in enumerate(texts_or_units):
-
-                if isinstance(item, str):
-                    sanitized_text = self._sanitize_text(item)
-                    unit = TextUnit(
-                        text=sanitized_text,
-                        parent_id=self.DEFAULT_PARENT_ID,
-                    )
-
-                elif isinstance(item, TextUnit):
-                    # Create a copy to avoid modifying the original
-                    unit = TextUnit(
-                        text=self._sanitize_text(item.text),
-                        text_id=item.text_id,
-                        parent_id=item.parent_id or self.DEFAULT_PARENT_ID,
-                        chunk_position=item.chunk_position,
-                        distance=item.distance,
-                        source=item.source,
-                        confidence=item.confidence,
-                        language=item.language,
-                        section=item.section,
-                        author=item.author,
-                        tags=item.tags,
-                        timestamp=item.timestamp,
-                    )
-
-                else:
-                    msg = 'Invalid text type, must be str or TextUnit'
-                    _LOG.error(msg)
-                    raise ValidationError(msg)
-
-                chunker = TextUnitChunker(
-                    tokenizer=self.tokenizer,
-                    chunk_size=effective_chunk_size,
-                    overlap=effective_overlap,
-                    min_chunk_size=self.min_chunk_size,
-                    split=split,
-                    batch_timestamp=batch_timestamp,
-                    text_index=text_index,
-                )
-                text_units_to_store.extend(chunker.chunk_text_unit(unit))
-
-            if not text_units_to_store:
-                msg = 'No valid chunks stored'
-                _LOG.error(msg)
-                raise DataError(msg)
+            _chunk_size, _overlap = self._resolve_chunk_params(
+                chunk_size=chunk_size,
+                overlap=overlap,
+            )
+            text_units_to_store = self._prepare_text_units_for_storage(
+                texts_or_units=texts_or_units,
+                chunk_size=_chunk_size,
+                overlap=_overlap,
+                split=split,
+            )
 
             stored_units = self.ragstore.store_texts(text_units_to_store)
-
             _LOG.info('Added %d texts resulting in %d chunks',
                       len(texts_or_units), len(stored_units))
+
             return stored_units
+
+    @staticmethod
+    def _validate_texts_input(texts_or_units: list[str | TextUnit]) -> None:
+        """
+        Validate input for add_texts method.
+
+        Args:
+            texts_or_units:
+                List of texts or TextUnit objects to validate.
+
+        Raises:
+            ValidationError:
+                If texts_or_units is empty.
+        """
+        if not texts_or_units:
+            _LOG.error('texts_or_units cannot be empty')
+            raise ValidationError('texts_or_units cannot be empty')
+
+    def _resolve_chunk_params(
+            self,
+            chunk_size: int | None,
+            overlap: int | None
+    ) -> tuple[int, int]:
+        """
+        Resolve effective chunk size and overlap.
+
+        Determines the effective chunk size and overlap to use,
+        prioritizing method parameters over instance defaults.
+
+        Args:
+            chunk_size:
+                Optional chunk size override.
+            overlap:
+                Optional overlap override.
+
+        Returns:
+            Tuple of effective chunk size and overlap.
+        """
+        effective_chunk_size = chunk_size or self.chunk_size
+        effective_overlap = overlap or self.overlap
+        self._validate_chunking(effective_chunk_size, effective_overlap)
+
+        return effective_chunk_size, effective_overlap
+
+    def _prepare_text_units_for_storage(
+            self,
+            *,
+            texts_or_units: list[str | TextUnit],
+            chunk_size: int,
+            overlap: int,
+            split: bool,
+    ) -> list[TextUnit]:
+        """
+        Prepare TextUnit instances for storage.
+
+        Converts input texts or TextUnits to sanitized TextUnits,
+        chunks them, and returns a list of TextUnits ready for storage.
+
+        Args:
+            texts_or_units:
+                List of texts or TextUnit objects to add.
+            chunk_size:
+                Chunk size to use.
+            overlap:
+                Overlap to use.
+            split:
+                Whether to split the text into chunks.
+
+        Returns:
+            List of TextUnit instances ready for storage.
+        """
+        text_units_to_store: list[TextUnit] = []
+        batch_timestamp = int(time.time_ns() // 1000)
+
+        for text_index, item in enumerate(texts_or_units):
+            unit = self._convert_to_text_unit(item)
+            chunker = self._create_chunker(
+                chunk_size=chunk_size,
+                overlap=overlap,
+                split=split,
+                batch_timestamp=batch_timestamp,
+                text_index=text_index,
+            )
+            text_units_to_store.extend(chunker.chunk_text_unit(unit))
+
+        if not text_units_to_store:
+            msg = 'No valid chunks stored'
+            _LOG.error(msg)
+            raise DataError(msg)
+
+        return text_units_to_store
+
+    def _convert_to_text_unit(self, item: str | TextUnit) -> TextUnit:
+        """
+        Convert input to a sanitized TextUnit.
+
+        Args:
+            item:
+                Text or TextUnit to convert.
+
+        Returns:
+            Sanitized TextUnit instance.
+        """
+        if isinstance(item, str):
+            return TextUnit(
+                text=self._sanitize_text(item),
+                parent_id=self.DEFAULT_PARENT_ID,
+            )
+        if isinstance(item, TextUnit):
+            return TextUnit(
+                text=self._sanitize_text(item.text),
+                text_id=item.text_id,
+                parent_id=item.parent_id or self.DEFAULT_PARENT_ID,
+                chunk_position=item.chunk_position,
+                distance=item.distance,
+                source=item.source,
+                confidence=item.confidence,
+                language=item.language,
+                section=item.section,
+                author=item.author,
+                tags=item.tags,
+                timestamp=item.timestamp,
+            )
+        msg = 'Invalid text type, must be str or TextUnit'
+        _LOG.error(msg)
+        raise ValidationError(msg)
+
+    def _create_chunker(
+            self,
+            *,
+            chunk_size: int,
+            overlap: int,
+            split: bool,
+            batch_timestamp: int,
+            text_index: int,
+    ) -> TextUnitChunker:
+        # pylint: disable=too-many-arguments
+        """
+        Create a TextUnitChunker instance.
+
+        Args:
+            chunk_size:
+                Chunk size to use.
+            overlap:
+                Overlap to use.
+            split:
+                Whether to split the text into chunks.
+            batch_timestamp:
+                Timestamp for the batch, used in text_id generation.
+            text_index:
+                Index of the text in the batch, used in text_id generation.
+
+        Returns:
+            TextUnitChunker instance.
+        """
+        return TextUnitChunker(
+            tokenizer=self.tokenizer,
+            chunk_size=chunk_size,
+            overlap=overlap,
+            min_chunk_size=self.min_chunk_size,
+            split=split,
+            batch_timestamp=batch_timestamp,
+            text_index=text_index,
+        )
+
+    # def add_texts(
+    #         self,
+    #         texts_or_units: list[str | TextUnit],
+    #         *,
+    #         chunk_size: int | None = None,
+    #         overlap: int | None = None,
+    #         split: bool = True,
+    # ) -> list[TextUnit]:
+    #     # pylint: disable=too-many-locals
+    #     """
+    #     Add multiple texts to the store.
+    #
+    #     Splits texts into chunks, stores with metadata in batch, and
+    #     returns stored TextUnit instances.
+    #
+    #     Args:
+    #         texts_or_units:
+    #             List of texts or TextUnit objects to add.
+    #         chunk_size:
+    #             Optional chunk size override.
+    #         overlap:
+    #             Optional overlap override.
+    #         split:
+    #             Whether to split the text into chunks.
+    #
+    #     Raises:
+    #         ValidationError:
+    #             If texts are empty or params invalid.
+    #         DataError:
+    #             If no chunks are stored.
+    #
+    #     Returns:
+    #         List of stored TextUnit instances.
+    #     """
+    #     with self.track_operation('add_texts'):
+    #         _LOG.debug('Adding texts: %d items', len(texts_or_units))
+    #
+    #         if not texts_or_units:
+    #             _LOG.error('texts_or_units cannot be empty')
+    #             raise ValidationError('texts_or_units cannot be empty')
+    #
+    #         effective_chunk_size = chunk_size or self.chunk_size
+    #         effective_overlap = overlap or self.overlap
+    #         self._validate_chunking(effective_chunk_size, effective_overlap)
+    #
+    #         text_units_to_store: list[TextUnit] = []
+    #         batch_timestamp = int(time.time_ns() // 1000)
+    #
+    #         for text_index, item in enumerate(texts_or_units):
+    #
+    #             if isinstance(item, str):
+    #                 sanitized_text = self._sanitize_text(item)
+    #                 unit = TextUnit(
+    #                     text=sanitized_text,
+    #                     parent_id=self.DEFAULT_PARENT_ID,
+    #                 )
+    #
+    #             elif isinstance(item, TextUnit):
+    #                 # Create a copy to avoid modifying the original
+    #                 unit = TextUnit(
+    #                     text=self._sanitize_text(item.text),
+    #                     text_id=item.text_id,
+    #                     parent_id=item.parent_id or self.DEFAULT_PARENT_ID,
+    #                     chunk_position=item.chunk_position,
+    #                     distance=item.distance,
+    #                     source=item.source,
+    #                     confidence=item.confidence,
+    #                     language=item.language,
+    #                     section=item.section,
+    #                     author=item.author,
+    #                     tags=item.tags,
+    #                     timestamp=item.timestamp,
+    #                 )
+    #
+    #             else:
+    #                 msg = 'Invalid text type, must be str or TextUnit'
+    #                 _LOG.error(msg)
+    #                 raise ValidationError(msg)
+    #
+    #             chunker = TextUnitChunker(
+    #                 tokenizer=self.tokenizer,
+    #                 chunk_size=effective_chunk_size,
+    #                 overlap=effective_overlap,
+    #                 min_chunk_size=self.min_chunk_size,
+    #                 split=split,
+    #                 batch_timestamp=batch_timestamp,
+    #                 text_index=text_index,
+    #             )
+    #             text_units_to_store.extend(chunker.chunk_text_unit(unit))
+    #
+    #         if not text_units_to_store:
+    #             msg = 'No valid chunks stored'
+    #             _LOG.error(msg)
+    #             raise DataError(msg)
+    #
+    #         stored_units = self.ragstore.store_texts(text_units_to_store)
+    #
+    #         _LOG.info('Added %d texts resulting in %d chunks',
+    #                   len(texts_or_units), len(stored_units))
+    #         return stored_units
 
     def delete_text(self, text_id: str) -> bool | None:
         """
@@ -642,14 +861,53 @@ class RAGManager:
         """
         _LOG.debug('Deleting texts: %s', text_ids)
         with self.track_operation('delete_texts'):
-            existing_texts = self.ragstore.list_texts()
-            valid_ids = [tid for tid in text_ids if tid in existing_texts]
+            valid_ids = self._filter_valid_text_ids(text_ids)
+
             if not valid_ids:
                 _LOG.warning('No valid text IDs found for deletion')
                 return 0
+
             deleted_count = self.ragstore.delete_texts(valid_ids)
             _LOG.info('Deleted %d texts', deleted_count)
             return deleted_count
+
+    def _filter_valid_text_ids(self, text_ids: list[str]) -> list[str]:
+        """
+        Filter text IDs to only include those that exist in the store.
+
+        Args:
+            text_ids: List of text IDs to filter.
+
+        Returns:
+            List of valid text IDs that exist in the store.
+        """
+        existing_texts = self.ragstore.list_texts()
+        return [tid for tid in text_ids if tid in existing_texts]
+
+    # def delete_texts(self, text_ids: list[str]) -> int:
+    #     """
+    #     Delete multiple texts from the store.
+    #
+    #     Deletes a list of text chunks by their IDs, removing them
+    #     and any associated metadata from the store.
+    #
+    #     Args:
+    #         text_ids:
+    #             List of text IDs to delete.
+    #
+    #     Returns:
+    #         Number of texts deleted.
+    #     """
+    #     _LOG.debug('Deleting texts: %s', text_ids)
+    #     with self.track_operation('delete_texts'):
+    #         existing_texts = self.ragstore.list_texts()
+    #         valid_ids = [tid for tid in text_ids if tid in existing_texts]
+    #         if not valid_ids:
+    #             _LOG.warning('No valid text IDs found for deletion')
+    #             return 0
+    #         deleted_count = self.ragstore.delete_texts(valid_ids)
+    #         _LOG.info('Deleted %d texts', deleted_count)
+    #         return deleted_count
 
     def get_context(
             self,
@@ -681,8 +939,7 @@ class RAGManager:
 
         Returns:
             List of TextUnit instances, possibly fewer than top_k
-            if backend filtering reduces results. See relevant
-            backend documentation for details.
+            if backend filtering reduces results.
         """
         _LOG.debug('Retrieving context for query: %s', query)
 
@@ -690,26 +947,135 @@ class RAGManager:
             return []
 
         with self.track_operation('get_context'):
-            self._sanitize_text(query)
-            self._validate_query(query)
-            self._validate_top_k(top_k)
+            self._validate_and_sanitize_query(query, top_k)
 
-            results = self.ragstore.get_relevant(
-                query=query,
-                top_k=top_k,
-                min_time=min_time,
-                max_time=max_time,
+            results = self._retrieve_relevant_texts(
+                query, top_k, min_time, max_time
             )
 
-            if sort_by_time:
-                results = sorted(results, key=lambda x: x.timestamp)
-            else:
-                results = sorted(results, key=lambda x: x.distance)
+            sorted_results = self._sort_results(results, sort_by_time)
 
             _LOG.info('Retrieved %s contexts for query: %s',
-                      len(results), query)
+                      len(sorted_results), query)
 
-            return results
+            return sorted_results
+
+    def _validate_and_sanitize_query(self, query: str, top_k: int) -> None:
+        """
+        Validate and sanitize the query and top_k parameters.
+
+        Args:
+            query: Query string to validate and sanitize.
+            top_k: Number of results to validate.
+        """
+        self._sanitize_text(query)
+        self._validate_query(query)
+        self._validate_top_k(top_k)
+
+    def _retrieve_relevant_texts(
+            self,
+            query: str,
+            top_k: int,
+            min_time: int | None,
+            max_time: int | None,
+    ) -> list[TextUnit]:
+        """
+        Retrieve relevant texts from the RAG store.
+
+        Args:
+            query: Query text.
+            top_k: Number of results to return.
+            min_time: Minimum timestamp filter.
+            max_time: Maximum timestamp filter.
+
+        Returns:
+            List of relevant TextUnit instances.
+        """
+        return self.ragstore.get_relevant(
+            query=query,
+            top_k=top_k,
+            min_time=min_time,
+            max_time=max_time,
+        )
+
+    @staticmethod
+    def _sort_results(
+            results: list[TextUnit],
+            sort_by_time: bool,
+    ) -> list[TextUnit]:
+        """
+        Sort results by time or distance.
+
+        Args:
+            results: List of TextUnit instances to sort.
+            sort_by_time: Whether to sort by time instead of distance.
+
+        Returns:
+            Sorted list of TextUnit instances.
+        """
+        if sort_by_time:
+            return sorted(results, key=lambda x: x.timestamp)
+        return sorted(results, key=lambda x: x.distance)
+
+    # def get_context(
+    #         self,
+    #         query: str,
+    #         top_k: int = 10,
+    #         *,
+    #         min_time: int | None = None,
+    #         max_time: int | None = None,
+    #         sort_by_time: bool = False,
+    # ) -> list[TextUnit]:
+    #     # pylint: disable=too-many-arguments
+    #     """
+    #     Retrieve relevant text chunks for a query.
+    #
+    #     Retrieves text chunks based on semantic similarity
+    #     to the query, optionally filtering by time range and sorting.
+    #
+    #     Args:
+    #         query:
+    #             Query text.
+    #         top_k:
+    #             Number of results to return.
+    #         min_time:
+    #             Minimum timestamp filter.
+    #         max_time:
+    #             Maximum timestamp filter.
+    #         sort_by_time:
+    #             Sort by time instead of distance.
+    #
+    #     Returns:
+    #         List of TextUnit instances, possibly fewer than top_k
+    #         if backend filtering reduces results. See relevant
+    #         backend documentation for details.
+    #     """
+    #     _LOG.debug('Retrieving context for query: %s', query)
+    #
+    #     if query.strip() == '':
+    #         return []
+    #
+    #     with self.track_operation('get_context'):
+    #         self._sanitize_text(query)
+    #         self._validate_query(query)
+    #         self._validate_top_k(top_k)
+    #
+    #         results = self.ragstore.get_relevant(
+    #             query=query,
+    #             top_k=top_k,
+    #             min_time=min_time,
+    #             max_time=max_time,
+    #         )
+    #
+    #         if sort_by_time:
+    #             results = sorted(results, key=lambda x: x.timestamp)
+    #         else:
+    #             results = sorted(results, key=lambda x: x.distance)
+    #
+    #         _LOG.info('Retrieved %s contexts for query: %s',
+    #                   len(results), query)
+    #
+    #         return results
 
     def get_health_status(self) -> dict[str, Any]:
         """
