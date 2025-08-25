@@ -460,8 +460,7 @@ class RedisVectorStore:
             ValidationError:
                 If any input is invalid.
         """
-        if not isinstance(texts_and_embeddings, list):
-            raise ValidationError('texts_and_embeddings must be a list')
+        self._validate_batch_input_structure(texts_and_embeddings)
 
         if not texts_and_embeddings:
             return []
@@ -469,9 +468,7 @@ class RedisVectorStore:
         _LOG.debug('Storing batch of %d text-embedding pairs',
                    len(texts_and_embeddings))
 
-        batch_data = self._validate_and_prepare_batch_data(
-            texts_and_embeddings=texts_and_embeddings,
-        )
+        batch_data = self._prepare_batch_data(texts_and_embeddings)
         stored_ids = self._execute_batch_storage(batch_data)
 
         _LOG.info('Successfully stored batch of %d texts', len(stored_ids))
@@ -969,6 +966,71 @@ class RedisVectorStore:
 
         return []
 
+    def _prepare_batch_data(
+            self,
+            texts_and_embeddings: list[TextEmbeddingPair],
+    ) -> dict[str, dict[str, Any]]:
+        """
+        Validate input structure and prepare batch data for storage.
+
+        Validates the structure of the batch input and prepares each
+        text-embedding pair for storage in Redis. Ensures that each
+        entry is valid and properly formatted before returning a
+        dictionary of prepared data.
+
+        Args:
+            texts_and_embeddings:
+                List of (TextUnit, np.ndarray) tuples to validate and prepare.
+
+        Returns:
+            Batch data dictionary mapping text IDs to prepared data.
+
+        Raises:
+            ValidationError:
+                If any input is invalid.
+        """
+        batch_data = {}
+
+        for text_unit, embedding in texts_and_embeddings:
+            text_id, prepared_data = self._prepare_single_text_entry(
+                text_unit=text_unit,
+                embedding=embedding,
+            )
+            batch_data[text_id] = prepared_data
+
+        return batch_data
+
+    @staticmethod
+    def _prepare_redis_payload(
+            text: str,
+            embedding: np.ndarray,
+            metadata: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Create data structured for Redis store.
+
+        Prepares a dictionary containing the text, embedding, and
+        sanitized metadata for storage in Redis. The embedding is
+        converted to bytes for Redis storage. The metadata is expected
+        to be sanitized according to the schema defined in the store.
+
+        Args:
+            text:
+                Text to store.
+            embedding:
+                Vector embedding.
+            metadata:
+                Sanitized metadata.
+
+        Returns:
+            Dict with text, embedding, and metadata.
+        """
+        return {
+            'text':             text,
+            'embedding':        embedding.tobytes(),
+            **metadata,
+        }
+
     def _prepare_single_text_entry(
             self,
             text_unit: TextUnit,
@@ -1020,7 +1082,7 @@ class RedisVectorStore:
                 tags=sanitized['tags'],
             )
 
-        prepared_data = self._prepare_text_data(
+        prepared_data = self._prepare_redis_payload(
             text=text,
             embedding=embedding,
             metadata=sanitized,
@@ -1048,37 +1110,6 @@ class RedisVectorStore:
         if isinstance(tags, list):
             return self.TAG_SEPARATOR.join(str(t).strip() for t in tags)
         return str(tags)
-
-    @staticmethod
-    def _prepare_text_data(
-            text: str,
-            embedding: np.ndarray,
-            metadata: dict[str, Any],
-    ) -> dict[str, Any]:
-        """
-        Prepare data dict for Redis store.
-
-        Prepares a dictionary containing the text, embedding, and
-        sanitized metadata for storage in Redis. The embedding is
-        converted to bytes for Redis storage. The metadata is expected
-        to be sanitized according to the schema defined in the store.
-
-        Args:
-            text:
-                Text to store.
-            embedding:
-                Vector embedding.
-            metadata:
-                Sanitized metadata.
-
-        Returns:
-            Dict with text, embedding, and metadata.
-        """
-        return {
-            'text':             text,
-            'embedding':        embedding.tobytes(),
-            **metadata,
-        }
 
     def _search_redis(self, vector_query: VectorQuery) -> Any:
         """
@@ -1167,41 +1198,6 @@ class RedisVectorStore:
             }
 
         return [_build_doc_dict(doc) for doc in results.docs]
-
-    def _validate_and_prepare_batch_data(
-            self,
-            texts_and_embeddings: list[TextEmbeddingPair],
-    ) -> dict[str, dict[str, Any]]:
-        """
-        Validate input structure and prepare batch data for storage.
-
-        Validates the structure of the batch input and prepares each
-        text-embedding pair for storage in Redis. Ensures that each
-        entry is valid and properly formatted before returning a
-        dictionary of prepared data.
-
-        Args:
-            texts_and_embeddings:
-                List of (TextUnit, np.ndarray) tuples to validate and prepare.
-
-        Returns:
-            Batch data dictionary mapping text IDs to prepared data.
-
-        Raises:
-            ValidationError:
-                If any input is invalid.
-        """
-        self._validate_batch_input_structure(texts_and_embeddings)
-
-        batch_data = {}
-
-        for text_unit, embedding in texts_and_embeddings:
-            text_id, prepared_data = self._prepare_single_text_entry(
-                text_unit, embedding
-            )
-            batch_data[text_id] = prepared_data
-
-        return batch_data
 
     @staticmethod
     def _validate_batch_input_structure(

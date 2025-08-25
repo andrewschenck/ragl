@@ -1513,7 +1513,7 @@ class TestRedisVectorStore(unittest.TestCase):
         embedding = np.random.rand(768)
         metadata = {'source': 'test', 'tags': 'tag1,tag2'}
 
-        result = RedisVectorStore._prepare_text_data(text, embedding, metadata)
+        result = RedisVectorStore._prepare_redis_payload(text, embedding, metadata)
 
         self.assertEqual(result['text'], text)
         self.assertEqual(result['source'], 'test')
@@ -2585,7 +2585,7 @@ class TestRedisVectorStore(unittest.TestCase):
         self.mock_redis_client.incr.return_value = 123
 
         with patch('ragl.store.redis.sanitize_metadata', return_value={}):
-            result = store._validate_and_prepare_batch_data(
+            result = store._prepare_batch_data(
                 texts_and_embeddings)
 
         self.assertIsInstance(result, dict)
@@ -2596,7 +2596,7 @@ class TestRedisVectorStore(unittest.TestCase):
     @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
     def test_validate_and_prepare_batch_data_invalid_structure(self,
                                                                mock_validate_sync):
-        """Test batch data validation with invalid structure."""
+        """Test that store_texts validates input structure before calling _prepare_batch_data."""
         with patch.object(RedisVectorStore, '_enforce_schema_version'):
             store = RedisVectorStore(
                 redis_client=self.mock_redis_client,
@@ -2604,14 +2604,16 @@ class TestRedisVectorStore(unittest.TestCase):
                 index_name=self.index_name
             )
 
-        # Test with non-list input
+        # Test validation happens at store_texts level, not _prepare_batch_data level
         with self.assertRaises(ValidationError):
-            store._validate_and_prepare_batch_data("not_a_list")
+            store.store_texts("not_a_list")  # Changed from _prepare_batch_data
 
-        # Test with invalid tuple structure
-        invalid_pairs = [("not_a_text_unit", "not_an_embedding")]
+        # Test other invalid structures at store_texts level
         with self.assertRaises(ValidationError):
-            store._validate_and_prepare_batch_data(invalid_pairs)
+            store.store_texts([("not_a_tuple_with_two_elements",)])
+
+        with self.assertRaises(ValidationError):
+            store.store_texts([(None, np.array([1, 2, 3]))])
 
     @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
     def test_prepare_single_text_entry_success(self, mock_validate_sync):
