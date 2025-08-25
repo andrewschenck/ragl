@@ -2347,6 +2347,244 @@ class TestRedisVectorStore(unittest.TestCase):
         # Verify ping was called
         mock_redis_client.ping.assert_called_once()
 
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_initialize_redis_with_client_success(self, mock_validate_sync):
+        """Test _initialize_redis with valid Redis client."""
+        mock_client = Mock(spec=redis.Redis)
+        mock_client.ping.return_value = True
+
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        result = store._initialize_redis(mock_client, None)
+
+        self.assertEqual(result, mock_client)
+        mock_client.ping.assert_called_once()
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_initialize_redis_with_client_connection_error(self,
+                                                           mock_validate_sync):
+        """Test _initialize_redis with Redis client connection failure."""
+        mock_client = Mock(spec=redis.Redis)
+        mock_client.ping.side_effect = redis.ConnectionError(
+            "Connection failed")
+
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        with self.assertRaises(StorageConnectionError) as cm:
+            store._initialize_redis(mock_client, None)
+
+        self.assertIn("Injected Redis client connection failed",
+                      str(cm.exception))
+
+    @patch('redis.Redis')
+    @patch('redis.BlockingConnectionPool')
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_initialize_redis_with_config_success(self, mock_validate_sync,
+                                                  mock_pool_class,
+                                                  mock_redis_class):
+        """Test _initialize_redis with valid Redis config."""
+        mock_config = RedisConfig(host='localhost', port=6379)
+        mock_pool = Mock()
+        mock_pool_class.return_value = mock_pool
+
+        mock_redis_instance = Mock()
+        mock_redis_class.return_value = mock_redis_instance
+
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        result = store._initialize_redis(None, mock_config)
+
+        self.assertEqual(result, mock_redis_instance)
+        mock_pool_class.assert_called_once()
+        mock_redis_class.assert_called_once_with(connection_pool=mock_pool)
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_initialize_redis_no_client_or_config(self, mock_validate_sync):
+        """Test _initialize_redis with neither client nor config provided."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        with self.assertRaises(ConfigurationError) as cm:
+            store._initialize_redis(None, None)
+
+        self.assertIn("Either redis_client or redis_config must be provided",
+                      str(cm.exception))
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_initialize_redis_both_client_and_config(self, mock_validate_sync):
+        """Test _initialize_redis with both client and config provided."""
+        mock_client = Mock(spec=redis.Redis)
+        mock_config = RedisConfig(host='localhost', port=6379)
+
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        with self.assertRaises(ConfigurationError) as cm:
+            store._initialize_redis(mock_client, mock_config)
+
+        self.assertIn("Both redis_client and redis_config were provided",
+                      str(cm.exception))
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_initialize_redis_invalid_config_type(self, mock_validate_sync):
+        """Test _initialize_redis with invalid config type."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        with self.assertRaises(ConfigurationError) as cm:
+            store._initialize_redis(None, "invalid_config")
+
+        self.assertIn("redis_config must be an instance of RedisConfig",
+                      str(cm.exception))
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_create_validation_schema(self, mock_validate_sync):
+        """Test _create_validation_schema returns correct schema structure."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        schema = store._create_validation_schema()
+
+        # Verify schema structure
+        self.assertIsInstance(schema, dict)
+
+        # Check required fields exist
+        expected_fields = [
+            'chunk_position', 'timestamp', 'confidence', 'tags',
+            'parent_id', 'source', 'language', 'section', 'author'
+        ]
+        for field in expected_fields:
+            self.assertIn(field, schema)
+
+        # Check specific field types and defaults
+        self.assertEqual(schema['chunk_position']['type'], int)
+        self.assertEqual(schema['chunk_position']['default'], 0)
+        self.assertEqual(schema['timestamp']['type'], int)
+        self.assertEqual(schema['timestamp']['default'], 0)
+        self.assertEqual(schema['confidence']['type'], float)
+        self.assertEqual(schema['confidence']['default'], 0.0)
+        self.assertEqual(schema['tags']['type'], str)
+        self.assertEqual(schema['tags']['default'], '')
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_initialize_search_index_create_new(self, mock_validate_sync):
+        """Test _initialize_search_index creating new index."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        with patch.object(store.index, 'exists', return_value=False), \
+            patch.object(store.index, 'create') as mock_create:
+            store._initialize_search_index()
+
+            mock_create.assert_called_once()
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_initialize_search_index_existing(self, mock_validate_sync):
+        """Test _initialize_search_index with existing index."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        with patch.object(store.index, 'exists', return_value=True), \
+            patch.object(store.index, 'create') as mock_create:
+            store._initialize_search_index()
+
+            mock_create.assert_not_called()
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_initialize_search_index_response_error(self, mock_validate_sync):
+        """Test _initialize_search_index with Redis response error."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        with patch.object(store.index, 'exists', return_value=False), \
+            patch.object(store.index, 'create',
+                         side_effect=redis.ResponseError(
+                             "Index creation failed")):
+            with self.assertRaises(DataError) as cm:
+                store._initialize_search_index()
+
+            self.assertIn("Failed to create Redis index", str(cm.exception))
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_initialize_search_index_connection_error(self,
+                                                      mock_validate_sync):
+        """Test _initialize_search_index with connection error."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        with patch.object(store.index, 'exists',
+                          side_effect=redis.ConnectionError(
+                              "Connection failed")):
+            with self.assertRaises(StorageConnectionError) as cm:
+                store._initialize_search_index()
+
+            self.assertIn("Failed to connect to Redis", str(cm.exception))
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_initialize_search_index_unexpected_error(self,
+                                                      mock_validate_sync):
+        """Test _initialize_search_index with unexpected error."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        with patch.object(store.index, 'exists',
+                          side_effect=Exception("Unexpected error")):
+            with self.assertRaises(DataError) as cm:
+                store._initialize_search_index()
+
+            self.assertIn("Unexpected error creating index", str(cm.exception))
+
 
 if __name__ == '__main__':
     unittest.main()
