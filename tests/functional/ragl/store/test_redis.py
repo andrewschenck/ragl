@@ -1410,28 +1410,6 @@ class TestRedisVectorStore(unittest.TestCase):
                 store._search_redis(mock_query)
 
     @patch( 'redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
-    def test_store_to_redis(self, mock_validate_sync):
-        """Test storing data to Redis."""
-        with patch.object(RedisVectorStore, '_enforce_schema_version'):
-            store = RedisVectorStore(
-                redis_client=self.mock_redis_client,
-                dimensions=self.dimensions,
-                index_name=self.index_name
-            )
-
-        text_id = f'{TEXT_ID_PREFIX}123'
-        text_data = {'text': 'sample', 'embedding': b'bytes'}
-        batch_data = {text_id: text_data}
-
-        with patch.object(store, 'index', self.mock_index):
-            store._store_to_redis(batch_data)
-
-        self.mock_index.load.assert_called_once_with(
-            data=[text_data],
-            keys=[text_id]
-        )
-
-    @patch( 'redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
     def test_transform_redis_results(self, mock_validate_sync):
         """Test transforming Redis results."""
         with patch.object(RedisVectorStore, '_enforce_schema_version'):
@@ -2584,6 +2562,228 @@ class TestRedisVectorStore(unittest.TestCase):
                 store._initialize_search_index()
 
             self.assertIn("Unexpected error creating index", str(cm.exception))
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_validate_and_prepare_batch_data_success(self, mock_validate_sync):
+        """Test successful validation and preparation of batch data."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        text_unit1 = TextUnit(text="Sample text 1",
+                              text_id=f'{TEXT_ID_PREFIX}1', distance=0.0)
+        text_unit2 = TextUnit(text="Sample text 2", text_id=None, distance=0.0)
+        embedding1 = np.random.rand(self.dimensions).astype(np.float32)
+        embedding2 = np.random.rand(self.dimensions).astype(np.float32)
+
+        texts_and_embeddings = [(text_unit1, embedding1),
+                                (text_unit2, embedding2)]
+
+        self.mock_redis_client.incr.return_value = 123
+
+        with patch('ragl.store.redis.sanitize_metadata', return_value={}):
+            result = store._validate_and_prepare_batch_data(
+                texts_and_embeddings)
+
+        self.assertIsInstance(result, dict)
+        self.assertEqual(len(result), 2)
+        self.assertIn(f'{TEXT_ID_PREFIX}1', result)
+        self.assertIn(f'{TEXT_ID_PREFIX}123', result)
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_validate_and_prepare_batch_data_invalid_structure(self,
+                                                               mock_validate_sync):
+        """Test batch data validation with invalid structure."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        # Test with non-list input
+        with self.assertRaises(ValidationError):
+            store._validate_and_prepare_batch_data("not_a_list")
+
+        # Test with invalid tuple structure
+        invalid_pairs = [("not_a_text_unit", "not_an_embedding")]
+        with self.assertRaises(ValidationError):
+            store._validate_and_prepare_batch_data(invalid_pairs)
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_prepare_single_text_entry_success(self, mock_validate_sync):
+        """Test successful preparation of single text entry."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        text_unit = TextUnit(text="Sample text",
+                             text_id=f'{TEXT_ID_PREFIX}123', distance=0.0)
+        embedding = np.random.rand(self.dimensions).astype(np.float32)
+
+        with patch('ragl.store.redis.sanitize_metadata',
+                   return_value={'source': 'test'}):
+            text_id, prepared_data = store._prepare_single_text_entry(
+                text_unit, embedding)
+
+        self.assertEqual(text_id, f'{TEXT_ID_PREFIX}123')
+        self.assertIsInstance(prepared_data, dict)
+        self.assertEqual(prepared_data['text'], "Sample text")
+        self.assertIsInstance(prepared_data['embedding'], bytes)
+        self.assertEqual(prepared_data['source'], 'test')
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_prepare_single_text_entry_auto_id(self, mock_validate_sync):
+        """Test preparation of single text entry with auto-generated ID."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        text_unit = TextUnit(text="Sample text", text_id=None, distance=0.0)
+        embedding = np.random.rand(self.dimensions).astype(np.float32)
+
+        self.mock_redis_client.incr.return_value = 456
+
+        with patch('ragl.store.redis.sanitize_metadata', return_value={}):
+            text_id, prepared_data = store._prepare_single_text_entry(
+                text_unit, embedding)
+
+        self.assertEqual(text_id, f'{TEXT_ID_PREFIX}456')
+        self.assertEqual(text_unit.text_id,
+                         f'{TEXT_ID_PREFIX}456')  # Should be set on the unit
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_prepare_single_text_entry_empty_text(self, mock_validate_sync):
+        """Test preparation with empty text raises ValidationError."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        embedding = np.random.rand(self.dimensions).astype(np.float32)
+
+        with self.assertRaises(ValidationError) as cm:
+            text_unit = TextUnit(text="", text_id=None, distance=0.0)
+            store._prepare_single_text_entry(text_unit, embedding)
+
+        self.assertIn('text cannot be whitespace-only or zero-length', str(cm.exception))
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_prepare_single_text_entry_with_tags(self, mock_validate_sync):
+        """Test preparation of single text entry with tags."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        text_unit = TextUnit(text="Sample text",
+                             text_id=f'{TEXT_ID_PREFIX}123', distance=0.0)
+        embedding = np.random.rand(self.dimensions).astype(np.float32)
+
+        with patch('ragl.store.redis.sanitize_metadata',
+                   return_value={'tags': ['tag1', 'tag2']}):
+            text_id, prepared_data = store._prepare_single_text_entry(
+                text_unit, embedding)
+
+        self.assertEqual(prepared_data['tags'], 'tag1,tag2')
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_prepare_single_text_entry_invalid_dimensions(self,
+                                                          mock_validate_sync):
+        """Test preparation with invalid embedding dimensions."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        text_unit = TextUnit(text="Sample text", text_id=None, distance=0.0)
+        wrong_embedding = np.random.rand(512).astype(
+            np.float32)  # Wrong dimensions
+
+        with self.assertRaises(ConfigurationError):
+            store._prepare_single_text_entry(text_unit, wrong_embedding)
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_execute_batch_storage_success(self, mock_validate_sync):
+        """Test successful execution of batch storage."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        batch_data = {
+            f'{TEXT_ID_PREFIX}1': {'text': 'text1', 'embedding': b'data1'},
+            f'{TEXT_ID_PREFIX}2': {'text': 'text2', 'embedding': b'data2'}
+        }
+
+        expected_ids = [f'{TEXT_ID_PREFIX}1', f'{TEXT_ID_PREFIX}2']
+        self.mock_index.load.return_value = expected_ids
+
+        with patch.object(store, 'index', self.mock_index):
+            result = store._execute_batch_storage(batch_data)
+
+        self.assertEqual(result, expected_ids)
+        self.mock_index.load.assert_called_once_with(
+            data=list(batch_data.values()),
+            keys=list(batch_data.keys())
+        )
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_execute_batch_storage_empty_batch(self, mock_validate_sync):
+        """Test execution of batch storage with empty batch."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        batch_data = {}
+        self.mock_index.load.return_value = []
+
+        with patch.object(store, 'index', self.mock_index):
+            result = store._execute_batch_storage(batch_data)
+
+        self.assertEqual(result, [])
+        self.mock_index.load.assert_called_once_with(data=[], keys=[])
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_execute_batch_storage_redis_error(self, mock_validate_sync):
+        """Test batch storage execution with Redis error."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        batch_data = {
+            f'{TEXT_ID_PREFIX}1': {'text': 'text1', 'embedding': b'data1'}
+        }
+
+        with patch.object(store, 'index', self.mock_index):
+            self.mock_index.load.side_effect = redis.ResponseError(
+                "Redis error")
+
+            with self.assertRaises(DataError):
+                store._execute_batch_storage(batch_data)
 
 
 if __name__ == '__main__':

@@ -228,143 +228,6 @@ class RedisVectorStore:
         self.index = SearchIndex(self.index_schema, self.redis_client)
         self._initialize_search_index()
 
-    # def __init__(
-    #         self,
-    #         *,
-    #         redis_client: redis.Redis | None = None,
-    #         redis_config: RedisConfig | None = None,
-    #         dimensions: int | None = None,
-    #         index_name: str,
-    # ):
-    #     """
-    #     Initialize Redis store with existing client or configuration.
-    #
-    #     Connects to Redis using either a provided client instance or
-    #     configuration. Sets up the vector search index with the
-    #     specified dimensions and index name. Validates the connection
-    #     and schema version. Creates the index if it does not already
-    #     exist.
-    #
-    #     Args:
-    #         redis_client:
-    #             Redis client instance. If provided, config is ignored.
-    #         redis_config:
-    #             Redis configuration object. If provided, redis_client
-    #             is ignored.
-    #         dimensions:
-    #             Size of embedding vectors, required for schema
-    #             creation.
-    #         index_name:
-    #             Name of the Redis search index.
-    #
-    #     Raises:
-    #         StorageConnectionError:
-    #             If Redis connection or index creation fails.
-    #         ConfigurationError:
-    #             If both redis_client and redis_config are provided, or
-    #             if schema version mismatch occurs.
-    #     """
-    #     # pylint: disable=too-many-statements
-    #
-    #     # TODO move redis client setup to another method
-    #     if redis_client is None and redis_config is None:
-    #         msg = 'Either redis_client or redis_config must be provided'
-    #         _LOG.critical(msg)
-    #         raise ConfigurationError(msg)
-    #
-    #     if redis_client is not None and redis_config is not None:
-    #         msg = 'Both redis_client and redis_config were provided'
-    #         _LOG.critical(msg)
-    #         raise ConfigurationError(msg)
-    #
-    #     if redis_client is not None:
-    #         self.redis_client = redis_client
-    #         try:
-    #             self.redis_client.ping()
-    #             _LOG.info('Successfully connected to injected Redis client')
-    #         except redis.ConnectionError as e:
-    #             msg = f'Injected Redis client connection failed: {e}'
-    #             _LOG.critical(msg)
-    #             raise StorageConnectionError(msg) from e
-    #     else:
-    #         if not isinstance(redis_config, RedisConfig):
-    #             msg = 'redis_config must be an instance of RedisConfig'
-    #             _LOG.critical(msg)
-    #             raise ConfigurationError(msg)
-    #
-    #         pool_config = {**self.POOL_DEFAULTS, **redis_config.to_dict()}
-    #         pool = redis.BlockingConnectionPool(**pool_config)
-    #         self.redis_client = redis.Redis(connection_pool=pool)
-    #
-    #     self._validate_dimensions(dimensions)
-    #     self._validate_index_name(index_name)
-    #     assert isinstance(dimensions, int)
-    #     assert isinstance(index_name, str)
-    #     self.dimensions = dimensions
-    #     self.index_name = index_name
-    #
-    #     # TODO maybe move all of the rest of this other methods?
-    #     self._enforce_schema_version()
-    #     self.validation_schema = {  # TODO return this from some method?
-    #         'chunk_position': {
-    #             'type':         int,
-    #             'default':      0,
-    #         },
-    #         'timestamp': {
-    #             'type':         int,
-    #             'default':      0,
-    #         },
-    #         'confidence': {
-    #             'type':         float,
-    #             'default':      0.0,
-    #         },
-    #         'tags': {
-    #             'type':         str,
-    #             'default':      '',
-    #         },
-    #         'parent_id': {
-    #             'type':         str,
-    #             'default':      '',
-    #         },
-    #         'source': {
-    #             'type':         str,
-    #             'default':      '',
-    #         },
-    #         'language': {
-    #             'type':         str,
-    #             'default':      '',
-    #         },
-    #         'section': {
-    #             'type':         str,
-    #             'default':      '',
-    #         },
-    #         'author': {
-    #             'type':         str,
-    #             'default':      '',
-    #         },
-    #     }
-    #     self.index_schema = self._create_redis_schema(index_name)
-    #     self.index = SearchIndex(self.index_schema, self.redis_client)
-    #
-    #     try:
-    #         if not self.index.exists():
-    #             self.index.create()
-    #             _LOG.info('Created new index: %s', index_name)
-    #         _LOG.info('Connected to index: %s', index_name)
-    #
-    #     except redis.ResponseError as e:
-    #         msg = f'Failed to create Redis index: {e}'
-    #         _LOG.error(msg)
-    #         raise DataError(msg) from e
-    #
-    #     except redis.ConnectionError as e:
-    #         msg = f'Failed to connect to Redis: {e}'
-    #         _LOG.error(msg)
-    #         raise StorageConnectionError(msg) from e
-    #
-    #     except Exception as e:
-    #         raise DataError(f'Unexpected error creating index: {e}') from e
-
     def clear(self) -> None:
         """
         Clear all data from the Redis index.
@@ -595,58 +458,22 @@ class RedisVectorStore:
         Raises:
             ValidationError:
                 If any input is invalid.
-            DataError:
-                If storage operation fails.
         """
+        if not isinstance(texts_and_embeddings, list):
+            raise ValidationError('texts_and_embeddings must be a list')
+
         if not texts_and_embeddings:
             return []
-
-        self._validate_batch_input_structure(texts_and_embeddings)
 
         _LOG.debug('Storing batch of %d text-embedding pairs',
                    len(texts_and_embeddings))
 
-        batch_data = {}
-        text_ids = []
+        batch_data = self._validate_and_prepare_batch_data(
+            texts_and_embeddings=texts_and_embeddings,
+        )
+        stored_ids = self._execute_batch_storage(batch_data)
 
-        for text_unit, embedding in texts_and_embeddings:
-            text_data = text_unit.to_dict()
-            text = text_data.pop('text')
-
-            if not text.strip():
-                raise ValidationError('text cannot be empty')
-
-            text_id = text_unit.text_id
-            if text_id is None:
-                text_id = self._generate_text_id()
-                text_unit.text_id = text_id
-
-            self._validate_input_sizes(text, text_data)
-            self._validate_text_id(text_id)
-            self._validate_dimensions_match(embedding)
-
-            sanitized = sanitize_metadata(
-                metadata=text_data,
-                schema=self.validation_schema,
-            )
-
-            if 'tags' in sanitized:
-                sanitized['tags'] = self._prepare_tags_for_storage(
-                    tags=sanitized['tags'],
-                )
-
-            prepared_data = self._prepare_text_data(
-                text=text,
-                embedding=embedding,
-                metadata=sanitized,
-            )
-
-            batch_data[text_id] = prepared_data
-            text_ids.append(text_id)
-
-        stored_ids = self._store_to_redis(batch_data)
         _LOG.info('Successfully stored batch of %d texts', len(stored_ids))
-
         return stored_ids
 
     def _build_vector_query(
@@ -861,6 +688,32 @@ class RedisVectorStore:
                 _LOG.debug('Schema version %s confirmed for index %s',
                            self.SCHEMA_VERSION, self.index_name)
 
+    def _execute_batch_storage(
+            self,
+            batch_data: dict[str, dict[str, Any]],
+    ) -> list[str]:
+        """
+        Execute the batch storage operation in Redis.
+
+        Performs the actual storage of prepared batch data into Redis.
+
+        Args:
+            batch_data:
+                Dictionary mapping text IDs to their prepared data.
+
+        Returns:
+            List of successfully stored text IDs.
+
+        Raises:
+            DataError:
+                If storage operation fails.
+        """
+        keys = list(batch_data.keys())
+        values = list(batch_data.values())
+
+        with self.redis_context():
+            return self.index.load(data=values, keys=keys)
+
     @staticmethod
     def _extract_memory_info(info: Mapping) -> dict[str, Any]:
         """
@@ -986,27 +839,6 @@ class RedisVectorStore:
         text_id = f'{TEXT_ID_PREFIX}{counter}'
         return text_id
 
-    def _prepare_tags_for_storage(self, tags: Any) -> str:
-        """
-        Convert tags to a string for Redis store.
-
-        Converts a list of tags or a single tag into a comma-separated
-        string for storage in Redis. It ensures that each tag is
-        stripped of whitespace and converted to a string. If tags
-        is not a list, it converts it to a string directly.
-
-        Args:
-            tags:
-                Tags to convert (list or other).
-
-        Returns:
-            Comma-separated string of tags.
-        """
-        _LOG.debug('Preparing tags for Redis storage')
-        if isinstance(tags, list):
-            return self.TAG_SEPARATOR.join(str(t).strip() for t in tags)
-        return str(tags)
-
     def _parse_tags_from_retrieval(
             self,
             tags: str | list[str] | None,
@@ -1060,6 +892,86 @@ class RedisVectorStore:
             _LOG.warning('bad tags type: %s', type(tags))
 
         return clean_tags
+
+    def _prepare_single_text_entry(
+            self,
+            text_unit: TextUnit,
+            embedding: np.ndarray,
+    ) -> tuple[str, dict[str, Any]]:
+        """
+        Prepare a single text entry for Redis storage.
+
+        Validates and sanitizes a single TextUnit and its embedding
+        for storage in Redis. It ensures the text and metadata meet
+        size and format requirements, generates a text ID if needed,
+        and prepares the data dictionary for Redis.
+
+        Args:
+            text_unit:
+                TextUnit containing text and metadata.
+            embedding:
+                Vector embedding for the text.
+
+        Returns:
+            Tuple of (text_id, prepared_data_dict).
+
+        Raises:
+            ValidationError:
+                If input validation fails.
+        """
+        text_data = text_unit.to_dict()
+        text = text_data.pop('text')
+
+        if not text.strip():
+            raise ValidationError('text cannot be empty')
+
+        text_id = text_unit.text_id
+        if text_id is None:
+            text_id = self._generate_text_id()
+            text_unit.text_id = text_id
+
+        self._validate_input_sizes(text, text_data)
+        self._validate_text_id(text_id)
+        self._validate_dimensions_match(embedding)
+
+        sanitized = sanitize_metadata(
+            metadata=text_data,
+            schema=self.validation_schema,
+        )
+
+        if 'tags' in sanitized:
+            sanitized['tags'] = self._prepare_tags_for_storage(
+                tags=sanitized['tags'],
+            )
+
+        prepared_data = self._prepare_text_data(
+            text=text,
+            embedding=embedding,
+            metadata=sanitized,
+        )
+
+        return text_id, prepared_data
+
+    def _prepare_tags_for_storage(self, tags: Any) -> str:
+        """
+        Convert tags to a string for Redis store.
+
+        Converts a list of tags or a single tag into a comma-separated
+        string for storage in Redis. It ensures that each tag is
+        stripped of whitespace and converted to a string. If tags
+        is not a list, it converts it to a string directly.
+
+        Args:
+            tags:
+                Tags to convert (list or other).
+
+        Returns:
+            Comma-separated string of tags.
+        """
+        _LOG.debug('Preparing tags for Redis storage')
+        if isinstance(tags, list):
+            return self.TAG_SEPARATOR.join(str(t).strip() for t in tags)
+        return str(tags)
 
     @staticmethod
     def _prepare_text_data(
@@ -1141,28 +1053,6 @@ class RedisVectorStore:
             _LOG.error(msg)
             raise StorageConnectionError(msg) from e
 
-    def _store_to_redis(
-            self,
-            batch_data: dict[str, dict[str, Any]],
-    ) -> list[str]:
-        """
-        Store text data in Redis using RedisVL.
-
-        Stores the provided text data in Redis under the specified
-        text ID. It uses the RedisVL index to load the data, which
-        includes the text, embedding, and metadata.
-
-        Args:
-            batch_data:
-                Dictionary mapping text IDs to their data dicts.
-
-        """
-        keys = list(batch_data.keys())
-        values = list(batch_data.values())
-
-        with self.redis_context():
-            return self.index.load(data=values, keys=keys)
-
     def _transform_redis_results(self, results: Any) -> list[dict[str, Any]]:
         """
         Transform Redis results into dicts.
@@ -1201,6 +1091,41 @@ class RedisVectorStore:
             }
 
         return [_build_doc_dict(doc) for doc in results.docs]
+
+    def _validate_and_prepare_batch_data(
+            self,
+            texts_and_embeddings: list[tuple[TextUnit, np.ndarray]],
+    ) -> dict[str, dict[str, Any]]:
+        """
+        Validate input structure and prepare batch data for storage.
+
+        Validates the structure of the batch input and prepares each
+        text-embedding pair for storage in Redis. Ensures that each
+        entry is valid and properly formatted before returning a
+        dictionary of prepared data.
+
+        Args:
+            texts_and_embeddings:
+                List of (TextUnit, np.ndarray) tuples to validate and prepare.
+
+        Returns:
+            Batch data dictionary mapping text IDs to prepared data.
+
+        Raises:
+            ValidationError:
+                If any input is invalid.
+        """
+        self._validate_batch_input_structure(texts_and_embeddings)
+
+        batch_data = {}
+
+        for text_unit, embedding in texts_and_embeddings:
+            text_id, prepared_data = self._prepare_single_text_entry(
+                text_unit, embedding
+            )
+            batch_data[text_id] = prepared_data
+
+        return batch_data
 
     @staticmethod
     def _validate_batch_input_structure(
