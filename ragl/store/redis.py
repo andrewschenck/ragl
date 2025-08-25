@@ -102,6 +102,10 @@ class RedisVectorStore:
     Attributes:
         index:
             Redis SearchIndex instance.
+        index_name:
+            Name of the Redis search index.
+        index_schema:
+            Schema defining the index structure.
         redis_client:
             Redis client instance.
         dimensions:
@@ -211,106 +215,155 @@ class RedisVectorStore:
                 If both redis_client and redis_config are provided, or
                 if schema version mismatch occurs.
         """
-        # pylint: disable=too-many-statements
-
-        # TODO move redis client setup to another method
-        if redis_client is None and redis_config is None:
-            msg = 'Either redis_client or redis_config must be provided'
-            _LOG.critical(msg)
-            raise ConfigurationError(msg)
-
-        if redis_client is not None and redis_config is not None:
-            msg = 'Both redis_client and redis_config were provided'
-            _LOG.critical(msg)
-            raise ConfigurationError(msg)
-
-        if redis_client is not None:
-            self.redis_client = redis_client
-            try:
-                self.redis_client.ping()
-                _LOG.info('Successfully connected to injected Redis client')
-            except redis.ConnectionError as e:
-                msg = f'Injected Redis client connection failed: {e}'
-                _LOG.critical(msg)
-                raise StorageConnectionError(msg) from e
-        else:
-            if not isinstance(redis_config, RedisConfig):
-                msg = 'redis_config must be an instance of RedisConfig'
-                _LOG.critical(msg)
-                raise ConfigurationError(msg)
-
-            pool_config = {**self.POOL_DEFAULTS, **redis_config.to_dict()}
-            pool = redis.BlockingConnectionPool(**pool_config)
-            self.redis_client = redis.Redis(connection_pool=pool)
-
+        self.redis_client = self._initialize_redis(redis_client, redis_config)
         self._validate_dimensions(dimensions)
         self._validate_index_name(index_name)
-        assert isinstance(dimensions, int)
-        assert isinstance(index_name, str)
+        assert dimensions is not None
         self.dimensions = dimensions
         self.index_name = index_name
 
-        # TODO maybe move all of the rest of this other methods?
         self._enforce_schema_version()
-        self.validation_schema = {  # TODO return this from some method?
-            'chunk_position': {
-                'type':         int,
-                'default':      0,
-            },
-            'timestamp': {
-                'type':         int,
-                'default':      0,
-            },
-            'confidence': {
-                'type':         float,
-                'default':      0.0,
-            },
-            'tags': {
-                'type':         str,
-                'default':      '',
-            },
-            'parent_id': {
-                'type':         str,
-                'default':      '',
-            },
-            'source': {
-                'type':         str,
-                'default':      '',
-            },
-            'language': {
-                'type':         str,
-                'default':      '',
-            },
-            'section': {
-                'type':         str,
-                'default':      '',
-            },
-            'author': {
-                'type':         str,
-                'default':      '',
-            },
-        }
-        self.index_schema = self._create_redis_schema(index_name)
+        self.validation_schema = self._create_validation_schema()
+        self.index_schema = self._create_index_schema(index_name)
         self.index = SearchIndex(self.index_schema, self.redis_client)
+        self._initialize_search_index()
 
-        try:
-            if not self.index.exists():
-                self.index.create()
-                _LOG.info('Created new index: %s', index_name)
-            _LOG.info('Connected to index: %s', index_name)
-
-        except redis.ResponseError as e:
-            msg = f'Failed to create Redis index: {e}'
-            _LOG.error(msg)
-            raise DataError(msg) from e
-
-        except redis.ConnectionError as e:
-            msg = f'Failed to connect to Redis: {e}'
-            _LOG.error(msg)
-            raise StorageConnectionError(msg) from e
-
-        except Exception as e:
-            raise DataError(f'Unexpected error creating index: {e}') from e
+    # def __init__(
+    #         self,
+    #         *,
+    #         redis_client: redis.Redis | None = None,
+    #         redis_config: RedisConfig | None = None,
+    #         dimensions: int | None = None,
+    #         index_name: str,
+    # ):
+    #     """
+    #     Initialize Redis store with existing client or configuration.
+    #
+    #     Connects to Redis using either a provided client instance or
+    #     configuration. Sets up the vector search index with the
+    #     specified dimensions and index name. Validates the connection
+    #     and schema version. Creates the index if it does not already
+    #     exist.
+    #
+    #     Args:
+    #         redis_client:
+    #             Redis client instance. If provided, config is ignored.
+    #         redis_config:
+    #             Redis configuration object. If provided, redis_client
+    #             is ignored.
+    #         dimensions:
+    #             Size of embedding vectors, required for schema
+    #             creation.
+    #         index_name:
+    #             Name of the Redis search index.
+    #
+    #     Raises:
+    #         StorageConnectionError:
+    #             If Redis connection or index creation fails.
+    #         ConfigurationError:
+    #             If both redis_client and redis_config are provided, or
+    #             if schema version mismatch occurs.
+    #     """
+    #     # pylint: disable=too-many-statements
+    #
+    #     # TODO move redis client setup to another method
+    #     if redis_client is None and redis_config is None:
+    #         msg = 'Either redis_client or redis_config must be provided'
+    #         _LOG.critical(msg)
+    #         raise ConfigurationError(msg)
+    #
+    #     if redis_client is not None and redis_config is not None:
+    #         msg = 'Both redis_client and redis_config were provided'
+    #         _LOG.critical(msg)
+    #         raise ConfigurationError(msg)
+    #
+    #     if redis_client is not None:
+    #         self.redis_client = redis_client
+    #         try:
+    #             self.redis_client.ping()
+    #             _LOG.info('Successfully connected to injected Redis client')
+    #         except redis.ConnectionError as e:
+    #             msg = f'Injected Redis client connection failed: {e}'
+    #             _LOG.critical(msg)
+    #             raise StorageConnectionError(msg) from e
+    #     else:
+    #         if not isinstance(redis_config, RedisConfig):
+    #             msg = 'redis_config must be an instance of RedisConfig'
+    #             _LOG.critical(msg)
+    #             raise ConfigurationError(msg)
+    #
+    #         pool_config = {**self.POOL_DEFAULTS, **redis_config.to_dict()}
+    #         pool = redis.BlockingConnectionPool(**pool_config)
+    #         self.redis_client = redis.Redis(connection_pool=pool)
+    #
+    #     self._validate_dimensions(dimensions)
+    #     self._validate_index_name(index_name)
+    #     assert isinstance(dimensions, int)
+    #     assert isinstance(index_name, str)
+    #     self.dimensions = dimensions
+    #     self.index_name = index_name
+    #
+    #     # TODO maybe move all of the rest of this other methods?
+    #     self._enforce_schema_version()
+    #     self.validation_schema = {  # TODO return this from some method?
+    #         'chunk_position': {
+    #             'type':         int,
+    #             'default':      0,
+    #         },
+    #         'timestamp': {
+    #             'type':         int,
+    #             'default':      0,
+    #         },
+    #         'confidence': {
+    #             'type':         float,
+    #             'default':      0.0,
+    #         },
+    #         'tags': {
+    #             'type':         str,
+    #             'default':      '',
+    #         },
+    #         'parent_id': {
+    #             'type':         str,
+    #             'default':      '',
+    #         },
+    #         'source': {
+    #             'type':         str,
+    #             'default':      '',
+    #         },
+    #         'language': {
+    #             'type':         str,
+    #             'default':      '',
+    #         },
+    #         'section': {
+    #             'type':         str,
+    #             'default':      '',
+    #         },
+    #         'author': {
+    #             'type':         str,
+    #             'default':      '',
+    #         },
+    #     }
+    #     self.index_schema = self._create_redis_schema(index_name)
+    #     self.index = SearchIndex(self.index_schema, self.redis_client)
+    #
+    #     try:
+    #         if not self.index.exists():
+    #             self.index.create()
+    #             _LOG.info('Created new index: %s', index_name)
+    #         _LOG.info('Connected to index: %s', index_name)
+    #
+    #     except redis.ResponseError as e:
+    #         msg = f'Failed to create Redis index: {e}'
+    #         _LOG.error(msg)
+    #         raise DataError(msg) from e
+    #
+    #     except redis.ConnectionError as e:
+    #         msg = f'Failed to connect to Redis: {e}'
+    #         _LOG.error(msg)
+    #         raise StorageConnectionError(msg) from e
+    #
+    #     except Exception as e:
+    #         raise DataError(f'Unexpected error creating index: {e}') from e
 
     def clear(self) -> None:
         """
@@ -578,7 +631,9 @@ class RedisVectorStore:
             )
 
             if 'tags' in sanitized:
-                sanitized['tags'] = self._prepare_tags(tags=sanitized['tags'])
+                sanitized['tags'] = self._prepare_tags_for_storage(
+                    tags=sanitized['tags'],
+                )
 
             prepared_data = self._prepare_text_data(
                 text=text,
@@ -594,7 +649,62 @@ class RedisVectorStore:
 
         return stored_ids
 
-    def _create_redis_schema(self, index_name: str) -> IndexSchema:
+    def _build_vector_query(
+            self,
+            embedding: np.ndarray,
+            top_k: int,
+            min_time: int | None,
+            max_time: int | None,
+    ) -> VectorQuery:
+        """
+        Build a vector query for Redis search.
+
+        Constructs a VectorQuery object for searching Redis using the
+        provided embedding and optional timestamp filters.
+
+        Args:
+            embedding:
+                Query embedding.
+            top_k:
+                Number of results to return.
+            min_time:
+                Minimum timestamp filter.
+            max_time:
+                Maximum timestamp filter.
+
+        Raises:
+            ValidationError:
+                If top_k is not positive.
+
+        Returns:
+            Configured VectorQuery object.
+        """
+        _LOG.debug('Building vector query')
+        self._validate_top_k(top_k)
+
+        _min_time: int | str | None = min_time
+        _max_time: int | str | None = max_time
+
+        if _min_time is None:
+            _min_time = '-inf'
+        if _max_time is None:
+            _max_time = '+inf'
+
+        filter_expr = f'@timestamp:[{_min_time} {_max_time}]'
+
+        return_fields = [
+            'text', 'chunk_position', 'parent_id', 'source', 'timestamp',
+            'tags', 'confidence', 'language', 'section', 'author'
+        ]
+        return VectorQuery(
+            vector=embedding.tobytes(),
+            vector_field_name='embedding',
+            return_fields=return_fields,
+            num_results=top_k,
+            filter_expression=filter_expr if filter_expr else None,
+        )
+
+    def _create_index_schema(self, index_name: str) -> IndexSchema:
         """
         Create a Redis-specific schema for the vector search index.
 
@@ -668,6 +778,53 @@ class RedisVectorStore:
             ]
         })
 
+    @staticmethod
+    def _create_validation_schema() -> dict[str, SchemaField]:
+        """
+        Create the validation schema for metadata fields.
+
+        Returns:
+            Dictionary mapping field names to their schema definitions.
+        """
+        return {
+            'chunk_position': {
+                'type':    int,
+                'default': 0,
+            },
+            'timestamp':      {
+                'type':    int,
+                'default': 0,
+            },
+            'confidence':     {
+                'type':    float,
+                'default': 0.0,
+            },
+            'tags':           {
+                'type':    str,
+                'default': '',
+            },
+            'parent_id':      {
+                'type':    str,
+                'default': '',
+            },
+            'source':         {
+                'type':    str,
+                'default': '',
+            },
+            'language':       {
+                'type':    str,
+                'default': '',
+            },
+            'section':        {
+                'type':    str,
+                'default': '',
+            },
+            'author':         {
+                'type':    str,
+                'default': '',
+            },
+        }
+
     def _enforce_schema_version(self) -> None:
         """
         Check whether stored schema matches current version.
@@ -730,6 +887,89 @@ class RedisVectorStore:
                                                   'unknown'),
         }
 
+    def _initialize_redis(
+            self,
+            redis_client: redis.Redis | None,
+            redis_config: RedisConfig | None,
+    ) -> redis.Redis:
+        """
+        Configure and return Redis client.
+
+        Configures and returns Redis client based on provided
+        arguments. Validates connection and raises appropriate
+        exceptions for configuration errors or connection failures.
+
+        Args:
+            redis_client:
+                Redis client instance.
+            redis_config:
+                Redis configuration object.
+
+        Returns:
+            Fully initialized Redis client.
+
+        Raises:
+            ConfigurationError: If configuration is invalid.
+            StorageConnectionError: If connection fails.
+        """
+        if redis_client is None and redis_config is None:
+            msg = 'Either redis_client or redis_config must be provided'
+            _LOG.error(msg)
+            raise ConfigurationError(msg)
+
+        if redis_client is not None and redis_config is not None:
+            msg = 'Both redis_client and redis_config were provided'
+            _LOG.critical(msg)
+            raise ConfigurationError(msg)
+
+        if redis_client is not None:
+            try:
+                redis_client.ping()
+                _LOG.info('Successfully connected to injected Redis client')
+                return redis_client
+            except redis.ConnectionError as e:
+                msg = f'Injected Redis client connection failed: {e}'
+                _LOG.error(msg)
+                raise StorageConnectionError(msg) from e
+        else:
+            if not isinstance(redis_config, RedisConfig):
+                msg = 'redis_config must be an instance of RedisConfig'
+                _LOG.error(msg)
+                raise ConfigurationError(msg)
+
+            pool_config = {**self.POOL_DEFAULTS, **redis_config.to_dict()}
+            pool = redis.BlockingConnectionPool(**pool_config)
+            return redis.Redis(connection_pool=pool)
+
+    def _initialize_search_index(self) -> None:
+        """
+        Set up the Redis search index, creating it if it doesn't exist.
+
+        Raises:
+            DataError:
+                If index creation fails.
+            StorageConnectionError:
+                If Redis connection fails.
+        """
+        try:
+            if not self.index.exists():
+                self.index.create()
+                _LOG.info('Created new index: %s', self.index_name)
+            _LOG.info('Connected to index: %s', self.index_name)
+
+        except redis.ResponseError as e:
+            msg = f'Failed to create Redis index: {e}'
+            _LOG.error(msg)
+            raise DataError(msg) from e
+
+        except redis.ConnectionError as e:
+            msg = f'Failed to connect to Redis: {e}'
+            _LOG.error(msg)
+            raise StorageConnectionError(msg) from e
+
+        except Exception as e:
+            raise DataError(f'Unexpected error creating index: {e}') from e
+
     def _generate_text_id(self) -> str:
         """
         Generate a unique text ID.
@@ -745,6 +985,27 @@ class RedisVectorStore:
             counter = client.incr(self.TEXT_COUNTER_KEY)
         text_id = f'{TEXT_ID_PREFIX}{counter}'
         return text_id
+
+    def _prepare_tags_for_storage(self, tags: Any) -> str:
+        """
+        Convert tags to a string for Redis store.
+
+        Converts a list of tags or a single tag into a comma-separated
+        string for storage in Redis. It ensures that each tag is
+        stripped of whitespace and converted to a string. If tags
+        is not a list, it converts it to a string directly.
+
+        Args:
+            tags:
+                Tags to convert (list or other).
+
+        Returns:
+            Comma-separated string of tags.
+        """
+        _LOG.debug('Preparing tags for Redis storage')
+        if isinstance(tags, list):
+            return self.TAG_SEPARATOR.join(str(t).strip() for t in tags)
+        return str(tags)
 
     def _parse_tags_from_retrieval(
             self,
@@ -800,26 +1061,36 @@ class RedisVectorStore:
 
         return clean_tags
 
-    def _prepare_tags(self, tags: Any) -> str:
+    @staticmethod
+    def _prepare_text_data(
+            text: str,
+            embedding: np.ndarray,
+            metadata: dict[str, Any],
+    ) -> dict[str, Any]:
         """
-        Convert tags to a string for Redis store.
+        Prepare data dict for Redis store.
 
-        Converts a list of tags or a single tag into a comma-separated
-        string for storage in Redis. It ensures that each tag is
-        stripped of whitespace and converted to a string. If tags
-        is not a list, it converts it to a string directly.
+        Prepares a dictionary containing the text, embedding, and
+        sanitized metadata for storage in Redis. The embedding is
+        converted to bytes for Redis storage. The metadata is expected
+        to be sanitized according to the schema defined in the store.
 
         Args:
-            tags:
-                Tags to convert (list or other).
+            text:
+                Text to store.
+            embedding:
+                Vector embedding.
+            metadata:
+                Sanitized metadata.
 
         Returns:
-            Comma-separated string of tags.
+            Dict with text, embedding, and metadata.
         """
-        _LOG.debug('Preparing tags for Redis storage')
-        if isinstance(tags, list):
-            return self.TAG_SEPARATOR.join(str(t).strip() for t in tags)
-        return str(tags)
+        return {
+            'text':             text,
+            'embedding':        embedding.tobytes(),
+            **metadata,
+        }
 
     def _search_redis(self, vector_query: VectorQuery) -> Any:
         """
@@ -930,92 +1201,6 @@ class RedisVectorStore:
             }
 
         return [_build_doc_dict(doc) for doc in results.docs]
-
-    def _build_vector_query(
-            self,
-            embedding: np.ndarray,
-            top_k: int,
-            min_time: int | None,
-            max_time: int | None,
-    ) -> VectorQuery:
-        """
-        Build a vector query for Redis search.
-
-        Constructs a VectorQuery object for searching Redis using the
-        provided embedding and optional timestamp filters.
-
-        Args:
-            embedding:
-                Query embedding.
-            top_k:
-                Number of results to return.
-            min_time:
-                Minimum timestamp filter.
-            max_time:
-                Maximum timestamp filter.
-
-        Raises:
-            ValidationError:
-                If top_k is not positive.
-
-        Returns:
-            Configured VectorQuery object.
-        """
-        _LOG.debug('Building vector query')
-        self._validate_top_k(top_k)
-
-        _min_time: int | str | None = min_time
-        _max_time: int | str | None = max_time
-
-        if _min_time is None:
-            _min_time = '-inf'
-        if _max_time is None:
-            _max_time = '+inf'
-
-        filter_expr = f'@timestamp:[{_min_time} {_max_time}]'
-
-        return_fields = [
-            'text', 'chunk_position', 'parent_id', 'source', 'timestamp',
-            'tags', 'confidence', 'language', 'section', 'author'
-        ]
-        return VectorQuery(
-            vector=embedding.tobytes(),
-            vector_field_name='embedding',
-            return_fields=return_fields,
-            num_results=top_k,
-            filter_expression=filter_expr if filter_expr else None,
-        )
-
-    @staticmethod
-    def _prepare_text_data(
-            text: str,
-            embedding: np.ndarray,
-            metadata: dict[str, Any],
-    ) -> dict[str, Any]:
-        """
-        Prepare data dict for Redis store.
-
-        Prepares a dictionary containing the text, embedding, and
-        sanitized metadata for storage in Redis. The embedding is
-        converted to bytes for Redis storage. The metadata is expected
-        to be sanitized according to the schema defined in the store.
-
-        Args:
-            text:
-                Text to store.
-            embedding:
-                Vector embedding.
-            metadata:
-                Sanitized metadata.
-
-        Returns:
-            Dict with text, embedding, and metadata.
-        """
-        return {
-            'text':             text,
-            'embedding':        embedding.tobytes(),
-            **metadata,
-        }
 
     @staticmethod
     def _validate_batch_input_structure(

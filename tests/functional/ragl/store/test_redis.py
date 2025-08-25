@@ -1139,7 +1139,7 @@ class TestRedisVectorStore(unittest.TestCase):
 
         with patch('ragl.store.redis.IndexSchema') as mock_schema_class:
             mock_schema_class.from_dict.return_value = self.mock_schema
-            result = store._create_redis_schema(self.index_name)
+            result = store._create_index_schema(self.index_name)
 
         self.assertEqual(result, self.mock_schema)
         mock_schema_class.from_dict.assert_called_once()
@@ -1296,7 +1296,7 @@ class TestRedisVectorStore(unittest.TestCase):
             )
 
         tags = ['tag1', 'tag2', 'tag3']
-        result = store._prepare_tags(tags)
+        result = store._prepare_tags_for_storage(tags)
         self.assertEqual(result, 'tag1,tag2,tag3')
 
     @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
@@ -1310,7 +1310,7 @@ class TestRedisVectorStore(unittest.TestCase):
             )
 
         tags = 'single_tag'
-        result = store._prepare_tags(tags)
+        result = store._prepare_tags_for_storage(tags)
         self.assertEqual(result, 'single_tag')
 
     @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
