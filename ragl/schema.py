@@ -71,7 +71,9 @@ def sanitize_metadata(
             Raw metadata to sanitize (key-value Mapping).
         schema:
             Optional mapping of field names to type, default, and
-            conversion rules.
+            conversion rules. If not provided, a default schema is
+            used. If a field requires specific handling, the schema
+            should include a 'convert' callable to transform the value.
 
     Returns:
         Sanitized metadata as a dictionary.

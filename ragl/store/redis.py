@@ -106,7 +106,7 @@ class RedisVectorStore:
             Redis client instance.
         dimensions:
             Size of embedding vectors.
-        metadata_schema:
+        validation_schema:
             Schema for metadata sanitization.
 
     Note:
@@ -150,9 +150,10 @@ class RedisVectorStore:
 
     index: SearchIndex
     index_name: str
+    index_schema: IndexSchema
     redis_client: redis.Redis
     dimensions: int
-    metadata_schema: dict[str, SchemaField]
+    validation_schema: dict[str, SchemaField]
 
     @overload
     def __init__(
@@ -211,6 +212,8 @@ class RedisVectorStore:
                 if schema version mismatch occurs.
         """
         # pylint: disable=too-many-statements
+
+        # TODO move redis client setup to another method
         if redis_client is None and redis_config is None:
             msg = 'Either redis_client or redis_config must be provided'
             _LOG.critical(msg)
@@ -242,13 +245,14 @@ class RedisVectorStore:
 
         self._validate_dimensions(dimensions)
         self._validate_index_name(index_name)
-
         assert isinstance(dimensions, int)
         assert isinstance(index_name, str)
         self.dimensions = dimensions
         self.index_name = index_name
 
-        self.metadata_schema = {
+        # TODO maybe move all of the rest of this other methods?
+        self._enforce_schema_version()
+        self.validation_schema = {  # TODO return this from some method?
             'chunk_position': {
                 'type':         int,
                 'default':      0,
@@ -286,9 +290,8 @@ class RedisVectorStore:
                 'default':      '',
             },
         }
-        self._enforce_schema_version()
-        schema = self._create_redis_schema(index_name)
-        self.index = SearchIndex(schema, self.redis_client)
+        self.index_schema = self._create_redis_schema(index_name)
+        self.index = SearchIndex(self.index_schema, self.redis_client)
 
         try:
             if not self.index.exists():
@@ -571,7 +574,7 @@ class RedisVectorStore:
 
             sanitized = sanitize_metadata(
                 metadata=text_data,
-                schema=self.metadata_schema,
+                schema=self.validation_schema,
             )
 
             if 'tags' in sanitized:
