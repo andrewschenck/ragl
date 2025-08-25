@@ -54,6 +54,7 @@ from ragl.exceptions import (
     StorageConnectionError,
     ValidationError,
 )
+from ragl.protocols import TextEmbeddingPair
 from ragl.schema import SchemaField, sanitize_metadata
 from ragl.textunit import TextUnit
 
@@ -439,7 +440,7 @@ class RedisVectorStore:
 
     def store_texts(
             self,
-            texts_and_embeddings: list[tuple[TextUnit, np.ndarray]],
+            texts_and_embeddings: list[TextEmbeddingPair],
     ) -> list[str]:
         """
         Store multiple texts and embeddings in batch.
@@ -968,60 +969,6 @@ class RedisVectorStore:
 
         return []
 
-    # def _parse_tags_from_retrieval( # todo
-    #         self,
-    #         tags: str | list[str] | None,
-    # ) -> list[str]:
-    #     # pylint: disable=too-many-branches
-    #     # pylint: disable=too-many-nested-blocks
-    #     """
-    #     Parse tags from Redis retrieval into a clean list.
-    #
-    #     Cleans and splits tags from Redis retrieval into a list of
-    #     tag strings. It handles both string and list formats, removing
-    #     unnecessary characters and whitespace. If tags are None,
-    #     it returns an empty list.
-    #
-    #     Args:
-    #         tags: Tags from Redis.
-    #
-    #     Returns:
-    #         List of tag strings.
-    #     """
-    #     _LOG.debug('Parsing tags from Redis retrieval')
-    #     if tags is None:
-    #         return []
-    #
-    #     clean_tags: list[str] = []
-    #     strip_chars = "[]'\" \t\n"
-    #
-    #     if isinstance(tags, str):
-    #         for tag in tags.split(self.TAG_SEPARATOR):
-    #             tag = tag.strip(strip_chars)
-    #             if tag:
-    #                 clean_tags.append(tag)
-    #
-    #     elif isinstance(tags, list):
-    #         for tag in tags:
-    #
-    #             if isinstance(tag, str):
-    #                 if self.TAG_SEPARATOR in tag:
-    #                     split_tags = tag.split(self.TAG_SEPARATOR)
-    #                     for t in split_tags:
-    #                         t = t.strip(strip_chars)
-    #                         if t:
-    #                             clean_tags.append(t)
-    #
-    #                 else:
-    #                     tag = tag.strip(strip_chars)
-    #                     if tag:
-    #                         clean_tags.append(tag)
-    #
-    #     else:
-    #         _LOG.warning('bad tags type: %s', type(tags))
-    #
-    #     return clean_tags
-
     def _prepare_single_text_entry(
             self,
             text_unit: TextUnit,
@@ -1223,7 +1170,7 @@ class RedisVectorStore:
 
     def _validate_and_prepare_batch_data(
             self,
-            texts_and_embeddings: list[tuple[TextUnit, np.ndarray]],
+            texts_and_embeddings: list[TextEmbeddingPair],
     ) -> dict[str, dict[str, Any]]:
         """
         Validate input structure and prepare batch data for storage.
@@ -1258,7 +1205,7 @@ class RedisVectorStore:
 
     @staticmethod
     def _validate_batch_input_structure(
-            texts_and_embeddings: list[tuple[TextUnit, np.ndarray]],
+            texts_and_embeddings: list[TextEmbeddingPair],
     ) -> None:
         """
         Validate the structure of the batch input.
