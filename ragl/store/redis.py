@@ -531,6 +531,35 @@ class RedisVectorStore:
             filter_expression=filter_expr if filter_expr else None,
         )
 
+    @staticmethod
+    def _clean_tag_value(tag_value: str) -> str:
+        """
+        Clean and normalize a single tag value.
+
+        Removes leading/trailing whitespace and surrounding quotes
+        from the tag value. If the input is not a string, it converts
+        it to a string before cleaning.
+
+        Args:
+            tag_value: Raw tag value string
+
+        Returns:
+            Cleaned tag string, or empty string if invalid
+        """
+        if not isinstance(tag_value, str):
+            tag_value = str(tag_value)
+
+        cleaned = tag_value.strip()
+
+        if len(cleaned) >= 2:
+            if (
+                (cleaned.startswith("'") and cleaned.endswith("'")) or
+                (cleaned.startswith('"') and cleaned.endswith('"'))
+            ):
+                cleaned = cleaned[1:-1].strip()
+
+        return cleaned
+
     def _create_index_schema(self, index_name: str) -> IndexSchema:
         """
         Create a Redis-specific schema for the vector search index.
@@ -839,12 +868,81 @@ class RedisVectorStore:
         text_id = f'{TEXT_ID_PREFIX}{counter}'
         return text_id
 
-    def _parse_tags_from_retrieval(
-            self,
-            tags: str | list[str] | None,
-    ) -> list[str]:
-        # pylint: disable=too-many-branches
-        # pylint: disable=too-many-nested-blocks
+    def _parse_list_tags(self, tags_list: list) -> list[str]:
+        """
+        Parse tags from a list format.
+
+        Handles nested comma-separated strings within list
+        elements.
+
+        Args:
+            tags_list:
+                List containing tag elements
+
+        Returns:
+            List of cleaned tag strings
+        """
+        result = []
+
+        for tag_item in tags_list:
+            if isinstance(tag_item, str):
+
+                if self.TAG_SEPARATOR in tag_item:
+                    split_tags = tag_item.split(self.TAG_SEPARATOR)
+                    for split_tag in split_tags:
+                        cleaned = self._clean_tag_value(split_tag)
+                        if cleaned:
+                            result.append(cleaned)
+
+                else:
+                    cleaned = self._clean_tag_value(tag_item)
+                    if cleaned:
+                        result.append(cleaned)
+
+            else:
+                cleaned = self._clean_tag_value(str(tag_item))
+                if cleaned:
+                    result.append(cleaned)
+
+        return result
+
+    def _parse_string_tags(self, tags_str: str) -> list[str]:
+        """
+        Parse tags from a string format.
+
+        Handles both comma-separated strings and string
+        representations of lists.
+
+        Args:
+            tags_str:
+                String containing tags
+
+        Returns:
+            List of cleaned tag strings
+        """
+        # Handle string representation of list (e.g., "['tag1', 'tag2']")
+        if tags_str.startswith('[') and tags_str.endswith(']'):
+            # Remove brackets and split by comma
+            inner = tags_str[1:-1]
+            if not inner.strip():
+                return []
+
+            # Split and clean each tag
+            raw_tags = [tag.strip() for tag in inner.split(',')]
+            return [self._clean_tag_value(tag)
+                    for tag in raw_tags if tag.strip()]
+
+        # Handle comma-separated string (e.g., "tag1,tag2,tag3")
+        if self.TAG_SEPARATOR in tags_str:
+            raw_tags = tags_str.split(self.TAG_SEPARATOR)
+            return [self._clean_tag_value(tag)
+                    for tag in raw_tags if tag.strip()]
+
+        # Single tag
+        cleaned = self._clean_tag_value(tags_str)
+        return [cleaned] if cleaned else []
+
+    def _parse_tags_from_retrieval(self, tags) -> list[str]:
         """
         Parse tags from Redis retrieval into a clean list.
 
@@ -859,39 +957,70 @@ class RedisVectorStore:
         Returns:
             List of tag strings.
         """
-        _LOG.debug('Parsing tags from Redis retrieval')
         if tags is None:
             return []
 
-        clean_tags: list[str] = []
-        strip_chars = "[]'\" \t\n"
-
         if isinstance(tags, str):
-            for tag in tags.split(self.TAG_SEPARATOR):
-                tag = tag.strip(strip_chars)
-                if tag:
-                    clean_tags.append(tag)
+            return self._parse_string_tags(tags)
 
-        elif isinstance(tags, list):
-            for tag in tags:
+        if isinstance(tags, list):
+            return self._parse_list_tags(tags)
 
-                if isinstance(tag, str):
-                    if self.TAG_SEPARATOR in tag:
-                        split_tags = tag.split(self.TAG_SEPARATOR)
-                        for t in split_tags:
-                            t = t.strip(strip_chars)
-                            if t:
-                                clean_tags.append(t)
+        return []
 
-                    else:
-                        tag = tag.strip(strip_chars)
-                        if tag:
-                            clean_tags.append(tag)
-
-        else:
-            _LOG.warning('bad tags type: %s', type(tags))
-
-        return clean_tags
+    # def _parse_tags_from_retrieval( # todo
+    #         self,
+    #         tags: str | list[str] | None,
+    # ) -> list[str]:
+    #     # pylint: disable=too-many-branches
+    #     # pylint: disable=too-many-nested-blocks
+    #     """
+    #     Parse tags from Redis retrieval into a clean list.
+    #
+    #     Cleans and splits tags from Redis retrieval into a list of
+    #     tag strings. It handles both string and list formats, removing
+    #     unnecessary characters and whitespace. If tags are None,
+    #     it returns an empty list.
+    #
+    #     Args:
+    #         tags: Tags from Redis.
+    #
+    #     Returns:
+    #         List of tag strings.
+    #     """
+    #     _LOG.debug('Parsing tags from Redis retrieval')
+    #     if tags is None:
+    #         return []
+    #
+    #     clean_tags: list[str] = []
+    #     strip_chars = "[]'\" \t\n"
+    #
+    #     if isinstance(tags, str):
+    #         for tag in tags.split(self.TAG_SEPARATOR):
+    #             tag = tag.strip(strip_chars)
+    #             if tag:
+    #                 clean_tags.append(tag)
+    #
+    #     elif isinstance(tags, list):
+    #         for tag in tags:
+    #
+    #             if isinstance(tag, str):
+    #                 if self.TAG_SEPARATOR in tag:
+    #                     split_tags = tag.split(self.TAG_SEPARATOR)
+    #                     for t in split_tags:
+    #                         t = t.strip(strip_chars)
+    #                         if t:
+    #                             clean_tags.append(t)
+    #
+    #                 else:
+    #                     tag = tag.strip(strip_chars)
+    #                     if tag:
+    #                         clean_tags.append(tag)
+    #
+    #     else:
+    #         _LOG.warning('bad tags type: %s', type(tags))
+    #
+    #     return clean_tags
 
     def _prepare_single_text_entry(
             self,

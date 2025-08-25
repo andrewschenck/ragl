@@ -2785,6 +2785,234 @@ class TestRedisVectorStore(unittest.TestCase):
             with self.assertRaises(DataError):
                 store._execute_batch_storage(batch_data)
 
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_clean_tag_value_basic_string(self, mock_validate_sync):
+        """Test basic tag value cleaning."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        # Test basic string cleaning
+        result = store._clean_tag_value("  tag1  ")
+        self.assertEqual(result, "tag1")
+
+        # Test string without whitespace
+        result = store._clean_tag_value("tag2")
+        self.assertEqual(result, "tag2")
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_clean_tag_value_quotes(self, mock_validate_sync):
+        """Test tag value cleaning with quotes."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        # Test single quotes
+        result = store._clean_tag_value("'tag1'")
+        self.assertEqual(result, "tag1")
+
+        # Test double quotes
+        result = store._clean_tag_value('"tag2"')
+        self.assertEqual(result, "tag2")
+
+        # Test quotes with whitespace
+        result = store._clean_tag_value("  'tag3'  ")
+        self.assertEqual(result, "tag3")
+
+        # Test nested quotes (should only remove outer)
+        result = store._clean_tag_value("'tag\"with\"quotes'")
+        self.assertEqual(result, 'tag"with"quotes')
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_clean_tag_value_edge_cases(self, mock_validate_sync):
+        """Test tag value cleaning edge cases."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        # Test empty string
+        result = store._clean_tag_value("")
+        self.assertEqual(result, "")
+
+        # Test whitespace only
+        result = store._clean_tag_value("   ")
+        self.assertEqual(result, "")
+
+        # Test non-string input
+        result = store._clean_tag_value(123)
+        self.assertEqual(result, "123")
+
+        # Test single character
+        result = store._clean_tag_value("a")
+        self.assertEqual(result, "a")
+
+        # Test mismatched quotes
+        result = store._clean_tag_value("'tag\"")
+        self.assertEqual(result, "'tag\"")
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_parse_string_tags_comma_separated(self, mock_validate_sync):
+        """Test parsing comma-separated string tags."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        # Test basic comma-separated tags
+        result = store._parse_string_tags("tag1,tag2,tag3")
+        self.assertEqual(result, ["tag1", "tag2", "tag3"])
+
+        # Test tags with whitespace
+        result = store._parse_string_tags("  tag1  ,  tag2  ,  tag3  ")
+        self.assertEqual(result, ["tag1", "tag2", "tag3"])
+
+        # Test empty tags in list
+        result = store._parse_string_tags("tag1,,tag3")
+        self.assertEqual(result, ["tag1", "tag3"])
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_parse_string_tags_bracket_format(self, mock_validate_sync):
+        """Test parsing string tags in bracket format."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        # Test bracket format
+        result = store._parse_string_tags("['tag1', 'tag2', 'tag3']")
+        self.assertEqual(result, ["tag1", "tag2", "tag3"])
+
+        # Test bracket format with quotes
+        result = store._parse_string_tags('["tag1", "tag2", "tag3"]')
+        self.assertEqual(result, ["tag1", "tag2", "tag3"])
+
+        # Test empty bracket format
+        result = store._parse_string_tags("[]")
+        self.assertEqual(result, [])
+
+        # Test bracket format with whitespace
+        result = store._parse_string_tags("[  'tag1'  ,  'tag2'  ]")
+        self.assertEqual(result, ["tag1", "tag2"])
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_parse_string_tags_single_tag(self, mock_validate_sync):
+        """Test parsing single string tag."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        # Test single tag
+        result = store._parse_string_tags("single_tag")
+        self.assertEqual(result, ["single_tag"])
+
+        # Test single tag with quotes
+        result = store._parse_string_tags("'single_tag'")
+        self.assertEqual(result, ["single_tag"])
+
+        # Test empty string
+        result = store._parse_string_tags("")
+        self.assertEqual(result, [])
+
+        # Test whitespace only
+        result = store._parse_string_tags("   ")
+        self.assertEqual(result, [])
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_parse_list_tags_basic(self, mock_validate_sync):
+        """Test parsing basic list tags."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        # Test basic list
+        result = store._parse_list_tags(["tag1", "tag2", "tag3"])
+        self.assertEqual(result, ["tag1", "tag2", "tag3"])
+
+        # Test list with quotes
+        result = store._parse_list_tags(["'tag1'", '"tag2"', "tag3"])
+        self.assertEqual(result, ["tag1", "tag2", "tag3"])
+
+        # Test empty list
+        result = store._parse_list_tags([])
+        self.assertEqual(result, [])
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_parse_list_tags_with_comma_separated(self, mock_validate_sync):
+        """Test parsing list tags containing comma-separated strings."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        # Test list with comma-separated strings
+        result = store._parse_list_tags(["tag1,tag2", "tag3"])
+        self.assertEqual(result, ["tag1", "tag2", "tag3"])
+
+        # Test mixed format
+        result = store._parse_list_tags(["tag1", "tag2,tag3", "tag4"])
+        self.assertEqual(result, ["tag1", "tag2", "tag3", "tag4"])
+
+        # Test with whitespace
+        result = store._parse_list_tags(["  tag1  ,  tag2  ", "tag3"])
+        self.assertEqual(result, ["tag1", "tag2", "tag3"])
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_parse_list_tags_non_string_elements(self, mock_validate_sync):
+        """Test parsing list tags with non-string elements."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        # Test list with numbers
+        result = store._parse_list_tags([123, "tag1", 456])
+        self.assertEqual(result, ["123", "tag1", "456"])
+
+        # Test list with mixed types
+        result = store._parse_list_tags(["tag1", 42, True, "tag2"])
+        self.assertEqual(result, ["tag1", "42", "True", "tag2"])
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_parse_list_tags_empty_elements(self, mock_validate_sync):
+        """Test parsing list tags with empty or whitespace elements."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        # Test list with empty strings
+        result = store._parse_list_tags(["tag1", "", "tag2", "   "])
+        self.assertEqual(result, ["tag1", "tag2"])
+
+        # Test list with comma-separated including empty
+        result = store._parse_list_tags(["tag1,", ",tag2", "tag3"])
+        self.assertEqual(result, ["tag1", "tag2", "tag3"])
+
 
 if __name__ == '__main__':
     unittest.main()
