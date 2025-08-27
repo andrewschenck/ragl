@@ -7,7 +7,7 @@ storage and retrieval of text embeddings with associated metadata. It
 leverages RedisVL (Redis Vector Library) for vector similarity search
 operations.
 
-Key Features:
+Features:
     - Vector similarity search using HNSW algorithm with cosine distance
     - Metadata storage and filtering (timestamps, tags, source info)
     - Schema validation and versioning
@@ -22,7 +22,8 @@ language, section, and author details. All metadata is sanitized
 according to a predefined schema before storage.
 
 Classes:
-    - RedisVectorStore: Main class for managing Redis vector storage.
+    RedisVectorStore:
+        Manage storage and retrieval of text embeddings in Redis.
 """
 
 import logging
@@ -683,56 +684,6 @@ class RedisVectorStore:
             },
         }
 
-    # @staticmethod  # todo
-    # def _create_validation_schema() -> dict[str, SchemaField]:
-    #     """
-    #     Create the validation schema for metadata fields.
-    #
-    #     Defines the expected types and default values for metadata
-    #     fields to ensure consistent sanitization before storage.
-    #
-    #     Returns:
-    #         Dictionary mapping field names to their schema definitions.
-    #     """
-    #     return {
-    #         'chunk_position': {
-    #             'type':    int,
-    #             'default': 0,
-    #         },
-    #         'timestamp':      {
-    #             'type':    int,
-    #             'default': 0,
-    #         },
-    #         'confidence':     {
-    #             'type':    float,
-    #             'default': 0.0,
-    #         },
-    #         'tags':           {
-    #             'type':    str,
-    #             'default': '',
-    #         },
-    #         'parent_id':      {
-    #             'type':    str,
-    #             'default': '',
-    #         },
-    #         'source':         {
-    #             'type':    str,
-    #             'default': '',
-    #         },
-    #         'language':       {
-    #             'type':    str,
-    #             'default': '',
-    #         },
-    #         'section':        {
-    #             'type':    str,
-    #             'default': '',
-    #         },
-    #         'author':         {
-    #             'type':    str,
-    #             'default': '',
-    #         },
-    #     }
-
     def _enforce_schema_version(self) -> None:
         """
         Check whether stored schema matches current version.
@@ -1130,11 +1081,6 @@ class RedisVectorStore:
             schema=self.validation_schema,
         )
 
-        # if 'tags' in sanitized:  # todo
-        #     sanitized['tags'] = self._prepare_tags_for_storage(
-        #         tags=sanitized['tags'],
-        #     )
-
         prepared_data = self._prepare_redis_payload(
             text=text,
             embedding=embedding,
@@ -1164,27 +1110,6 @@ class RedisVectorStore:
             sep = getattr(RedisVectorStore, 'TAG_SEPARATOR', ',')
             return sep.join(str(t).strip() for t in tags)
         return str(tags)
-
-    # def _prepare_tags_for_storage(self, tags: Any) -> str:  # todo
-    #     """
-    #     Convert tags to a string for Redis store.
-    #
-    #     Converts a list of tags or a single tag into a comma-separated
-    #     string for storage in Redis. It ensures that each tag is
-    #     stripped of whitespace and converted to a string. If tags
-    #     is not a list, it converts it to a string directly.
-    #
-    #     Args:
-    #         tags:
-    #             Tags to convert (list or other).
-    #
-    #     Returns:
-    #         Comma-separated string of tags.
-    #     """
-    #     _LOG.debug('Preparing tags for Redis storage')
-    #     if isinstance(tags, list):
-    #         return self.TAG_SEPARATOR.join(str(t).strip() for t in tags)
-    #     return str(tags)
 
     def _search_redis(self, vector_query: VectorQuery) -> Any:
         """
