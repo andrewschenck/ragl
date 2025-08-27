@@ -1715,6 +1715,63 @@ class TestRaglIntegration:
         assert time_sort_duration < 5.0, "Time sorting too slow"
         assert distance_sort_duration < 5.0, "Distance sorting too slow"
 
+    def test_tag_storage_and_retrieval(self):
+        """Test that tags are properly stored and retrieved with correct format conversion."""
+
+        # Test with list of tags
+        text_unit_with_tags = TextUnit(
+            text="Document about machine learning algorithms",
+            tags=['ml', 'algorithms', 'data-science', 'python'],
+            source='test_docs',
+            author='test_author'
+        )
+
+        # Store the document
+        stored_ids = self.manager.add_texts([text_unit_with_tags])
+        assert len(stored_ids) == 1
+
+        # Retrieve and verify tags are returned as list
+        contexts = self.manager.get_context(
+            query="machine learning",
+            top_k=1
+        )
+
+        assert len(contexts) >= 1
+        retrieved_context = contexts[0]
+
+        # Verify tags are returned as list with correct values
+        assert isinstance(retrieved_context.tags, list)
+        assert set(retrieved_context.tags) == {'ml', 'algorithms',
+                                               'data-science', 'python'}
+
+        # Test with single tag (string)
+        text_unit_single_tag = TextUnit(
+            text="Document about databases",
+            tags=['database'],  # Still provide as list for consistency
+            source='test_docs'
+        )
+
+        stored_ids = self.manager.add_texts([text_unit_single_tag])
+        assert len(stored_ids) == 1
+
+        contexts = self.manager.get_context(query="database", top_k=1)
+        assert len(contexts) >= 1
+        assert isinstance(contexts[0].tags, list)
+        assert contexts[0].tags == ['database']
+
+        # Test with empty tags
+        text_unit_no_tags = TextUnit(
+            text="Document without tags",
+            source='test_docs'
+        )
+
+        stored_ids = self.manager.add_texts([text_unit_no_tags])
+        contexts = self.manager.get_context(query="without", top_k=1)
+        assert len(contexts) >= 1
+        # Should return empty list for tags, not None or empty string
+        assert isinstance(contexts[0].tags, list)
+        assert contexts[0].tags == []
+
 
 if __name__ == "__main__":
     import sys

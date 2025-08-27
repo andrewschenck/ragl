@@ -2691,16 +2691,22 @@ class TestRedisVectorStore(unittest.TestCase):
                 index_name=self.index_name
             )
 
-        text_unit = TextUnit(text="Sample text",
-                             text_id=f'{TEXT_ID_PREFIX}123', distance=0.0)
+        # Create TextUnit with tags - this will go through the natural conversion flow
+        text_unit = TextUnit(
+            text="Sample text",
+            text_id=f'{TEXT_ID_PREFIX}123',
+            distance=0.0,
+            tags=['tag1', 'tag2']  # Set tags on the TextUnit
+        )
         embedding = np.random.rand(self.dimensions).astype(np.float32)
 
-        with patch('ragl.store.redis.sanitize_metadata',
-                   return_value={'tags': ['tag1', 'tag2']}):
-            text_id, prepared_data = store._prepare_single_text_entry(
-                text_unit, embedding)
+        # Let sanitize_metadata handle the conversion naturally
+        text_id, prepared_data = store._prepare_single_text_entry(
+            text_unit, embedding)
 
+        # Verify the tags were converted to comma-separated string
         self.assertEqual(prepared_data['tags'], 'tag1,tag2')
+        self.assertEqual(text_id, f'{TEXT_ID_PREFIX}123')
 
     @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
     def test_prepare_single_text_entry_invalid_dimensions(self,

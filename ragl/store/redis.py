@@ -637,6 +637,9 @@ class RedisVectorStore:
         """
         Create the validation schema for metadata fields.
 
+        Defines the expected types and default values for metadata
+        fields to ensure consistent sanitization before storage.
+
         Returns:
             Dictionary mapping field names to their schema definitions.
         """
@@ -656,6 +659,7 @@ class RedisVectorStore:
             'tags':           {
                 'type':    str,
                 'default': '',
+                'convert': RedisVectorStore._prepare_tags_for_storage,
             },
             'parent_id':      {
                 'type':    str,
@@ -678,6 +682,56 @@ class RedisVectorStore:
                 'default': '',
             },
         }
+
+    # @staticmethod  # todo
+    # def _create_validation_schema() -> dict[str, SchemaField]:
+    #     """
+    #     Create the validation schema for metadata fields.
+    #
+    #     Defines the expected types and default values for metadata
+    #     fields to ensure consistent sanitization before storage.
+    #
+    #     Returns:
+    #         Dictionary mapping field names to their schema definitions.
+    #     """
+    #     return {
+    #         'chunk_position': {
+    #             'type':    int,
+    #             'default': 0,
+    #         },
+    #         'timestamp':      {
+    #             'type':    int,
+    #             'default': 0,
+    #         },
+    #         'confidence':     {
+    #             'type':    float,
+    #             'default': 0.0,
+    #         },
+    #         'tags':           {
+    #             'type':    str,
+    #             'default': '',
+    #         },
+    #         'parent_id':      {
+    #             'type':    str,
+    #             'default': '',
+    #         },
+    #         'source':         {
+    #             'type':    str,
+    #             'default': '',
+    #         },
+    #         'language':       {
+    #             'type':    str,
+    #             'default': '',
+    #         },
+    #         'section':        {
+    #             'type':    str,
+    #             'default': '',
+    #         },
+    #         'author':         {
+    #             'type':    str,
+    #             'default': '',
+    #         },
+    #     }
 
     def _enforce_schema_version(self) -> None:
         """
@@ -971,12 +1025,11 @@ class RedisVectorStore:
             texts_and_embeddings: list[TextEmbeddingPair],
     ) -> dict[str, dict[str, Any]]:
         """
-        Validate input structure and prepare batch data for storage.
+        Prepare batch data for storage.
 
-        Validates the structure of the batch input and prepares each
-        text-embedding pair for storage in Redis. Ensures that each
-        entry is valid and properly formatted before returning a
-        dictionary of prepared data.
+        Prepares each text-embedding pair for storage in Redis. Ensures
+        that each entry is valid and properly formatted before returning
+        a dictionary of prepared data.
 
         Args:
             texts_and_embeddings:
@@ -1077,10 +1130,10 @@ class RedisVectorStore:
             schema=self.validation_schema,
         )
 
-        if 'tags' in sanitized:
-            sanitized['tags'] = self._prepare_tags_for_storage(
-                tags=sanitized['tags'],
-            )
+        # if 'tags' in sanitized:  # todo
+        #     sanitized['tags'] = self._prepare_tags_for_storage(
+        #         tags=sanitized['tags'],
+        #     )
 
         prepared_data = self._prepare_redis_payload(
             text=text,
@@ -1090,7 +1143,8 @@ class RedisVectorStore:
 
         return text_id, prepared_data
 
-    def _prepare_tags_for_storage(self, tags: Any) -> str:
+    @staticmethod
+    def _prepare_tags_for_storage(tags: Any) -> str:
         """
         Convert tags to a string for Redis store.
 
@@ -1106,10 +1160,31 @@ class RedisVectorStore:
         Returns:
             Comma-separated string of tags.
         """
-        _LOG.debug('Preparing tags for Redis storage')
         if isinstance(tags, list):
-            return self.TAG_SEPARATOR.join(str(t).strip() for t in tags)
+            sep = getattr(RedisVectorStore, 'TAG_SEPARATOR', ',')
+            return sep.join(str(t).strip() for t in tags)
         return str(tags)
+
+    # def _prepare_tags_for_storage(self, tags: Any) -> str:  # todo
+    #     """
+    #     Convert tags to a string for Redis store.
+    #
+    #     Converts a list of tags or a single tag into a comma-separated
+    #     string for storage in Redis. It ensures that each tag is
+    #     stripped of whitespace and converted to a string. If tags
+    #     is not a list, it converts it to a string directly.
+    #
+    #     Args:
+    #         tags:
+    #             Tags to convert (list or other).
+    #
+    #     Returns:
+    #         Comma-separated string of tags.
+    #     """
+    #     _LOG.debug('Preparing tags for Redis storage')
+    #     if isinstance(tags, list):
+    #         return self.TAG_SEPARATOR.join(str(t).strip() for t in tags)
+    #     return str(tags)
 
     def _search_redis(self, vector_query: VectorQuery) -> Any:
         """
