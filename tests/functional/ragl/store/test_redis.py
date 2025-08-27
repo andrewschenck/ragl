@@ -3021,6 +3021,256 @@ class TestRedisVectorStore(unittest.TestCase):
         result = store._parse_list_tags(["tag1,", ",tag2", "tag3"])
         self.assertEqual(result, ["tag1", "tag2", "tag3"])
 
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_prepare_tags_for_storage_none(self, mock_validate_sync):
+        """Test preparing None tags returns empty list."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        result = store._prepare_tags_for_storage(None)
+        self.assertEqual(result, '')
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_prepare_tags_for_storage_empty_string(self, mock_validate_sync):
+        """Test preparing empty string tags raises ValidationError."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        with self.assertRaises(ValidationError) as cm:
+            store._prepare_tags_for_storage('')
+        self.assertIn('Tag cannot be empty or whitespace-only',
+                      str(cm.exception))
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_prepare_tags_for_storage_whitespace_string(self,
+                                                        mock_validate_sync):
+        """Test preparing whitespace-only string tags raises ValidationError."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        with self.assertRaises(ValidationError) as cm:
+            store._prepare_tags_for_storage('   \n\t   ')
+        self.assertIn('Tag cannot be empty or whitespace-only',
+                      str(cm.exception))
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_prepare_tags_for_storage_single_string(self, mock_validate_sync):
+        """Test preparing single string tag."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        result = store._prepare_tags_for_storage('single_tag')
+        self.assertEqual(result, 'single_tag')
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_prepare_tags_for_storage_string_with_whitespace(self,
+                                                             mock_validate_sync):
+        """Test preparing string tag with surrounding whitespace."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        result = store._prepare_tags_for_storage('  tag_with_spaces  ')
+        self.assertEqual(result, 'tag_with_spaces')
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_prepare_tags_for_storage_empty_list(self, mock_validate_sync):
+        """Test preparing empty list tags."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        result = store._prepare_tags_for_storage([])
+        self.assertEqual(result, '')
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_prepare_tags_for_storage_single_item_list(self,
+                                                       mock_validate_sync):
+        """Test preparing list with single tag."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        result = store._prepare_tags_for_storage(['single_tag'])
+        self.assertEqual(result, 'single_tag')
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_prepare_tags_for_storage_multiple_item_list(self,
+                                                         mock_validate_sync):
+        """Test preparing list with multiple tags."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        result = store._prepare_tags_for_storage(['tag1', 'tag2', 'tag3'])
+        self.assertEqual(result, 'tag1,tag2,tag3')
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_prepare_tags_for_storage_list_with_empty_strings(self,
+                                                              mock_validate_sync):
+        """Test preparing list with empty strings raises ValidationError."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        with self.assertRaises(ValidationError) as cm:
+            store._prepare_tags_for_storage(['tag1', '', 'tag2'])
+        self.assertIn('Tag cannot be empty or whitespace-only',
+                      str(cm.exception))
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_prepare_tags_for_storage_list_with_whitespace(self,
+                                                           mock_validate_sync):
+        """Test preparing list with tags containing whitespace."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        result = store._prepare_tags_for_storage(
+            ['  tag1  ', '  tag2  ', '  tag3  '])
+        self.assertEqual(result, 'tag1,tag2,tag3')
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_prepare_tags_for_storage_list_all_empty(self, mock_validate_sync):
+        """Test preparing list with all empty/whitespace tags raises ValidationError."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        with self.assertRaises(ValidationError) as cm:
+            store._prepare_tags_for_storage(['', '   ', '\n\t'])
+        self.assertIn('Tag cannot be empty or whitespace-only',
+                      str(cm.exception))
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_prepare_tags_for_storage_list_with_non_strings(self,
+                                                            mock_validate_sync):
+        """Test preparing list with non-string elements raises ValidationError."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        with self.assertRaises(ValidationError) as cm:
+            store._prepare_tags_for_storage(['tag1', 123, 'tag2'])
+        self.assertIn('All tags must be strings', str(cm.exception))
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_prepare_tags_for_storage_unsupported_type(self,
+                                                       mock_validate_sync):
+        """Test preparing tags with unsupported type raises ValidationError."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        # Test with dict
+        with self.assertRaises(ValidationError) as cm:
+            store._prepare_tags_for_storage({'key': 'value'})
+        self.assertIn('Invalid tags type', str(cm.exception))
+
+        # Test with int
+        with self.assertRaises(ValidationError) as cm:
+            store._prepare_tags_for_storage(123)
+        self.assertIn('Invalid tags type', str(cm.exception))
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_prepare_tags_for_storage_tags_with_separator(self,
+                                                          mock_validate_sync):
+        """Test that tags containing TAG_SEPARATOR raise ValidationError."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        with self.assertRaises(ValidationError) as cm:
+            store._prepare_tags_for_storage(['tag1,tag2'])
+        self.assertIn('Tag cannot contain delimiter', str(cm.exception))
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_prepare_tags_for_storage_tags_with_newlines(self,
+                                                         mock_validate_sync):
+        """Test that tags containing newlines raise ValidationError."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        with self.assertRaises(ValidationError) as cm:
+            store._prepare_tags_for_storage(['tag1\ntag2'])
+        self.assertIn('Tag cannot contain newline', str(cm.exception))
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_prepare_tags_for_storage_valid_complex_tags(self,
+                                                         mock_validate_sync):
+        """Test preparing valid complex tags."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        # Test valid special characters
+        result = store._prepare_tags_for_storage(
+            ['category:ai', 'type:text', 'version:1.0'])
+        self.assertEqual(result, 'category:ai,type:text,version:1.0')
+
+        # Test valid punctuation
+        result = store._prepare_tags_for_storage(
+            ['tag-with-dash', 'tag_with_underscore', 'tag.with.dots'])
+        self.assertEqual(result,
+                         'tag-with-dash,tag_with_underscore,tag.with.dots')
+
+        # Test unicode characters
+        result = store._prepare_tags_for_storage(['тег', 'étiquette', '标签'])
+        self.assertEqual(result, 'тег,étiquette,标签')
+
 
 if __name__ == '__main__':
     unittest.main()

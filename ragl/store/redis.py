@@ -1106,10 +1106,47 @@ class RedisVectorStore:
         Returns:
             Comma-separated string of tags.
         """
-        if isinstance(tags, list):
-            sep = getattr(RedisVectorStore, 'TAG_SEPARATOR', ',')
-            return sep.join(str(t).strip() for t in tags)
-        return str(tags)
+        if tags is None:
+            tag_list = []
+        elif isinstance(tags, str):
+            tag_list = [tags]
+        elif isinstance(tags, list):
+            tag_list = tags
+        else:
+            msg = f'Invalid tags type: {type(tags).__name__}'
+            _LOG.error(msg)
+            raise ValidationError(msg)
+
+        validated_tags = []
+        delim = getattr(RedisVectorStore, 'TAG_SEPARATOR', ',')
+
+        for tag in tag_list:
+
+            if not isinstance(tag, str):
+                msg = f'All tags must be strings, got {type(tag).__name__}'
+                _LOG.error(msg)
+                raise ValidationError(msg)
+
+            tag = tag.strip()
+
+            if not tag:
+                msg = 'Tag cannot be empty or whitespace-only'
+                _LOG.error(msg)
+                raise ValidationError(msg)
+
+            if delim in tag:
+                msg = f'Tag cannot contain delimiter: {delim}'
+                _LOG.error(msg)
+                raise ValidationError(msg)
+
+            if any(char in tag for char in ('\n', '\r', '\t')):
+                msg = 'Tag cannot contain newline, carriage return, or tab'
+                _LOG.error(msg)
+                raise ValidationError(msg)
+
+            validated_tags.append(tag)
+
+        return delim.join(t for t in validated_tags)
 
     def _search_redis(self, vector_query: VectorQuery) -> Any:
         """
