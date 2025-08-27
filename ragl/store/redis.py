@@ -391,6 +391,71 @@ class RedisVectorStore:
             keys = client.keys(f'{TEXT_ID_PREFIX}*')
             return sorted(cast(list[str], keys))
 
+    @staticmethod
+    def prepare_tags_for_storage(tags: Any) -> str:
+        """
+        Convert tags to a string for Redis store.
+
+        Converts a list of tags or a single tag into a comma-separated
+        string for storage in Redis. It ensures that each tag is
+        stripped of whitespace and converted to a string. If tags
+        is not a list, it converts it to a string directly.
+
+        This method is injected into the data sanitization machinery,
+        and is presented as a staticmethod which is callable by external
+        objects working with a class rather than instance.
+
+        For more information on how this method is used, see:
+            - RedisVectorStore._create_validation_schema()
+            - ragl.schema.sanitize_metadata()
+
+        Args:
+            tags:
+                Tags to convert (list or other).
+
+        Returns:
+            Comma-separated string of tags.
+        """
+        if tags is None:
+            tag_list = []
+        elif isinstance(tags, str):
+            tag_list = [tags]
+        elif isinstance(tags, list):
+            tag_list = tags
+        else:
+            msg = f'Invalid tag type: {type(tags).__name__}'
+            _LOG.error(msg)
+            raise ValidationError(msg)
+
+        validated_tags = []
+        delim = getattr(RedisVectorStore, 'TAG_SEPARATOR', ',')
+
+        for tag in tag_list:
+
+            if not isinstance(tag, str):
+                msg = f'All tags must be strings, got {type(tag).__name__}'
+                _LOG.error(msg)
+                raise ValidationError(msg)
+
+            tag = tag.strip()
+
+            if not tag:
+                continue
+
+            if delim in tag:
+                msg = f'Tag cannot contain delimiter: {delim}'
+                _LOG.error(msg)
+                raise ValidationError(msg)
+
+            if any(char in tag for char in ('\n', '\r', '\t')):
+                msg = 'Tag cannot contain newline, carriage return, or tab'
+                _LOG.error(msg)
+                raise ValidationError(msg)
+
+            validated_tags.append(tag)
+
+        return delim.join(t for t in validated_tags)
+
     @contextmanager
     def redis_context(self) -> Iterator[redis.Redis]:
         """
@@ -660,7 +725,7 @@ class RedisVectorStore:
             'tags':           {
                 'type':    str,
                 'default': '',
-                'convert': RedisVectorStore._prepare_tags_for_storage,
+                'convert': RedisVectorStore.prepare_tags_for_storage,
             },
             'parent_id':      {
                 'type':    str,
@@ -1088,65 +1153,6 @@ class RedisVectorStore:
         )
 
         return text_id, prepared_data
-
-    @staticmethod
-    def _prepare_tags_for_storage(tags: Any) -> str:
-        """
-        Convert tags to a string for Redis store.
-
-        Converts a list of tags or a single tag into a comma-separated
-        string for storage in Redis. It ensures that each tag is
-        stripped of whitespace and converted to a string. If tags
-        is not a list, it converts it to a string directly.
-
-        Args:
-            tags:
-                Tags to convert (list or other).
-
-        Returns:
-            Comma-separated string of tags.
-        """
-        if tags is None:
-            tag_list = []
-        elif isinstance(tags, str):
-            tag_list = [tags]
-        elif isinstance(tags, list):
-            tag_list = tags
-        else:
-            msg = f'Invalid tags type: {type(tags).__name__}'
-            _LOG.error(msg)
-            raise ValidationError(msg)
-
-        validated_tags = []
-        delim = getattr(RedisVectorStore, 'TAG_SEPARATOR', ',')
-
-        for tag in tag_list:
-
-            if not isinstance(tag, str):
-                msg = f'All tags must be strings, got {type(tag).__name__}'
-                _LOG.error(msg)
-                raise ValidationError(msg)
-
-            tag = tag.strip()
-
-            if not tag:
-                msg = 'Tag cannot be empty or whitespace-only'
-                _LOG.error(msg)
-                raise ValidationError(msg)
-
-            if delim in tag:
-                msg = f'Tag cannot contain delimiter: {delim}'
-                _LOG.error(msg)
-                raise ValidationError(msg)
-
-            if any(char in tag for char in ('\n', '\r', '\t')):
-                msg = 'Tag cannot contain newline, carriage return, or tab'
-                _LOG.error(msg)
-                raise ValidationError(msg)
-
-            validated_tags.append(tag)
-
-        return delim.join(t for t in validated_tags)
 
     def _search_redis(self, vector_query: VectorQuery) -> Any:
         """
