@@ -1310,6 +1310,468 @@ class TestRaglIntegration:
                 assert len(
                     shared_words) > 0, "No word overlap between consecutive chunks"
 
+    def test_sort_by_time_functionality(self):
+        """Test that sort_by_time parameter correctly orders results by timestamp."""
+
+        # Create TextUnits with different timestamps
+        base_time = int(time.time())
+        text_units = [
+            TextUnit(
+                text="First document about machine learning fundamentals",
+                source="doc1.pdf",
+                timestamp=base_time - 3600,  # 1 hour ago
+                parent_id="doc:time_test_1"
+            ),
+            TextUnit(
+                text="Second document about machine learning algorithms",
+                source="doc2.pdf",
+                timestamp=base_time - 1800,  # 30 minutes ago
+                parent_id="doc:time_test_2"
+            ),
+            TextUnit(
+                text="Third document about machine learning applications",
+                source="doc3.pdf",
+                timestamp=base_time - 900,  # 15 minutes ago
+                parent_id="doc:time_test_3"
+            )
+        ]
+
+        # Add documents
+        self.manager.add_texts(texts_or_units=text_units)
+
+        # Test sort by time (chronological order)
+        contexts_by_time = self.manager.get_context(
+            query="machine learning",
+            top_k=3,
+            sort_by_time=True
+        )
+
+        assert len(contexts_by_time) >= 3
+
+        # Verify chronological ordering (oldest first)
+        timestamps = [ctx.timestamp for ctx in contexts_by_time]
+        assert timestamps == sorted(
+            timestamps), "Results not sorted chronologically"
+
+        # Test sort by distance (default behavior)
+        contexts_by_distance = self.manager.get_context(
+            query="machine learning",
+            top_k=3,
+            sort_by_time=False
+        )
+
+        assert len(contexts_by_distance) >= 3
+
+        # Verify distance ordering (most relevant first)
+        distances = [ctx.distance for ctx in contexts_by_distance]
+        assert distances == sorted(
+            distances), "Results not sorted by relevance"
+
+        # The two orderings should potentially be different
+        time_order_ids = [ctx.text_id for ctx in contexts_by_time]
+        distance_order_ids = [ctx.text_id for ctx in contexts_by_distance]
+
+        logging.info(f"Time order: {time_order_ids}")
+        logging.info(f"Distance order: {distance_order_ids}")
+
+    def test_time_range_filtering_with_sorting(self):
+        """Test time range filtering combined with different sorting options."""
+
+        base_time = int(time.time())
+
+        # Create documents spanning different time periods
+        text_units = [
+            TextUnit(
+                text="Ancient document about programming concepts",
+                timestamp=base_time - 7200,  # 2 hours ago
+                parent_id="doc:ancient"
+            ),
+            TextUnit(
+                text="Recent document about programming languages",
+                timestamp=base_time - 1800,  # 30 minutes ago
+                parent_id="doc:recent"
+            ),
+            TextUnit(
+                text="Very recent document about programming frameworks",
+                timestamp=base_time - 600,  # 10 minutes ago
+                parent_id="doc:very_recent"
+            ),
+            TextUnit(
+                text="Brand new document about programming best practices",
+                timestamp=base_time - 60,  # 1 minute ago
+                parent_id="doc:brand_new"
+            )
+        ]
+
+        self.manager.add_texts(texts_or_units=text_units)
+
+        # Filter to last hour and sort by time
+        hour_ago = base_time - 3600
+        contexts_filtered_by_time = self.manager.get_context(
+            query="programming",
+            top_k=5,
+            min_time=hour_ago,
+            sort_by_time=True
+        )
+
+        # Should exclude the 2-hour-old document
+        assert len(contexts_filtered_by_time) == 3
+
+        # Verify all results are within time range
+        for ctx in contexts_filtered_by_time:
+            assert ctx.timestamp >= hour_ago
+
+        # Verify chronological ordering
+        timestamps = [ctx.timestamp for ctx in contexts_filtered_by_time]
+        assert timestamps == sorted(timestamps)
+
+        # Same filter but sort by distance
+        contexts_filtered_by_distance = self.manager.get_context(
+            query="programming",
+            top_k=5,
+            min_time=hour_ago,
+            sort_by_time=False
+        )
+
+        assert len(contexts_filtered_by_distance) == 3
+
+        # Verify distance ordering
+        distances = [ctx.distance for ctx in contexts_filtered_by_distance]
+        assert distances == sorted(distances)
+
+    def test_time_window_filtering(self):
+        """Test filtering with both min_time and max_time parameters."""
+
+        base_time = int(time.time())
+
+        # Create documents at specific time intervals
+        documents_with_times = [
+            ("Document from 3 hours ago about data science",
+             base_time - 10800),
+            ("Document from 2 hours ago about data analysis",
+             base_time - 7200),
+            ("Document from 1 hour ago about data mining", base_time - 3600),
+            ("Document from 30 minutes ago about data visualization",
+             base_time - 1800),
+            ("Very recent document about data engineering", base_time - 300)
+        ]
+
+        text_units = [
+            TextUnit(text=text, timestamp=timestamp,
+                     parent_id=f"doc:window_{i}")
+            for i, (text, timestamp) in enumerate(documents_with_times)
+        ]
+
+        self.manager.add_texts(texts_or_units=text_units)
+
+        # Filter to 2-hour window (between 3 hours ago and just before 1 hour ago)
+        min_time = base_time - 10800  # 3 hours ago
+        max_time = base_time - 3601  # Just before 1 hour ago (exclusive of 1-hour doc)
+
+        windowed_contexts = self.manager.get_context(
+            query="data",
+            top_k=5,
+            min_time=min_time,
+            max_time=max_time,
+            sort_by_time=True
+        )
+
+        # Should only get the 3-hour and 2-hour old documents
+        assert len(windowed_contexts) == 2
+
+        # Verify all results are within time window
+        for ctx in windowed_contexts:
+            assert min_time <= ctx.timestamp <= max_time
+
+        # Verify chronological ordering
+        timestamps = [ctx.timestamp for ctx in windowed_contexts]
+        assert timestamps == sorted(timestamps)
+
+        # Test narrow window (last 45 minutes)
+        narrow_min = base_time - 2700  # 45 minutes ago
+        narrow_contexts = self.manager.get_context(
+            query="data",
+            top_k=5,
+            min_time=narrow_min,
+            sort_by_time=True
+        )
+
+        # Should only get the 30-minute and 5-minute old documents
+        assert len(narrow_contexts) == 2
+        for ctx in narrow_contexts:
+            assert ctx.timestamp >= narrow_min
+
+    def test_distance_precision_and_sorting(self):
+        """Test that distance values are precise and sorting works correctly."""
+        # Add documents with varying relevance to query
+        documents = [
+            "Machine learning algorithms analyze data patterns effectively",
+            "Algorithms can be used for machine data analysis in learning systems",
+            "Data analysis involves statistical methods and machine tools",
+            "Cooking recipes require precise timing and temperature control"
+        ]
+
+        self.manager.add_texts(texts_or_units=documents)
+
+        contexts = self.manager.get_context(
+            query="machine learning algorithms",
+            top_k=4,
+            sort_by_time=False  # Sort by distance (default)
+        )
+
+        assert len(contexts) >= 4
+
+        # Verify distance values are numeric and in valid range
+        for ctx in contexts:
+            assert isinstance(ctx.distance, (int, float))
+            assert 0.0 <= ctx.distance <= 1.0
+
+        # Verify strict ordering by distance (most relevant first)
+        distances = [ctx.distance for ctx in contexts]
+        assert distances == sorted(
+            distances), "Results not properly sorted by distance"
+
+        # Most relevant documents should be ML-related (not cooking)
+        most_relevant = contexts[0]
+        ml_related_terms = ["machine", "learning", "algorithms", "data",
+                            "analysis"]
+        assert any(
+            term in most_relevant.text.lower() for term in ml_related_terms)
+
+        # Least relevant should be the cooking document
+        least_relevant = contexts[-1]
+        assert "cooking" in least_relevant.text.lower()
+
+        # Verify ML documents have lower distances than cooking document
+        ml_contexts = [ctx for ctx in contexts if any(
+            term in ctx.text.lower()
+            for term in
+            ["machine", "learning", "algorithms", "data", "analysis"]
+        )]
+        cooking_contexts = [ctx for ctx in contexts if
+                            "cooking" in ctx.text.lower()]
+
+        if ml_contexts and cooking_contexts:
+            max_ml_distance = max(ctx.distance for ctx in ml_contexts)
+            min_cooking_distance = min(
+                ctx.distance for ctx in cooking_contexts)
+            assert max_ml_distance < min_cooking_distance, "ML documents should be more relevant than cooking"
+
+        logging.info(
+            f"Distance ordering: {[(ctx.text[:50], ctx.distance) for ctx in contexts]}")
+
+    def test_empty_results_sorting_behavior(self):
+        """Test sorting behavior when no results match the query or time filters."""
+        # Add some documents with known timestamp
+        current_time = int(time.time())
+
+        # Add document with current timestamp
+        text_unit = TextUnit(
+            text="Document about completely different topic like gardening",
+            timestamp=current_time
+        )
+        self.manager.add_texts([text_unit])
+
+        # Query for unrelated content
+        contexts = self.manager.get_context(
+            query="quantum physics nuclear science",
+            top_k=5,
+            sort_by_time=True
+        )
+
+        # Should return empty list or very low relevance results
+        if len(contexts) > 0:
+            # If any results returned, verify they're properly sorted
+            timestamps = [ctx.timestamp for ctx in contexts]
+            assert timestamps == sorted(timestamps)
+
+        # Test with time filter that excludes everything
+        # Use a future time that's definitely after the document timestamp
+        future_time = current_time + 7200  # 2 hours in future
+
+        future_contexts = self.manager.get_context(
+            query="gardening",
+            top_k=5,
+            min_time=future_time,
+            sort_by_time=True
+        )
+
+        # Should return empty results
+        assert len(future_contexts) == 0, (f"Expected no results with "
+                                           f"future min_time, got {len(future_contexts)}")
+
+        # Test with max_time filter that excludes everything
+        past_time = current_time - 7200  # 2 hours in past
+
+        past_contexts = self.manager.get_context(
+            query="gardening",
+            top_k=5,
+            max_time=past_time,
+            sort_by_time=True
+        )
+
+        # Should return empty results since document is newer than max_time
+        assert len(past_contexts) == 0, (f"Expected no results with past "
+                                         f"max_time, got {len(past_contexts)}")
+
+        logging.info("Empty results sorting behavior verified")
+
+    def test_sort_stability_with_identical_values(self):
+        """Test sorting stability when documents have identical timestamps or distances."""
+
+        # Create documents with identical timestamps
+        same_timestamp = int(time.time()) - 1800  # 30 minutes ago
+        identical_time_units = [
+            TextUnit(
+                text=f"Document {i} about identical timestamp testing",
+                timestamp=same_timestamp,
+                parent_id=f"doc:identical_{i}"
+            )
+            for i in range(3)
+        ]
+
+        self.manager.add_texts(texts_or_units=identical_time_units)
+
+        # Test sort by time with identical timestamps
+        contexts_by_time = self.manager.get_context(
+            query="identical timestamp",
+            top_k=3,
+            sort_by_time=True
+        )
+
+        assert len(contexts_by_time) >= 3
+
+        # All should have same timestamp
+        timestamps = [ctx.timestamp for ctx in contexts_by_time]
+        assert all(ts == same_timestamp for ts in timestamps)
+
+        # Test sort by distance - should have very similar distances for similar content
+        contexts_by_distance = self.manager.get_context(
+            query="identical timestamp testing",
+            top_k=3,
+            sort_by_time=False
+        )
+
+        assert len(contexts_by_distance) >= 3
+
+        # Distances should be very similar for nearly identical content
+        distances = [ctx.distance for ctx in contexts_by_distance]
+        distance_range = max(distances) - min(distances)
+        assert distance_range < 0.1, "Distances for similar content should be close"
+
+    def test_large_result_set_sorting_performance(self):
+        """Test sorting performance with larger result sets."""
+        import time
+
+        # Add many documents with varying timestamps
+        base_time = int(time.time())
+        large_batch = []
+
+        for i in range(50):
+            text_unit = TextUnit(
+                text=f"Performance test document {i} about data processing topic {i % 5}",
+                timestamp=base_time - (i * 60),
+                # Each doc 1 minute older than previous
+                parent_id=f"doc:perf_{i}"
+            )
+            large_batch.append(text_unit)
+
+        self.manager.add_texts(texts_or_units=large_batch)
+
+        # Test time-based sorting performance
+        start_time = time.time()
+        contexts_by_time = self.manager.get_context(
+            query="data processing",
+            top_k=20,
+            sort_by_time=True
+        )
+        time_sort_duration = time.time() - start_time
+
+        assert len(contexts_by_time) >= 20
+
+        # Verify proper time ordering
+        timestamps = [ctx.timestamp for ctx in contexts_by_time]
+        assert timestamps == sorted(timestamps)
+
+        # Test distance-based sorting performance
+        start_time = time.time()
+        contexts_by_distance = self.manager.get_context(
+            query="data processing",
+            top_k=20,
+            sort_by_time=False
+        )
+        distance_sort_duration = time.time() - start_time
+
+        assert len(contexts_by_distance) >= 20
+
+        # Verify proper distance ordering
+        distances = [ctx.distance for ctx in contexts_by_distance]
+        assert distances == sorted(distances)
+
+        logging.info(f"Time sort took {time_sort_duration:.3f}s, "
+                     f"distance sort took {distance_sort_duration:.3f}s")
+
+        # Both should complete reasonably quickly
+        assert time_sort_duration < 5.0, "Time sorting too slow"
+        assert distance_sort_duration < 5.0, "Distance sorting too slow"
+
+    def test_tag_storage_and_retrieval(self):
+        """Test that tags are properly stored and retrieved with correct format conversion."""
+
+        # Test with list of tags
+        text_unit_with_tags = TextUnit(
+            text="Document about machine learning algorithms",
+            tags=['ml', 'algorithms', 'data-science', 'python'],
+            source='test_docs',
+            author='test_author'
+        )
+
+        # Store the document
+        stored_ids = self.manager.add_texts([text_unit_with_tags])
+        assert len(stored_ids) == 1
+
+        # Retrieve and verify tags are returned as list
+        contexts = self.manager.get_context(
+            query="machine learning",
+            top_k=1
+        )
+
+        assert len(contexts) >= 1
+        retrieved_context = contexts[0]
+
+        # Verify tags are returned as list with correct values
+        assert isinstance(retrieved_context.tags, list)
+        assert set(retrieved_context.tags) == {'ml', 'algorithms',
+                                               'data-science', 'python'}
+
+        # Test with single tag (string)
+        text_unit_single_tag = TextUnit(
+            text="Document about databases",
+            tags=['database'],  # Still provide as list for consistency
+            source='test_docs'
+        )
+
+        stored_ids = self.manager.add_texts([text_unit_single_tag])
+        assert len(stored_ids) == 1
+
+        contexts = self.manager.get_context(query="database", top_k=1)
+        assert len(contexts) >= 1
+        assert isinstance(contexts[0].tags, list)
+        assert contexts[0].tags == ['database']
+
+        # Test with empty tags
+        text_unit_no_tags = TextUnit(
+            text="Document without tags",
+            source='test_docs'
+        )
+
+        stored_ids = self.manager.add_texts([text_unit_no_tags])
+        contexts = self.manager.get_context(query="without", top_k=1)
+        assert len(contexts) >= 1
+        # Should return empty list for tags, not None or empty string
+        assert isinstance(contexts[0].tags, list)
+        assert contexts[0].tags == []
+
 
 if __name__ == "__main__":
     import sys

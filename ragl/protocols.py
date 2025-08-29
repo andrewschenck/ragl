@@ -20,6 +20,7 @@ Classes:
 from typing import (
     Any,
     Protocol,
+    TypeAlias,
     runtime_checkable,
 )
 
@@ -31,8 +32,12 @@ __all__ = (
     'EmbedderProtocol',
     'RAGStoreProtocol',
     'TokenizerProtocol',
+    'TextEmbeddingPair',
     'VectorStoreProtocol',
 )
+
+
+TextEmbeddingPair: TypeAlias = tuple[TextUnit, np.ndarray]
 
 
 @runtime_checkable
@@ -98,7 +103,7 @@ class VectorStoreProtocol(Protocol):
 
     def store_texts(
             self,
-            texts_and_embeddings: list[tuple[TextUnit, np.ndarray]],
+            texts_and_embeddings: list[TextEmbeddingPair],
     ) -> list[str]:
         # pylint: disable=missing-function-docstring
         ...
