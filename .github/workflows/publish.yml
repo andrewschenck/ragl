@@ -9,7 +9,46 @@ on:
     types: [published]        # Trigger publish-pypi on published releases
 
 jobs:
+  code-quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -e .[test]
+
+      - name: Run mypy
+        run: mypy
+
+      - name: Run ruff check
+        run: ruff check
+
+  functional-tests:
+    needs: code-quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -e .[test]
+
+      - name: Run functional tests
+        run: pytest tests/
+
   integration-tests:
+    needs: [code-quality, functional-tests]
     runs-on: ubuntu-latest
     services:
       redis:
@@ -31,7 +70,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -e .[all] pytest
+        run: pip install -e .[all,test]
 
       - name: Run integration tests
         env:
@@ -40,7 +79,7 @@ jobs:
 
   publish-testpypi:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: integration-tests
+    needs: [code-quality, functional-tests, integration-tests]
     environment: test-release
     runs-on: ubuntu-latest
     permissions:
@@ -67,7 +106,7 @@ jobs:
 
   publish-pypi:
     if: github.event_name == 'release'
-    needs: integration-tests
+    needs: [code-quality, functional-tests, integration-tests]
     environment: release
     runs-on: ubuntu-latest
     permissions:
