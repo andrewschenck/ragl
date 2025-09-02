@@ -21,7 +21,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -e .[all, test]
+        run: pip install -e .[all,test]
 
       - name: Run mypy
         run: mypy
