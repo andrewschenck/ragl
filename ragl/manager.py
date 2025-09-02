@@ -506,14 +506,12 @@ class RAGManager:
         _LOG.debug('Adding text: %s', text_or_unit)
 
         with self.track_operation('add_text'):
-            results = self.add_texts(
+            return self.add_texts(
                 texts_or_units=[text_or_unit],
                 chunk_size=chunk_size,
                 overlap=overlap,
                 split=split,
             )
-
-        return results
 
     def add_texts(
             self,
