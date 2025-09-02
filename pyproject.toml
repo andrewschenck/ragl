@@ -1,3 +1,6 @@
+[tool.coverage.run]
+source = ["ragl"]
+
 [tool.mypy]
 files = ["ragl/"]
 show_error_codes = true
