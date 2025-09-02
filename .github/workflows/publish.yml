@@ -21,7 +21,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -e .[all,test]
+        run: pip install -e .[test]
 
       - name: Run mypy
         run: mypy
@@ -46,7 +46,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: pip install -e .[all,test]
+        run: pip install -e .[test]
 
       - name: Run functional tests
         run: pytest tests/
@@ -78,7 +78,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: pip install -e .[all,test]
+        run: pip install -e .[test]
 
       - name: Run integration tests
         env:

@@ -76,6 +76,7 @@ classifiers = [
 
 [project.optional-dependencies]
 test = [
+    "ragl[all]",
     "coverage",
     "mypy",
     "pytest",
