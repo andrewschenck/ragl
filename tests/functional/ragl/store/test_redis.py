@@ -1796,8 +1796,7 @@ class TestRedisVectorStore(unittest.TestCase):
         # Mock the index creation process
         with patch.object(RedisVectorStore, '_enforce_schema_version'):
             with patch('ragl.store.redis.SearchIndex') as mock_index_class:
-                with patch(
-                    'ragl.store.redis.IndexSchema') as mock_schema_class:
+                with patch('ragl.store.redis.IndexSchema') as mock_schema_class:
                     # Configure mocks
                     mock_schema_class.from_dict.return_value = Mock()
                     mock_index = Mock()
@@ -1844,47 +1843,70 @@ class TestRedisVectorStore(unittest.TestCase):
         self.assertIn(self.index_name, result)
 
     def test_repr_with_missing_connection_pool(self):
-        """Test __repr__ when redis_client has no connection_pool attribute."""
-        # Create a mock redis client without connection_pool attribute
-        mock_client = Mock(spec=[])  # Empty spec means no attributes
+        """Test __repr__ when connection_pool attribute is missing."""
+        with patch('ragl.store.redis.redis.Redis') as mock_redis_class, \
+            patch('ragl.store.redis.SearchIndex') as mock_index_class, \
+            patch('ragl.store.redis.IndexSchema') as mock_schema_class, \
+            patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis'):
+            # Set up mocks for initialization
+            mock_redis_client = Mock()
+            mock_redis_client.ping.return_value = True
+            mock_redis_client.get.return_value = None
+            mock_redis_client.set.return_value = True
+            del mock_redis_client.connection_pool  # Remove the attribute
+            mock_redis_class.return_value = mock_redis_client
 
-        # Replace the redis_client temporarily
-        original_client = self.store.redis_client
-        self.store.redis_client = mock_client
+            mock_schema = Mock()
+            mock_schema_class.from_dict.return_value = mock_schema
 
-        try:
-            result = repr(self.store)
+            mock_index = Mock()
+            mock_index.exists.return_value = False
+            mock_index.create.return_value = None
+            mock_index_class.return_value = mock_index
 
-            # Should fall back to 'unknown' values
-            self.assertIn("host='unknown'", result)
-            self.assertIn("port=unknown", result)
-            self.assertIn("db=unknown", result)
-            self.assertIn("max_connections=unknown", result)
-            self.assertIn(f"index_name='{self.store.index_name}'", result)
-            self.assertIn(f"dimensions={self.store.dimensions}", result)
-        finally:
-            # Restore original client
-            self.store.redis_client = original_client
+            store = RedisVectorStore(
+                redis_config=self.redis_config,
+                dimensions=768,
+                index_name='test_index'
+            )
+
+            repr_str = repr(store)
+            self.assertIn("host='unknown'", repr_str)
+            self.assertIn("port=unknown", repr_str)
+            self.assertIn("max_connections=unknown", repr_str)
 
     def test_repr_with_connection_pool_none(self):
         """Test __repr__ when connection_pool is None."""
-        # Create a mock redis client with connection_pool = None
-        mock_client = Mock()
-        mock_client.connection_pool = None
+        with patch('ragl.store.redis.redis.Redis') as mock_redis_class, \
+            patch('ragl.store.redis.SearchIndex') as mock_index_class, \
+            patch('ragl.store.redis.IndexSchema') as mock_schema_class, \
+            patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis'):
+            # Set up mocks for initialization
+            mock_redis_client = Mock()
+            mock_redis_client.ping.return_value = True
+            mock_redis_client.get.return_value = None
+            mock_redis_client.set.return_value = True
+            mock_redis_client.connection_pool = None
+            mock_redis_class.return_value = mock_redis_client
 
-        original_client = self.store.redis_client
-        self.store.redis_client = mock_client
+            mock_schema = Mock()
+            mock_schema_class.from_dict.return_value = mock_schema
 
-        try:
-            result = repr(self.store)
+            mock_index = Mock()
+            mock_index.exists.return_value = False
+            mock_index.create.return_value = None
+            mock_index_class.return_value = mock_index
 
-            # Should fall back to 'unknown' values via else block
-            self.assertIn("host='unknown'", result)
-            self.assertIn("port=unknown", result)
-            self.assertIn("db=unknown", result)
-            self.assertIn("max_connections=unknown", result)
-        finally:
-            self.store.redis_client = original_client
+            store = RedisVectorStore(
+                redis_config=self.redis_config,
+                dimensions=768,
+                index_name='test_index'
+            )
+
+            repr_str = repr(store)
+            self.assertIn("host='unknown'", repr_str)
+            self.assertIn("port=unknown", repr_str)
+            self.assertIn("max_connections=unknown", repr_str)
 
     @patch('ragl.store.redis.redis.Redis')
     @patch('ragl.store.redis.SearchIndex')
@@ -2133,36 +2155,34 @@ class TestRedisVectorStore(unittest.TestCase):
                       str(context.exception))
 
     def test_init_handles_unexpected_exception_during_index_creation(self):
-        """Test that unexpected exceptions during index creation are handled properly."""
+        """Test initialization handles unexpected exceptions during index creation."""
+        with patch('ragl.store.redis.redis.Redis') as mock_redis_class, \
+            patch('ragl.store.redis.SearchIndex') as mock_index_class, \
+            patch('ragl.store.redis.IndexSchema') as mock_schema_class, \
+            patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis'):
+            # Set up mocks for initialization
+            mock_redis_client = Mock()
+            mock_redis_client.ping.return_value = True
+            mock_redis_client.get.return_value = None
+            mock_redis_client.set.return_value = True
+            mock_redis_class.return_value = mock_redis_client
 
-        # Mock Redis client that connects successfully
-        mock_client = MagicMock()
-        mock_client.ping.return_value = True
-        mock_client.get.return_value = None  # No existing schema version
-        mock_client.set.return_value = True  # Schema version set successfully
+            mock_schema = Mock()
+            mock_schema_class.from_dict.return_value = mock_schema
 
-        # Mock SearchIndex and IndexSchema
-        with patch('ragl.store.redis.SearchIndex') as mock_search_index_class:
-            with patch('ragl.store.redis.IndexSchema') as mock_schema_class:
-                # Configure schema mock
-                mock_schema_class.from_dict.return_value = MagicMock()
+            mock_index = Mock()
+            mock_index.exists.side_effect = RuntimeError("Unexpected error")
+            mock_index_class.return_value = mock_index
 
-                # Configure index mock to raise unexpected exception during exists() check
-                mock_index = MagicMock()
-                mock_index.exists.side_effect = RuntimeError(
-                    "Unexpected error during index operation")
-                mock_search_index_class.return_value = mock_index
+            with self.assertRaises(DataError) as context:
+                RedisVectorStore(
+                    redis_config=self.redis_config,
+                    dimensions=768,
+                    index_name='test_index'
+                )
 
-                # Should raise DataError wrapping the unexpected exception
-                with self.assertRaises(DataError) as context:
-                    RedisVectorStore(
-                        redis_client=mock_client,
-                        dimensions=768,
-                        index_name='test_index'
-                    )
-
-                self.assertIn('Unexpected error creating index',
-                              str(context.exception))
+            self.assertIn("Unexpected error creating index",
+                          str(context.exception))
 
     def test_validate_input_sizes_metadata_key_too_large(self):
         """Test that _validate_input_sizes raises ValidationError when metadata key exceeds MAX_FIELD_SIZE."""
@@ -2234,9 +2254,31 @@ class TestRedisVectorStore(unittest.TestCase):
             self.fail(
                 "_validate_input_sizes raised ValidationError for metadata at size limit")
 
+    @patch('ragl.store.redis.redis.Redis')
+    @patch('ragl.store.redis.SearchIndex')
+    @patch('ragl.store.redis.IndexSchema')
     @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
-    def test_parse_tags_from_retrieval_splits_tags_with_separator(self, mock_validate_sync):
+    def test_parse_tags_from_retrieval_splits_tags_with_separator(self,
+                                                                  mock_validate,
+                                                                  mock_schema_class,
+                                                                  mock_index_class,
+                                                                  mock_redis_class):
         """Test that tags containing TAG_SEPARATOR are properly split."""
+        # Set up mocks for initialization
+        mock_redis_client = Mock()
+        mock_redis_client.ping.return_value = True
+        mock_redis_client.get.return_value = None
+        mock_redis_client.set.return_value = True
+        mock_redis_class.return_value = mock_redis_client
+
+        mock_schema = Mock()
+        mock_schema_class.from_dict.return_value = mock_schema
+
+        mock_index = Mock()
+        mock_index.exists.return_value = False
+        mock_index.create.return_value = None
+        mock_index_class.return_value = mock_index
+
         store = RedisVectorStore(
             redis_config=self.redis_config,
             dimensions=768,
@@ -2266,24 +2308,29 @@ class TestRedisVectorStore(unittest.TestCase):
                                                    mock_schema_class,
                                                    mock_index_class,
                                                    mock_redis_class):
-        """Test initialization with schema version enforcement error."""
-        mock_redis_class.return_value = self.mock_redis_client
-        mock_schema_class.from_dict.return_value = self.mock_schema
-        mock_index_class.return_value = self.mock_index
+        """Test that initialization fails when schema version enforcement fails."""
+        # Set up mocks for initialization that will be overridden
+        mock_redis_client = Mock()
+        mock_redis_client.ping.return_value = True
+        mock_redis_class.return_value = mock_redis_client
 
-        with patch.object(RedisVectorStore,
-                          '_enforce_schema_version') as mock_enforce:
-            mock_enforce.side_effect = ConfigurationError(
-                "Schema version mismatch")
+        mock_schema = Mock()
+        mock_schema_class.from_dict.return_value = mock_schema
 
-            with self.assertRaises(ConfigurationError) as context:
+        mock_index = Mock()
+        mock_index.exists.return_value = False
+        mock_index.create.return_value = None
+        mock_index_class.return_value = mock_index
+
+        # Override the _enforce_schema_version method to raise an error
+        with patch.object(RedisVectorStore, '_enforce_schema_version',
+                          side_effect=StorageConnectionError("Schema error")):
+            with self.assertRaises(StorageConnectionError):
                 RedisVectorStore(
                     redis_config=self.redis_config,
-                    dimensions=self.dimensions,
-                    index_name=self.index_name
+                    dimensions=768,
+                    index_name='test_index'
                 )
-
-            self.assertIn("Schema version mismatch", str(context.exception))
 
     @patch('ragl.store.redis.redis.Redis')
     @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')

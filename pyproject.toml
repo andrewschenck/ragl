@@ -1,3 +1,6 @@
+[tool.coverage.run]
+source = ["ragl"]
+
 [tool.mypy]
 files = ["ragl/"]
 show_error_codes = true
@@ -8,8 +11,8 @@ extend-exclude = ["tests/", "work/"]
 line-length = 80
 
 [tool.ruff.lint]
-ignore = ["D203", "D212", "D413", "E272"]
-extend-select = ["W", "E", "D"]
+ignore = ["D203", "D212", "D413", "S101"]
+extend-select = ["W", "E", "D", "F", "S", "C4", "T20", "RET", "ERA", "PTH"]
 
 [tool.ruff.lint.per-file-ignores]
 "ragl/protocols.py" = ["D102"]
@@ -29,7 +32,7 @@ exclude = ["tests", "work"]
 
 [project]
 name = "ragl"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
     "bleach",
     "numpy",
@@ -76,6 +79,7 @@ classifiers = [
 
 [project.optional-dependencies]
 test = [
+    "ragl[all]",
     "coverage",
     "mypy",
     "pytest",

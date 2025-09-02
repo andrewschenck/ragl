@@ -933,8 +933,7 @@ class RedisVectorStore:
         """
         with self.redis_context() as client:
             counter = client.incr(self.TEXT_COUNTER_KEY)
-        text_id = f'{TEXT_ID_PREFIX}{counter}'
-        return text_id
+        return f'{TEXT_ID_PREFIX}{counter}'
 
     def _parse_list_tags(self, tags_list: list) -> list[str]:
         """
