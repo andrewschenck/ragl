@@ -32,7 +32,7 @@ exclude = ["tests", "work"]
 
 [project]
 name = "ragl"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
     "bleach",
     "numpy",
@@ -78,16 +78,6 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-test = [
-    "ragl[all]",
-    "coverage",
-    "mypy",
-    "pytest",
-    "pytest-cov",
-    "ruff",
-    "types-bleach",
-    "types-psutil",
-]
 redis = [
     "redis",
     "redisvl",
@@ -99,4 +89,14 @@ transformers = [
 all = [
     "ragl[redis]",
     "ragl[transformers]",
+]
+test = [
+    "ragl[all]",
+    "coverage",
+    "mypy",
+    "pytest",
+    "pytest-cov",
+    "ruff",
+    "types-bleach",
+    "types-psutil",
 ]
