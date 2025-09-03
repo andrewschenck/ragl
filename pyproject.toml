@@ -32,7 +32,7 @@ exclude = ["tests", "work"]
 
 [project]
 name = "ragl"
-version = "0.8.3"
+version = "0.8.4"
 dependencies = [
     "bleach",
     "numpy",
