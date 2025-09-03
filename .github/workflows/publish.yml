@@ -100,9 +100,30 @@ jobs:
           REDIS_URL: redis://localhost:6379
         run: pytest tests/integration/sentencetransformer_redis.py
 
+  all-tests:
+    needs: [code-quality, functional-tests, integration-tests]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check test results
+        run: |
+          if [[ "${{ needs.code-quality.result }}" != "success" ]]; then
+            echo "CI FAILURE: code-quality status is ${{ needs.code-quality.result }}"
+            exit 1
+          fi
+          if [[ "${{ needs.functional-tests.result }}" != "success" ]]; then
+            echo "CI FAILURE: functional-tests status is ${{ needs.functional-tests.result }}"
+            exit 1
+          fi
+          if [[ "${{ needs.integration-tests.result }}" != "success" ]]; then
+            echo "CI FAILURE: integration-tests status is ${{ needs.integration-tests.result }}"
+            exit 1
+          fi
+          echo "All tests passed!"
+
   publish-testpypi:
     if: startsWith(github.ref, 'refs/tags/v') && github.event_name != 'release'
-    needs: [code-quality, functional-tests, integration-tests]
+    needs: all-tests
     environment: test-release
     runs-on: ubuntu-latest
     permissions:
@@ -129,7 +150,7 @@ jobs:
 
   publish-pypi:
     if: github.event_name == 'release'
-    needs: [code-quality, functional-tests, integration-tests]
+    needs: all-tests
     environment: release
     runs-on: ubuntu-latest
     permissions:
