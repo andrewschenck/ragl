@@ -702,6 +702,83 @@ class TestTextUnit(unittest.TestCase):
         self.assertIsNone(unit.confidence)
         self.assertIsNone(unit.tags)
 
+    def test_contains_substring_found(self):
+        """Test __contains__ returns True when substring is found."""
+        unit = TextUnit(text_id='test', text='Hello world, this is a test')
+
+        self.assertTrue('Hello' in unit)
+        self.assertTrue('world' in unit)
+        self.assertTrue('test' in unit)
+        self.assertTrue('Hello world' in unit)
+
+    def test_contains_substring_not_found(self):
+        """Test __contains__ returns False when substring is not found."""
+        unit = TextUnit(text_id='test', text='Hello world')
+
+        self.assertFalse('goodbye' in unit)
+        self.assertFalse('HELLO' in unit)  # Case sensitive
+        self.assertFalse('xyz' in unit)
+
+    def test_contains_case_sensitive(self):
+        """Test __contains__ is case sensitive."""
+        unit = TextUnit(text_id='test', text='Hello World')
+
+        self.assertTrue('Hello' in unit)
+        self.assertTrue('World' in unit)
+        self.assertFalse('hello' in unit)
+        self.assertFalse('world' in unit)
+        self.assertFalse('HELLO' in unit)
+
+    def test_contains_empty_string(self):
+        """Test __contains__ with empty string."""
+        unit = TextUnit(text_id='test', text='Hello world')
+
+        self.assertTrue('' in unit)  # Empty string is always found
+
+    def test_contains_full_text(self):
+        """Test __contains__ with the full text content."""
+        text = 'This is the complete text'
+        unit = TextUnit(text_id='test', text=text)
+
+        self.assertTrue(text in unit)
+
+    def test_contains_non_string_types(self):
+        """Test __contains__ returns False for non-string types."""
+        unit = TextUnit(text_id='test', text='Hello world 123')
+
+        self.assertFalse(123 in unit)
+        self.assertFalse(None in unit)
+        self.assertFalse(['Hello'] in unit)
+        self.assertFalse({'text': 'Hello'} in unit)
+        self.assertFalse(123.45 in unit)
+
+    def test_contains_special_characters(self):
+        """Test __contains__ with special characters and unicode."""
+        unit = TextUnit(text_id='test', text='Hello 世界! @#$%^&*()')
+
+        self.assertTrue('世界' in unit)
+        self.assertTrue('!' in unit)
+        self.assertTrue('@#$' in unit)
+        self.assertTrue('Hello 世界!' in unit)
+
+    def test_contains_whitespace_and_newlines(self):
+        """Test __contains__ with whitespace and newline characters."""
+        unit = TextUnit(text_id='test', text='Line one\nLine two\tTabbed text')
+
+        self.assertTrue('\n' in unit)
+        self.assertTrue('\t' in unit)
+        self.assertTrue('Line one\nLine two' in unit)
+        self.assertTrue('two\tTabbed' in unit)
+
+    def test_contains_partial_words(self):
+        """Test __contains__ finds partial word matches."""
+        unit = TextUnit(text_id='test', text='programming')
+
+        self.assertTrue('prog' in unit)
+        self.assertTrue('gram' in unit)
+        self.assertTrue('ming' in unit)
+        self.assertTrue('ogra' in unit)
+
 
 if __name__ == '__main__':
     unittest.main()

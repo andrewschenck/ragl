@@ -5,8 +5,8 @@ This module defines the core TextUnit class for representing stored
 text chunks with associated metadata.
 
 Classes:
-- TextUnit:
-    Dataclass for representing text chunks with metadata.
+    TextUnit:
+        Dataclass for representing text chunks with metadata.
 """
 
 import logging
@@ -337,8 +337,8 @@ class TextUnit:
 
     def __init__(
             self,
-            *,
             text: str,
+            *,
             text_id: str | None = None,
             parent_id: str | None = None,
             chunk_position: int | None = None,
@@ -393,8 +393,10 @@ class TextUnit:
         self.section = section
         self.author = author
         self.tags = tags
-        self.timestamp = (timestamp if timestamp is not None else
-                          int(time.time_ns() // 1000))
+        self.timestamp = (
+            timestamp if timestamp is not None else
+            int(time.time_ns() // 1000)
+        )
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> Self:
@@ -450,6 +452,21 @@ class TextUnit:
             'timestamp':            self.timestamp,
         }
 
+    def __contains__(self, item) -> bool:
+        """
+        Check if a substring is in the text content.
+
+        Args:
+            item:
+                Substring to check for.
+
+        Returns:
+            True if item is found in text, False otherwise.
+        """
+        if not isinstance(item, str):
+            return False
+        return item in self.text
+
     def __eq__(self, other: Any) -> bool:
         """
         Check equality with another object.
@@ -466,18 +483,20 @@ class TextUnit:
         """
         if not isinstance(other, TextUnit):
             return NotImplemented
-        return (self.text == other.text and
-                self.text_id == other.text_id and
-                self.parent_id == other.parent_id and
-                self.chunk_position == other.chunk_position and
-                self.distance == other.distance and
-                self.source == other.source and
-                self.confidence == other.confidence and
-                self.language == other.language and
-                self.section == other.section and
-                self.author == other.author and
-                self.tags == other.tags and
-                self.timestamp == other.timestamp)
+        return (
+            self.text == other.text and
+            self.text_id == other.text_id and
+            self.parent_id == other.parent_id and
+            self.chunk_position == other.chunk_position and
+            self.distance == other.distance and
+            self.source == other.source and
+            self.confidence == other.confidence and
+            self.language == other.language and
+            self.section == other.section and
+            self.author == other.author and
+            self.tags == other.tags and
+            self.timestamp == other.timestamp
+        )
 
     def __len__(self) -> int:
         """
