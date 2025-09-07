@@ -396,7 +396,7 @@ class RedisVectorStore:
         except Exception as e:
             msg = f'Redis health check failed: {e}'
             _LOG.error(msg)
-            raise StorageConnectionError from e
+            raise
 
         index_info = self.index.info()
         health_status['index_exists'] = bool(index_info)
@@ -495,7 +495,7 @@ class RedisVectorStore:
         This method ensures that Redis connections are properly managed
         and that errors are caught and logged.
         """
-        _LOG.debug('Inintializing redis context manager')
+        _LOG.debug('Initializing Redis context manager')
         try:
             self.redis_client.ping()
             yield self.redis_client
