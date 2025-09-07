@@ -1774,38 +1774,17 @@ class TestRAGManager(unittest.TestCase):
         manager = RAGManager(self.config, self.mock_ragstore,
                              tokenizer=self.mock_tokenizer)
 
-        # Mock storage with health_check method
-        mock_storage = Mock()
-        mock_storage.health_check.return_value = {'status': 'healthy'}
-        self.mock_ragstore.storage = mock_storage
+        # Mock the ragstore's get_health_status method directly
+        expected_result = {
+            'embedder': {'used_memory': 1024},
+            'storage':  {'status': 'healthy'}
+        }
+        self.mock_ragstore.get_health_status.return_value = expected_result
 
         result = manager.get_health_status()
 
-        self.assertEqual(result, {'status': 'healthy'})
-
-        call_args = mock_log.debug.call_args
-        self.assertEqual(call_args[0][0],
-                         'Operation completed: %s (%.3fs)')
-        self.assertEqual(call_args[0][1], 'health_check')
-        self.assertIsInstance(call_args[0][2], float)  # execution time
-
-    @patch('ragl.manager._LOG')
-    def test_get_health_status_without_health_check(self, mock_log):
-        """Test getting health status when backend doesn't support health checks."""
-        manager = RAGManager(self.config, self.mock_ragstore,
-                             tokenizer=self.mock_tokenizer)
-
-        # Mock storage without health_check method
-        self.mock_ragstore.storage = Mock(spec=[])
-
-        result = manager.get_health_status()
-
-        self.assertEqual(result, {'status': 'health_check_not_supported'})
-        call_args = mock_log.debug.call_args
-        self.assertEqual(call_args[0][0],
-                         'Operation completed: %s (%.3fs)')
-        self.assertEqual(call_args[0][1], 'health_check')
-        self.assertIsInstance(call_args[0][2], float)  # execution time
+        self.assertEqual(result, expected_result)
+        self.mock_ragstore.get_health_status.assert_called_once()
 
     @patch('ragl.manager._LOG')
     def test_get_performance_metrics_all(self, mock_log):

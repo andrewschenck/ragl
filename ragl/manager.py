@@ -668,22 +668,17 @@ class RAGManager:
 
     def get_health_status(self) -> dict[str, Any]:
         """
-        Return the health status of the backend, if available.
+        Return the health status of the storage backend and embedder.
 
-        Determines whether the storage backend supports health checks
-        and returns the health check response.
-
-        If not supported, returns a default message indicating
-        health checks are not available.
+        Checks the health of both the embedder and storage components,
+        returning a dictionary with status and utilization details.
 
         Returns:
             Health status dictionary.
         """
         _LOG.debug('Retrieving health status')
         with self.track_operation('health_check'):
-            if hasattr(self.ragstore.storage, 'health_check'):
-                return self.ragstore.storage.health_check()
-            return {'status': 'health_check_not_supported'}
+            return self.ragstore.get_health_status()
 
     def get_performance_metrics(
             self,

@@ -344,6 +344,58 @@ class TestRAGStore(unittest.TestCase):
         self.assertEqual(result[0].text, "Text without ID 1")
         self.assertEqual(result[1].text, "Text without ID 2")
 
+    def test_get_health_status_returns_correct_structure(self):
+        """Test that get_health_status returns dictionary with embedder and storage keys."""
+        # Setup mock return values
+        mock_embedder_memory = {'memory_usage': '100MB', 'status': 'healthy'}
+        mock_storage_health = {'status': 'connected', 'disk_usage': '50%'}
+
+        self.mock_embedder.get_memory_usage.return_value = mock_embedder_memory
+        self.mock_storage.health_check.return_value = mock_storage_health
+
+        # Call method
+        result = self.rag_store.get_health_status()
+
+        # Verify structure and content
+        expected = {
+            'embedder': mock_embedder_memory,
+            'storage':  mock_storage_health,
+        }
+        self.assertEqual(result, expected)
+
+    def test_get_health_status_calls_component_methods(self):
+        """Test that get_health_status calls health methods on both components."""
+        # Call method
+        self.rag_store.get_health_status()
+
+        # Verify both component methods were called
+        self.mock_embedder.get_memory_usage.assert_called_once()
+        self.mock_storage.health_check.assert_called_once()
+
+    def test_get_health_status_logs_debug_message(self):
+        """Test that get_health_status logs appropriate debug message."""
+        with self.assertLogs('ragl.ragstore', level='DEBUG') as log:
+            self.rag_store.get_health_status()
+
+        self.assertIn('Retrieving health status', log.output[0])
+
+    def test_get_health_status_propagates_component_exceptions(self):
+        """Test that exceptions from components are propagated."""
+        # Test embedder exception
+        self.mock_embedder.get_memory_usage.side_effect = RuntimeError(
+            "Embedder error")
+
+        with self.assertRaises(RuntimeError):
+            self.rag_store.get_health_status()
+
+        # Reset and test storage exception
+        self.mock_embedder.get_memory_usage.side_effect = None
+        self.mock_storage.health_check.side_effect = ConnectionError(
+            "Storage error")
+
+        with self.assertRaises(ConnectionError):
+            self.rag_store.get_health_status()
+
     def test_repr(self):
         """Test __repr__ method."""
         result = repr(self.rag_store)

@@ -57,6 +57,10 @@ class EmbedderProtocol(Protocol):
         # pylint: disable=missing-function-docstring
         ...  # pragma: no cover
 
+    def get_memory_usage(self) -> dict[str, Any]:
+        # pylint: disable=missing-function-docstring
+        ...  # pragma: no cover
+
 
 @runtime_checkable
 class VectorStoreProtocol(Protocol):
@@ -142,6 +146,10 @@ class RAGStoreProtocol(Protocol):
     ) -> list[TextUnit]:
         # pylint: disable=missing-function-docstring
         ...
+
+    def get_health_status(self) -> dict[str, Any]:
+        # pylint: disable=missing-function-docstring
+        ...  # pragma: no cover
 
     def list_texts(self) -> list[str]:
         # pylint: disable=missing-function-docstring

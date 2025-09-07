@@ -645,24 +645,23 @@ class TestRaglIntegration:
 
         # Should return a dictionary with status information
         assert isinstance(health_status, dict)
+        storage_status = health_status.get('storage', {})
         for key in ('redis_connected', 'index_exists', 'index_healthy'):
-            assert key in health_status
-            assert health_status[key] is True
+            assert key in storage_status
+            assert storage_status[key] is True
 
-        assert 'document_count' in health_status
-        assert health_status['document_count'] == 0
+        assert 'document_count' in storage_status
+        assert storage_status['document_count'] == 0
 
-        assert 'errors' in health_status
-        assert isinstance(health_status['errors'], list)
-        assert len(health_status['errors']) == 0
+        assert 'errors' in storage_status
+        assert isinstance(storage_status['errors'], list)
+        assert len(storage_status['errors']) == 0
 
-        assert 'last_check' in health_status
-        assert isinstance(health_status['last_check'], int)
+        assert 'last_check' in storage_status
+        assert isinstance(storage_status['last_check'], int)
 
-        assert 'memory_info' in health_status
-        assert isinstance(health_status['memory_info'], dict)
-
-        logging.info("Backend does not support health checks")
+        assert 'memory_info' in storage_status
+        assert isinstance(storage_status['memory_info'], dict)
 
     def test_performance_metrics_tracking(self):
         """Test performance metrics collection and retrieval."""
