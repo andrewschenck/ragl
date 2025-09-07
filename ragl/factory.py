@@ -141,12 +141,12 @@ class AbstractFactory:
         _LOG.info('Registering factory class %s', cls.__name__)
         if not issubclass(config_cls, RaglConfig):
             msg = 'config_cls must be a subclass of RaglConfig'
-            _LOG.critical(msg)
+            _LOG.error(msg)
             raise TypeError(msg)
 
         if not issubclass(factory, AbstractFactory):
             msg = 'cls must be a subclass of AbstractFactory'
-            _LOG.critical(msg)
+            _LOG.error(msg)
             raise TypeError(msg)
 
         cls._factory_map[config_cls] = factory
@@ -195,25 +195,27 @@ class AbstractFactory:
             ConfigurationError:
                 When no factory found for configuration type.
         """
-        _LOG.debug('Calling factory %s with args: %s, kwargs: %s',)
         if self.__class__.__name__ not in self.can_call_abstract__call__:
             msg = f'{self.__class__.__name__} cannot be called directly'
-            _LOG.critical(msg)
+            _LOG.error(msg)
             raise TypeError(msg)
 
         try:
             config = kwargs['config']
         except KeyError as e:
             msg = 'config must be provided'
-            _LOG.critical(msg)
+            _LOG.error(msg)
             raise ConfigurationError(msg) from e
 
         try:
             factory_cls = self._factory_map[type(config)]
         except KeyError as e:
             msg = f'No factory found for configuration type: {e}'
-            _LOG.critical(msg)
+            _LOG.error(msg)
             raise ConfigurationError(msg) from e
+
+        _LOG.debug('Calling factory %s with args: %s, kwargs: %s',
+                   self.__class__.__name__, args, kwargs)
 
         factory = factory_cls()
         return factory(*args, **kwargs)
@@ -306,15 +308,17 @@ class SentenceTransformerFactory(EmbedderFactory):
             config = kwargs['config']
         except KeyError as e:
             msg = 'config parameter must be provided'
-            _LOG.critical(msg)
+            _LOG.error(msg)
             raise ConfigurationError(msg) from e
         try:
             # pylint: disable=import-outside-toplevel
+            _LOG.info('Importing SentenceTransformerEmbedder')
             from ragl.embed.sentencetransformer import SentenceTransformerEmbedder  # noqa: E501
+            _LOG.info('Creating SentenceTransformerEmbedder instance')
             return SentenceTransformerEmbedder(config=config)
         except ImportError as e:
             msg = 'SentenceTransformerEmbedder not available'
-            _LOG.critical(msg)
+            _LOG.error(msg)
             raise ConfigurationError(msg) from e
 
 
@@ -355,19 +359,20 @@ class RedisVectorStoreFactory(VectorStoreFactory):
                 Keyword arguments containing 'config', 'dimensions',
                 and 'index_name'.
         """
-        _LOG.debug('Calling RedisVectorStore %s with args: %s, kwargs: %s',)
         try:
             config = kwargs['config']
             dimensions = kwargs['dimensions']
             index_name = kwargs['index_name']
         except KeyError as e:
             msg = 'config, dimensions, and index_name must be provided'
-            _LOG.critical(msg)
+            _LOG.error(msg)
             raise ConfigurationError(msg) from e
 
         try:
             # pylint: disable=import-outside-toplevel
+            _LOG.info('Importing RedisVectorStore')
             from ragl.store.redis import RedisVectorStore
+            _LOG.info('Creating RedisVectorStore instance')
             return RedisVectorStore(
                 redis_config=config,
                 dimensions=dimensions,
@@ -375,7 +380,7 @@ class RedisVectorStoreFactory(VectorStoreFactory):
             )
         except ImportError as e:
             msg = 'RedisVectorStore not available'
-            _LOG.critical(msg)
+            _LOG.error(msg)
             raise ConfigurationError(msg) from e
 
 

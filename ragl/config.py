@@ -21,6 +21,7 @@ Classes:
         RAGManager configuration
 """
 
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -36,6 +37,9 @@ __all__ = (
     'SentenceTransformerConfig',
     'VectorStoreConfig',
 )
+
+
+_LOG = logging.getLogger(__name__)
 
 
 @dataclass
@@ -136,7 +140,9 @@ class SentenceTransformerConfig(EmbedderConfig):
         """
         model_name_or_path = str(self.model_name_or_path)
         if not model_name_or_path or not model_name_or_path.strip():
-            raise ConfigurationError('model_name_or_path cannot be empty')
+            msg = 'model_name_or_path cannot be empty'
+            _LOG.error(msg)
+            raise ConfigurationError(msg)
 
     def _validate_cache_settings(self) -> None:
         """
@@ -147,12 +153,14 @@ class SentenceTransformerConfig(EmbedderConfig):
                 If cache_maxsize is not a non-negative integer,
         """
         if not isinstance(self.cache_maxsize, int) or self.cache_maxsize < 0:
-            raise ConfigurationError(f'{self.cache_maxsize} must be '
-                                     'non-negative')
+            msg = 'cache_maxsize must be a non-negative integer'
+            _LOG.error(msg)
+            raise ConfigurationError(msg)
 
         if not 0.0 <= self.memory_threshold <= 1.0:
-            raise ConfigurationError(f'{self.memory_threshold=} must be '
-                                     'between 0.0 and 1.0')
+            msg = 'memory_threshold must be between 0.0 and 1.0'
+            _LOG.error(msg)
+            raise ConfigurationError(msg)
 
 
 @dataclass
@@ -237,13 +245,19 @@ class RedisConfig(VectorStoreConfig):
                 If host is empty, port is not in the range 1-65535,
         """
         if not self.host or not self.host.strip():
-            raise ConfigurationError('host cannot be empty')
+            msg = 'host cannot be empty'
+            _LOG.error(msg)
+            raise ConfigurationError(msg)
 
         if not isinstance(self.port, int) or not 1 <= self.port <= 65535:
-            raise ConfigurationError(f'{self.port=} must be between 1-65535')
+            msg = 'port must be between 1-65535'
+            _LOG.error(msg)
+            raise ConfigurationError(msg)
 
         if not isinstance(self.db, int) or self.db < 0:
-            raise ConfigurationError(f'{self.db=} must be non-negative')
+            msg = 'db must be a non-negative integer'
+            _LOG.error(msg)
+            raise ConfigurationError(msg)
 
     def _validate_timeouts(self) -> None:
         """
@@ -255,16 +269,19 @@ class RedisConfig(VectorStoreConfig):
                 health_check_interval are not positive integers.
         """
         if self.socket_timeout < 1:
-            raise ConfigurationError(f'{self.socket_timeout=} must be '
-                                     'positive')
+            msg = 'socket_timeout must be a positive integer'
+            _LOG.error(msg)
+            raise ConfigurationError(msg)
 
         if self.socket_connect_timeout < 1:
-            raise ConfigurationError(f'{self.socket_connect_timeout=} must be '
-                                     'positive')
+            msg = 'socket_connect_timeout must be a positive integer'
+            _LOG.error(msg)
+            raise ConfigurationError(msg)
 
         if self.health_check_interval < 1:
-            raise ConfigurationError(f'{self.health_check_interval=} must be '
-                                     'positive')
+            msg = 'health_check_interval must be a positive integer'
+            _LOG.error(msg)
+            raise ConfigurationError(msg)
 
 
 @dataclass
@@ -325,14 +342,19 @@ class ManagerConfig:
                 If chunk_size is not positive, overlap is negative,
         """
         if self.chunk_size < 1:
-            raise ConfigurationError(f'{self.chunk_size=} must be positive')
+            msg = 'chunk_size must be a positive integer'
+            _LOG.error(msg)
+            raise ConfigurationError(msg)
 
         if self.overlap < 0:
-            raise ConfigurationError(f'{self.overlap=} must be non-negative')
+            msg = 'overlap must be a non-negative integer'
+            _LOG.error(msg)
+            raise ConfigurationError(msg)
 
         if self.overlap >= self.chunk_size:
-            raise ConfigurationError(f'({self.overlap=}) must be less than '
-                                     f'({self.chunk_size=})')
+            msg = 'overlap must be less than chunk_size'
+            _LOG.error(msg)
+            raise ConfigurationError(msg)
 
     def _validate_limits(self) -> None:
         """
@@ -345,16 +367,19 @@ class ManagerConfig:
                 max_input_length.
         """
         if self.max_query_length < 1:
-            raise ConfigurationError(f'{self.max_query_length=} must be '
-                                     'positive')
+            msg = 'max_query_length must be a positive integer'
+            _LOG.error(msg)
+            raise ConfigurationError(msg)
 
         if self.max_input_length < 1:
-            raise ConfigurationError(f'{self.max_input_length=} must be '
-                                     'positive')
+            msg = 'max_input_length must be a positive integer'
+            _LOG.error(msg)
+            raise ConfigurationError(msg)
 
         if self.max_query_length > self.max_input_length:
-            raise ConfigurationError(f'{self.max_query_length=} cannot exceed '
-                                     f'{self.max_input_length=}')
+            msg = 'max_query_length cannot exceed max_input_length'
+            _LOG.error(msg)
+            raise ConfigurationError(msg)
 
     def _validate_names(self) -> None:
         """
@@ -366,10 +391,16 @@ class ManagerConfig:
                 or if default_base_id is empty.
         """
         if not self.index_name or not self.index_name.strip():
-            raise ConfigurationError('index_name cannot be empty')
+            msg = 'index_name cannot be empty'
+            _LOG.error(msg)
+            raise ConfigurationError(msg)
 
         if not re.match(r'^[a-zA-Z0-9_-]+$', self.index_name):
-            raise ConfigurationError('index_name contains invalid characters')
+            msg = 'index_name contains invalid characters'
+            _LOG.error(msg)
+            raise ConfigurationError(msg)
 
         if not self.default_base_id or not self.default_base_id.strip():
-            raise ConfigurationError('default_base_id cannot be empty')
+            msg = 'default_base_id cannot be empty'
+            _LOG.error(msg)
+            raise ConfigurationError(msg)

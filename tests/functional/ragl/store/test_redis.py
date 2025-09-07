@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, MagicMock, call, patch
 
 import numpy as np
 import redis
@@ -479,6 +479,41 @@ class TestRedisVectorStore(unittest.TestCase):
         self.assertTrue(result['index_healthy'])
         self.assertEqual(result['document_count'], 10)
         self.assertIn('memory_info', result)
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_health_check_high_memory_warning(self, mock_validate_sync):
+        """Test health check logs warning when Redis memory usage exceeds 80%."""
+        mock_client = Mock()
+        mock_client.ping.return_value = True
+
+        # Set up Redis info to simulate high memory usage (85%)
+        mock_client.info.return_value = {
+            'used_memory':       850_000_000,  # 850MB used
+            'maxmemory':         1_000_000_000,  # 1GB max
+            'used_memory_human': '850M',
+            'maxmemory_human':   '1G',
+        }
+
+        # Mock index info
+        mock_index_info = {'num_docs': 100}
+
+        with patch.object(self.store, 'redis_client', mock_client), \
+            patch.object(self.store.index, 'info',
+                         return_value=mock_index_info), \
+            patch('ragl.store.redis._LOG.warning') as mock_warning:
+            health_status = self.store.health_check()
+
+            # Verify warning was logged for high memory usage
+            mock_warning.assert_called_once_with(
+                'Redis memory usage high: %.1f%%', 85.0
+            )
+
+            # Verify health status includes memory info
+            self.assertTrue(health_status['redis_connected'])
+            self.assertEqual(health_status['memory_info']['used_memory'],
+                             850_000_000)
+            self.assertEqual(health_status['memory_info']['maxmemory'],
+                             1_000_000_000)
 
     @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
     def test_health_check_redis_connection_error(self, mock_validate_sync):
@@ -2799,6 +2834,40 @@ class TestRedisVectorStore(unittest.TestCase):
             data=list(batch_data.values()),
             keys=list(batch_data.keys())
         )
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_store_texts_logs_large_batch_processing(self, mock_validate_sync):
+        """Test that large batch processing is logged."""
+        with patch.object(RedisVectorStore, '_enforce_schema_version'):
+            store = RedisVectorStore(
+                redis_client=self.mock_redis_client,
+                dimensions=self.dimensions,
+                index_name=self.index_name
+            )
+
+        # Create a batch larger than BATCH_LOG_THRESHOLD
+        batch_size = store.LARGE_BATCH_THRESHOLD * 20
+        texts_and_embeddings = []
+        for i in range(batch_size):
+            text_unit = TextUnit(text=f"Sample text {i}", text_id=None,
+                                 distance=0.0)
+            embedding = np.random.rand(self.dimensions).astype(np.float32)
+            texts_and_embeddings.append((text_unit, embedding))
+
+        # Mock the Redis operations
+        self.mock_redis_client.incr.side_effect = range(1, batch_size + 1)
+        expected_ids = [f'{TEXT_ID_PREFIX}{i}' for i in
+                        range(1, batch_size + 1)]
+        self.mock_index.load.return_value = expected_ids
+
+        with patch('ragl.store.redis.sanitize_metadata', return_value={}), \
+            patch('ragl.store.redis._LOG') as mock_log:
+            result = store.store_texts(texts_and_embeddings)
+
+        # Verify the large batch log was called
+        mock_log.info.assert_called_with('Processed %d/%d items (%.1f%%)', batch_size, batch_size, 100.0)
+        self.assertEqual(len(result), batch_size)
+
 
     @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
     def test_execute_batch_storage_empty_batch(self, mock_validate_sync):

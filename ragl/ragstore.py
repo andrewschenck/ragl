@@ -74,7 +74,8 @@ class RAGStore:
                 store and retrieval.
 
         Raises:
-            TypeError: If args don’t implement protocols.
+            TypeError:
+                If args don’t implement protocols.
         """
         if not isinstance(embedder, EmbedderProtocol):
             msg = 'embedder must implement EmbedderProtocol'
@@ -86,6 +87,7 @@ class RAGStore:
             raise TypeError(msg)
         self.embedder = embedder
         self.storage = storage
+        _LOG.info('Initialized %s', self)
 
     def clear(self) -> None:
         """Clear all data from store."""

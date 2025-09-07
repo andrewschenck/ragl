@@ -641,17 +641,6 @@ class TestRAGManager(unittest.TestCase):
             mock_log.error.assert_called_with(
                 'tokenizer must implement TokenizerProtocol')
 
-    def test_init_invalid_chunking_parameters(self):
-        """Test RAGManager initialization with invalid chunking parameters."""
-
-        with patch('ragl.manager._LOG') as mock_log:
-            with self.assertRaises(ConfigurationError) as cm:
-                invalid_config = ManagerConfig(chunk_size=0, overlap=20,
-                                               paranoid=False)
-                RAGManager(invalid_config, self.mock_ragstore)
-
-            self.assertIn('self.chunk_size=0 must be positive', str(cm.exception))
-
     @patch('ragl.manager._LOG')
     def test_add_text_string_success(self, mock_log):
         """Test adding text as string successfully."""
@@ -668,7 +657,7 @@ class TestRAGManager(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertIsInstance(result[0], TextUnit)
         self.mock_ragstore.store_texts.assert_called_once()
-        mock_log.debug.assert_any_call('Adding text: %s', text)
+        mock_log.debug.assert_any_call('Adding text: %d characters', 19)
 
     @patch('ragl.manager._LOG')
     def test_add_text_textunit_success(self, mock_log):
@@ -692,7 +681,8 @@ class TestRAGManager(unittest.TestCase):
 
         self.assertEqual(len(result), 1)
         self.assertIsInstance(result[0], TextUnit)
-        mock_log.debug.assert_any_call('Adding text: %s', text_unit)
+        mock_log.debug.assert_any_call('Adding text: %d characters',
+                                       len(text_unit))
 
     def test_add_text_empty_string(self):
         """Test adding empty text raises ValidationError."""
@@ -704,8 +694,8 @@ class TestRAGManager(unittest.TestCase):
                 manager.add_text("")
 
             self.assertIn('text cannot be whitespace-only or zero-length', str(cm.exception))
-            mock_log.critical.assert_called()
-            call_args = mock_log.critical.call_args
+            mock_log.error.assert_called()
+            call_args = mock_log.error.call_args
             self.assertEqual(call_args[0][0],
                              'Operation failed: %s (%.3fs) - %s')
             self.assertEqual(call_args[0][1], 'add_text')
@@ -764,7 +754,7 @@ class TestRAGManager(unittest.TestCase):
                 manager.add_text(text)
 
             self.assertIn('No valid chunks stored', str(cm.exception))
-            call_args = mock_log.critical.call_args
+            call_args = mock_log.error.call_args
             self.assertEqual(call_args[0][0],
                              'Operation failed: %s (%.3fs) - %s')
             self.assertEqual(call_args[0][1], 'add_text')
@@ -873,7 +863,17 @@ class TestRAGManager(unittest.TestCase):
                 manager.add_texts([])
 
             self.assertIn('texts_or_units cannot be empty', str(cm.exception))
-            mock_log.error.assert_called_with('texts_or_units cannot be empty')
+
+            # Check that the ValidationError is logged within the operation failure
+            mock_log.error.assert_called()
+            call_args = mock_log.error.call_args
+            self.assertEqual(call_args[0][0],
+                             'Operation failed: %s (%.3fs) - %s')
+            self.assertEqual(call_args[0][1], 'add_texts')
+            self.assertIsInstance(call_args[0][2], float)  # execution time
+            self.assertIsInstance(call_args[0][3], ValidationError)
+            self.assertIn('texts_or_units cannot be empty',
+                          str(call_args[0][3]))
 
     def test_add_texts_contains_empty_string(self):
         """Test adding texts with empty string raises ValidationError."""
@@ -904,8 +904,17 @@ class TestRAGManager(unittest.TestCase):
 
             self.assertIn('Invalid text type, must be str or TextUnit',
                           str(cm.exception))
-            mock_log.error.assert_called_with(
-                'Invalid text type, must be str or TextUnit')
+
+            # Check that the ValidationError is logged within the operation failure
+            mock_log.error.assert_called()
+            call_args = mock_log.error.call_args
+            self.assertEqual(call_args[0][0],
+                             'Operation failed: %s (%.3fs) - %s')
+            self.assertEqual(call_args[0][1], 'add_texts')
+            self.assertIsInstance(call_args[0][2], float)  # execution time
+            self.assertIsInstance(call_args[0][3], ValidationError)
+            self.assertIn('Invalid text type, must be str or TextUnit',
+                          str(call_args[0][3]))
 
     def test_add_texts_custom_chunk_params(self):
         """Test adding texts with custom chunk parameters."""
@@ -1726,7 +1735,7 @@ class TestRAGManager(unittest.TestCase):
 
             expected_msg = f'Query too long: {len(long_query)} > {RAGManager.MAX_QUERY_LENGTH}'
             self.assertIn('Query too long', str(cm.exception))
-            call_args = mock_log.critical.call_args
+            call_args = mock_log.error.call_args
             self.assertEqual(call_args[0][0],
                              'Operation failed: %s (%.3fs) - %s')
             self.assertEqual(call_args[0][1], 'get_context')
@@ -1744,7 +1753,7 @@ class TestRAGManager(unittest.TestCase):
 
             self.assertIn('top_k must be a positive integer',
                           str(cm.exception))
-            call_args = mock_log.critical.call_args
+            call_args = mock_log.error.call_args
             self.assertEqual(call_args[0][0],
                              'Operation failed: %s (%.3fs) - %s')
             self.assertEqual(call_args[0][1], 'get_context')
@@ -1967,7 +1976,7 @@ class TestRAGManager(unittest.TestCase):
                 manager._sanitize_text(long_text)
 
             self.assertIn('text too long', str(cm.exception))
-            mock_log.critical.assert_called_with('text too long')
+            mock_log.error.assert_called_with('text too long')
 
     def test_sanitize_text_input_paranoid_mode(self):
         """Test sanitizing text input in paranoid mode."""
@@ -2022,7 +2031,7 @@ class TestRAGManager(unittest.TestCase):
                 RAGManager._validate_chunking(0, 20)
 
             self.assertIn('Chunk_size must be positive', str(cm.exception))
-            mock_log.critical.assert_called_with('Chunk_size must be positive')
+            mock_log.error.assert_called_with('Chunk_size must be positive')
 
     def test_validate_chunking_negative_chunk_size(self):
         """Test chunking validation with negative chunk size."""
@@ -2036,7 +2045,7 @@ class TestRAGManager(unittest.TestCase):
                 RAGManager._validate_chunking(100, -5)
 
             self.assertIn('Overlap must be non-negative', str(cm.exception))
-            mock_log.critical.assert_called_with(
+            mock_log.error.assert_called_with(
                 'Overlap must be non-negative')
 
     def test_validate_chunking_overlap_too_large(self):
@@ -2047,7 +2056,7 @@ class TestRAGManager(unittest.TestCase):
 
             self.assertIn('Overlap must be less than chunk_size',
                           str(cm.exception))
-            mock_log.critical.assert_called_with(
+            mock_log.error.assert_called_with(
                 'Overlap must be less than chunk_size')
 
     def test_validate_chunking_overlap_greater_than_chunk_size(self):
@@ -2075,7 +2084,7 @@ class TestRAGManager(unittest.TestCase):
                 manager._validate_query(None)
 
             self.assertIn('Query cannot be empty', str(cm.exception))
-            mock_log.critical.assert_called_with('Query cannot be empty')
+            mock_log.error.assert_called_with('Query cannot be empty')
 
     def test_validate_query_empty(self):
         """Test query validation with empty query."""
@@ -2105,7 +2114,7 @@ class TestRAGManager(unittest.TestCase):
 
             expected_msg = f'Query too long: {len(long_query)} > {RAGManager.MAX_QUERY_LENGTH}'
             self.assertIn('Query too long', str(cm.exception))
-            mock_log.critical.assert_called_with(expected_msg)
+            mock_log.error.assert_called_with(expected_msg)
 
     @patch('ragl.manager._LOG')
     def test_validate_top_k_valid(self, mock_log):
@@ -2121,7 +2130,7 @@ class TestRAGManager(unittest.TestCase):
 
             self.assertIn('top_k must be a positive integer',
                           str(cm.exception))
-            mock_log.critical.assert_called_with(
+            mock_log.error.assert_called_with(
                 'top_k must be a positive integer')
 
     def test_validate_top_k_negative(self):

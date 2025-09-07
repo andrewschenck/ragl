@@ -243,6 +243,7 @@ class TextUnitChunker:
         self.split = split
         self.timestamp = batch_timestamp or int(time.time_ns() // 1000)
         self.text_index = text_index
+        _LOG.info('Initialized %s', self)
 
     def chunk_text_unit(self, unit: TextUnit) -> Iterator[TextUnit]:
         """
@@ -263,6 +264,7 @@ class TextUnitChunker:
         Yields:
             Chunked TextUnit instances.
         """
+        _LOG.debug('Chunking TextUnit: %d characters', len(unit))
         if not self.split:
             # Create a copy with proper chunk_position and text_id
             text_id = (f'{TEXT_ID_PREFIX}{unit.parent_id}-'
@@ -469,6 +471,7 @@ class RAGManager:
         self.min_chunk_size = config.min_chunk_size
         self.paranoid = config.paranoid
         self._metrics = defaultdict(RAGTelemetry)
+        _LOG.info('Initialized %s', self)
 
     def add_text(
             self,
@@ -503,7 +506,7 @@ class RAGManager:
         Returns:
             List of stored TextUnit instances.
         """
-        _LOG.debug('Adding text: %s', text_or_unit)
+        _LOG.debug('Adding text: %d characters', len(text_or_unit))
 
         with self.track_operation('add_text'):
             return self.add_texts(
@@ -537,18 +540,11 @@ class RAGManager:
             split:
                 Whether to split the text into chunks.
 
-        Raises:
-            ValidationError:
-                If texts are empty or params invalid.
-            DataError:
-                If no chunks are stored.
-
         Returns:
             List of stored TextUnit instances.
         """
+        _LOG.debug('Adding texts: %d items', len(texts_or_units))
         with self.track_operation('add_texts'):
-            _LOG.debug('Adding texts: %d items', len(texts_or_units))
-
             self._validate_text_input(texts_or_units)
 
             _chunk_size, _overlap = self._resolve_chunk_params(
@@ -801,8 +797,8 @@ class RAGManager:
             duration = time.time() - start
             record_failure = self._metrics[operation_name].record_failure
             record_failure(duration)
-            _LOG.critical('Operation failed: %s (%.3fs) - %s', operation_name,
-                          duration, e)
+            _LOG.error('Operation failed: %s (%.3fs) - %s', operation_name,
+                       duration, e)
             raise
 
     def _convert_to_text_unit(self, item: str | TextUnit) -> TextUnit:
@@ -1014,7 +1010,7 @@ class RAGManager:
         limit = self.MAX_INPUT_LENGTH
         if len(text.encode('utf-8')) > limit:
             msg = 'text too long'
-            _LOG.critical(msg)
+            _LOG.error(msg)
             raise ValidationError(msg)
 
         if self.paranoid:
@@ -1077,15 +1073,15 @@ class RAGManager:
 
         if cs <= 0:
             msg = 'Chunk_size must be positive'
-            _LOG.critical(msg)
+            _LOG.error(msg)
             raise ValidationError(msg)
         if ov < 0:
             msg = 'Overlap must be non-negative'
-            _LOG.critical(msg)
+            _LOG.error(msg)
             raise ValidationError(msg)
         if ov >= cs:
             msg = 'Overlap must be less than chunk_size'
-            _LOG.critical(msg)
+            _LOG.error(msg)
             raise ValidationError(msg)
 
     def _validate_query(self, query: str) -> None:
@@ -1108,12 +1104,12 @@ class RAGManager:
         _LOG.debug('Validating query')
         if not query or not query.strip():
             msg = 'Query cannot be empty'
-            _LOG.critical(msg)
+            _LOG.error(msg)
             raise ValidationError(msg)
 
         if len(query) > self.MAX_QUERY_LENGTH:
             msg = f'Query too long: {len(query)} > {self.MAX_QUERY_LENGTH}'
-            _LOG.critical(msg)
+            _LOG.error(msg)
             raise ValidationError(msg)
 
     @staticmethod
@@ -1149,7 +1145,7 @@ class RAGManager:
         _LOG.debug('Validating top_k parameter')
         if not isinstance(top_k, int) or top_k < 1:
             msg = 'top_k must be a positive integer'
-            _LOG.critical(msg)
+            _LOG.error(msg)
             raise ValidationError(msg)
 
     def __str__(self) -> str:

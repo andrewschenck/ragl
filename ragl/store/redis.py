@@ -154,6 +154,8 @@ class RedisVectorStore:
     TAG_SEPARATOR: ClassVar[str] = ','
     TEXT_COUNTER_KEY: ClassVar[str] = 'text_counter'
 
+    LARGE_BATCH_THRESHOLD: ClassVar[int] = 100
+
     index: SearchIndex
     index_name: str
     index_schema: IndexSchema
@@ -229,6 +231,7 @@ class RedisVectorStore:
         self.index_schema = self._create_index_schema(index_name)
         self.index = SearchIndex(self.index_schema, self.redis_client)
         self._initialize_search_index()
+        _LOG.info('Initialized RedisVectorStore with index: %s', index_name)
 
     def clear(self) -> None:
         """
@@ -248,6 +251,7 @@ class RedisVectorStore:
 
     def close(self) -> None:
         """Close Redis connection pool."""
+        _LOG.debug('Closing RedisVectorStore with index: %s', self.index_name)
         if hasattr(self, 'redis_client'):
             self.redis_client.close()
 
@@ -283,6 +287,8 @@ class RedisVectorStore:
         Returns:
             The number of deleted text_id.
         """
+        _LOG.info('Deleting texts from store')
+        _LOG.debug('Deleting text IDs: %s', text_ids)
         if not text_ids:
             return 0
 
@@ -326,8 +332,12 @@ class RedisVectorStore:
         Returns:
             List of TextUnit objects, may be fewer than top_k.
         """
+        start_time = time.time()
         self._validate_dimensions_match(embedding)
 
+        _LOG.info('Retrieving relevant texts from Redis: '
+                  'top_k=%d, time_range=%s-%s',
+                  top_k, min_time or 'none', max_time or 'none')
         vector_query = self._build_vector_query(
             embedding=embedding,
             top_k=top_k,
@@ -336,6 +346,10 @@ class RedisVectorStore:
         )
         results = self._search_redis(vector_query)
         result_dicts = self._transform_redis_results(results)
+
+        duration = time.time() - start_time
+        _LOG.info('Retrieved %d relevant texts in %.3fs',
+                  len(result_dicts), duration)
 
         return [TextUnit.from_dict(result_dict)
                 for result_dict in result_dicts]
@@ -353,6 +367,7 @@ class RedisVectorStore:
         Returns:
             Dictionary with health status and diagnostics.
         """
+        _LOG.info('Checking Redis connection and index health')
         health_status = {
             'redis_connected':       False,
             'index_exists':          False,
@@ -362,12 +377,26 @@ class RedisVectorStore:
             'errors':                [],
         }
 
-        with self.redis_context() as client:
+        try:
+            with self.redis_context() as client:
 
-            info = client.info()
-            if isinstance(info, Mapping):
-                health_status['redis_connected'] = True
-                health_status['memory_info'] = self._extract_memory_info(info)
+                info = client.info()
+                if isinstance(info, Mapping):
+                    health_status['redis_connected'] = True
+                    memory_info = self._extract_memory_info(info)
+                    health_status['memory_info'] = memory_info
+
+                    used_memory = info.get('used_memory', 0)
+                    maxmemory = info.get('maxmemory', 0)
+                    if maxmemory > 0:
+                        memory_usage_pct = (used_memory / maxmemory) * 100
+                        if memory_usage_pct > 80:
+                            _LOG.warning('Redis memory usage high: %.1f%%',
+                                         memory_usage_pct)
+        except Exception as e:
+            msg = f'Redis health check failed: {e}'
+            _LOG.error(msg)
+            raise
 
         index_info = self.index.info()
         health_status['index_exists'] = bool(index_info)
@@ -387,6 +416,7 @@ class RedisVectorStore:
         Returns:
             Sorted list of text IDs.
         """
+        _LOG.info('Listing all text IDs in Redis')
         with self.redis_context() as client:
             keys = client.keys(f'{TEXT_ID_PREFIX}*')
             return sorted(cast(list[str], keys))
@@ -416,6 +446,7 @@ class RedisVectorStore:
         Returns:
             Comma-separated string of tags.
         """
+        _LOG.debug('Converting tags to string')
         if tags is None:
             tag_list = []
         elif isinstance(tags, str):
@@ -464,6 +495,7 @@ class RedisVectorStore:
         This method ensures that Redis connections are properly managed
         and that errors are caught and logged.
         """
+        _LOG.debug('Initializing Redis context manager')
         try:
             self.redis_client.ping()
             yield self.redis_client
@@ -531,13 +563,13 @@ class RedisVectorStore:
         if not texts_and_embeddings:
             return []
 
-        _LOG.debug('Storing batch of %d text-embedding pairs',
-                   len(texts_and_embeddings))
+        _LOG.info('Storing batch of %d text-embedding pairs',
+                  len(texts_and_embeddings))
 
         batch_data = self._prepare_batch_data(texts_and_embeddings)
         stored_ids = self._execute_batch_storage(batch_data)
 
-        _LOG.info('Successfully stored batch of %d texts', len(stored_ids))
+        _LOG.debug('Successfully stored batch of %d texts', len(stored_ids))
         return stored_ids
 
     def _build_vector_query(
@@ -610,6 +642,7 @@ class RedisVectorStore:
         Returns:
             Cleaned tag string, or empty string if invalid
         """
+        _LOG.debug('Cleaning tag value: %s', tag_value)
         if not isinstance(tag_value, str):
             tag_value = str(tag_value)
 
@@ -639,6 +672,7 @@ class RedisVectorStore:
         Returns:
             Configured IndexSchema object for Redis.
         """
+        _LOG.debug('Creating index schema for index: %s', index_name)
         return IndexSchema.from_dict({
             'index':  {
                 'name':   index_name,
@@ -709,6 +743,7 @@ class RedisVectorStore:
         Returns:
             Dictionary mapping field names to their schema definitions.
         """
+        _LOG.debug('Creating validation schema')
         return {
             'chunk_position': {
                 'type':    int,
@@ -862,6 +897,7 @@ class RedisVectorStore:
             ConfigurationError: If configuration is invalid.
             StorageConnectionError: If connection fails.
         """
+        _LOG.info('Initializing Redis client')
         if redis_client is None and redis_config is None:
             msg = 'Either redis_client or redis_config must be provided'
             _LOG.error(msg)
@@ -869,7 +905,7 @@ class RedisVectorStore:
 
         if redis_client is not None and redis_config is not None:
             msg = 'Both redis_client and redis_config were provided'
-            _LOG.critical(msg)
+            _LOG.error(msg)
             raise ConfigurationError(msg)
 
         if redis_client is not None:
@@ -901,11 +937,17 @@ class RedisVectorStore:
             StorageConnectionError:
                 If Redis connection fails.
         """
+        _LOG.info('Initializing Redis search index: %s', self.index_name)
         try:
             if not self.index.exists():
                 self.index.create()
                 _LOG.info('Created new index: %s', self.index_name)
-            _LOG.info('Connected to index: %s', self.index_name)
+                _LOG.info('Connected to index: %s', self.index_name)
+            else:
+                index_info = self.index.info()
+                doc_count = index_info.get('num_docs', 0)
+                _LOG.info('Connected to existing index: %s (%d documents)',
+                          self.index_name, doc_count)
 
         except redis.ResponseError as e:
             msg = f'Failed to create Redis index: {e}'
@@ -1057,9 +1099,23 @@ class RedisVectorStore:
             ValidationError:
                 If any input is invalid.
         """
+        _LOG.debug('Preparing batch data for %d items',
+                   len(texts_and_embeddings))
+
         batch_data = {}
 
-        for text_unit, embedding in texts_and_embeddings:
+        total_items = len(texts_and_embeddings)
+        if total_items > self.LARGE_BATCH_THRESHOLD:
+            _LOG.info('Processing large batch: %d items', total_items)
+
+        for i, (text_unit, embedding) in enumerate(texts_and_embeddings):
+
+            very_large_batch = self.LARGE_BATCH_THRESHOLD * 10
+            chunk = very_large_batch / 2
+            if total_items > very_large_batch and (i + 1) % chunk == 0:
+                _LOG.info('Processed %d/%d items (%.1f%%)',
+                          i + 1, total_items, ((i + 1) / total_items) * 100)
+
             text_id, prepared_data = self._prepare_single_text_entry(
                 text_unit=text_unit,
                 embedding=embedding,
@@ -1093,6 +1149,7 @@ class RedisVectorStore:
         Returns:
             Dict with text, embedding, and metadata.
         """
+        _LOG.debug('Preparing Redis payload')
         return {
             'text':             text,
             'embedding':        embedding.tobytes(),
@@ -1129,7 +1186,9 @@ class RedisVectorStore:
         text = text_data.pop('text')
 
         if not text.strip():
-            raise ValidationError('text cannot be empty')
+            msg = 'text cannot be empty be empty'
+            _LOG.error(msg)
+            raise ValidationError(msg)
 
         text_id = text_unit.text_id
         if text_id is None:
@@ -1175,6 +1234,7 @@ class RedisVectorStore:
         Returns:
             Redis search results.
         """
+        _LOG.debug('Executing Redis vector search')
         try:
             return self.index.search(
                 vector_query.query,
@@ -1260,12 +1320,15 @@ class RedisVectorStore:
                 If input structure is invalid.
         """
         if not isinstance(texts_and_embeddings, list):
-            raise ValidationError('texts_and_embeddings must be a list')
+            msg = 'texts_and_embeddings must be a list'
+            _LOG.error(msg)
+            raise ValidationError(msg)
 
         for i, item in enumerate(texts_and_embeddings):
             if not isinstance(item, tuple):
-                raise ValidationError(
-                    f'Item {i} must be a tuple, got {type(item).__name__}')
+                msg = f'Item {i} must be a tuple, got {type(item).__name__}'
+                _LOG.error(msg)
+                raise ValidationError(msg)
 
             if len(item) != 2:
                 msg = (f'Item {i} must be a tuple of length 2, '
@@ -1302,12 +1365,12 @@ class RedisVectorStore:
         """
         if dimensions is None:
             msg = 'Dimensions required for Schema creation'
-            _LOG.critical(msg)
+            _LOG.error(msg)
             raise ConfigurationError(msg)
 
         if not isinstance(dimensions, int) or dimensions <= 0:
             msg = 'Dimensions must be positive'
-            _LOG.critical(msg)
+            _LOG.error(msg)
             raise ConfigurationError(msg)
 
     def _validate_dimensions_match(self, embedding: np.ndarray) -> None:
@@ -1324,8 +1387,9 @@ class RedisVectorStore:
         """
         dim = embedding.shape[0]
         if dim != self.dimensions:
-            raise ConfigurationError('Embedding dimension mismatch: '
-                                     f'{dim} != {self.dimensions}')
+            msg = f'Embedding dimension mismatch: {dim} != {self.dimensions}'
+            _LOG.error(msg)
+            raise ConfigurationError(msg)
 
     @staticmethod
     def _validate_index_name(index_name: str) -> None:
@@ -1346,12 +1410,14 @@ class RedisVectorStore:
                 If index_name is invalid.
         """
         if not index_name or not index_name.strip():
-            raise ConfigurationError('index_name cannot be empty')
+            msg = 'index_name cannot be empty'
+            _LOG.error(msg)
+            raise ConfigurationError(msg)
 
         if len(index_name) > RedisVectorStore.MAX_TEXT_ID_LENGTH:
             msg = (f'index_name too long: {len(index_name)} > '
                    f'{RedisVectorStore.MAX_TEXT_ID_LENGTH}')
-            _LOG.critical(msg)
+            _LOG.error(msg)
             raise ConfigurationError(msg)
 
     def _validate_input_sizes(
@@ -1381,8 +1447,10 @@ class RedisVectorStore:
         """
         text_bytes = len(text.encode('utf-8'))
         if text_bytes > self.MAX_TEXT_SIZE:
-            raise ValidationError(f'Text too large: {text_bytes} bytes '
-                                  f'(max: {self.MAX_TEXT_SIZE})')
+            msg = (f'Text too large: {text_bytes} bytes '
+                   f'(max: {self.MAX_TEXT_SIZE})')
+            _LOG.error(msg)
+            raise ValidationError(msg)
 
         if metadata:
             total_metadata_size = 0
@@ -1391,18 +1459,23 @@ class RedisVectorStore:
                 value_bytes = len(str(value).encode('utf-8'))
 
                 if key_bytes > self.MAX_FIELD_SIZE:
-                    raise ValidationError(f'Metadata key too large: "{key}" '
-                                          f'({key_bytes} bytes)')
+                    msg = f'Metadata key too large: "{key}" {key_bytes} bytes'
+                    _LOG.error(msg)
+                    raise ValidationError(msg)
 
                 if value_bytes > self.MAX_FIELD_SIZE:
-                    raise ValidationError('Metadata value too large for '
-                                          f'key "{key}": {value_bytes} bytes')
+                    msg = (f'Metadata value too large: "{key}" '
+                           f'{value_bytes} bytes')
+                    _LOG.error(msg)
+                    raise ValidationError(msg)
 
                 total_metadata_size += key_bytes + value_bytes
 
             if total_metadata_size > self.MAX_METADATA_SIZE:
-                raise ValidationError('Total metadata too large: '
-                                      f'{total_metadata_size} bytes')
+                msg = (f'Total metadata too large: '
+                       f'{total_metadata_size} bytes')
+                _LOG.error(msg)
+                raise ValidationError(msg)
 
     def _validate_text_id(self, text_id: str) -> None:
         """
@@ -1422,15 +1495,20 @@ class RedisVectorStore:
                 If text_id is invalid.
         """
         if not text_id or not text_id.strip():
-            raise ValidationError('text_id cannot be empty')
+            msg = 'text_id cannot be empty'
+            _LOG.error(msg)
+            raise ValidationError(msg)
 
         if len(text_id) > self.MAX_TEXT_ID_LENGTH:
-            raise ValidationError(f'text_id too long: {len(text_id)} > '
-                                  f'{self.MAX_TEXT_ID_LENGTH}')
+            msg = (f'text_id too long: {len(text_id)} > '
+                   f'{self.MAX_TEXT_ID_LENGTH}')
+            _LOG.error(msg)
+            raise ValidationError(msg)
 
         if not text_id.startswith(TEXT_ID_PREFIX):
-            raise ValidationError('text_id must start with '
-                                  f'"{TEXT_ID_PREFIX}"')
+            msg = f'text_id must start with "{TEXT_ID_PREFIX}"'
+            _LOG.error(msg)
+            raise ValidationError(msg)
 
     @staticmethod
     def _validate_top_k(top_k: int) -> None:
@@ -1448,7 +1526,9 @@ class RedisVectorStore:
                 If top_k is not a positive integer.
         """
         if not isinstance(top_k, int) or top_k < 1:
-            raise ValidationError('top_k must be a positive integer')
+            msg = f'top_k must be a positive integer, got {top_k}'
+            _LOG.error(msg)
+            raise ValidationError(msg)
 
     def __del__(self):
         """Destructor to ensure Redis connection is closed."""
