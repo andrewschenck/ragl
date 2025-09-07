@@ -105,6 +105,11 @@ class SentenceTransformerEmbedder:
         Args:
             config: Configuration object with model and cache settings
         """
+        _LOG.info('Initializing SentenceTransformerEmbedder with model: %s',
+                  config.model_name_or_path)
+        if config.cache_maxsize <= 0:
+            _LOG.info('Cache disabled (maxsize=%d)', config.cache_maxsize)
+
         model_path = Path(config.model_name_or_path)
         self.model = SentenceTransformer(str(model_path), device=config.device)
         self._cache_size = config.cache_maxsize
@@ -112,6 +117,8 @@ class SentenceTransformerEmbedder:
         self._auto_cleanup = config.auto_clear_cache
         self._show_progress = config.show_progress
         self._embed_cached = lru_cache(self._cache_size)(self._embed_impl)
+        _LOG.debug('Embedder initialized: dims=%d, cache_size=%d, device=%s',
+                   self.dimensions, self._cache_size, config.device)
 
     def cache_info(self):
         """
@@ -125,6 +132,12 @@ class SentenceTransformerEmbedder:
 
     def clear_cache(self) -> None:
         """Clear the embedding cache and force garbage collection."""
+        cache_info = self.cache_info()
+        hit_rate = cache_info.hits / max(1,
+                                         cache_info.hits +
+                                         cache_info.misses)
+        _LOG.debug('Clearing cache: %d items, hit_rate=%.2f',
+                   cache_info.currsize, hit_rate)
         self._embed_cached.cache_clear()
         gc.collect()
 
@@ -146,9 +159,9 @@ class SentenceTransformerEmbedder:
         Returns:
             Embedding as a numpy array.
         """
-        _LOG.debug('Embedding text: %s', text)
+        _LOG.debug('Embedding text length: %d', len(text))
         if self._auto_cleanup and self._should_clear_cache():
-            _LOG.info('%s: Clearing embed cache due to memory threshold',
+            _LOG.info('%s: Clearing embedder cache due to memory threshold',
                       self.__class__.__name__)
             self.clear_cache()
         return self._embed_cached(text)
@@ -166,10 +179,21 @@ class SentenceTransformerEmbedder:
         Returns:
             Embedding as a numpy array of float32 type.
         """
-        array = self.model.encode(
-            sentences=text,
-            show_progress_bar=self._show_progress,
-        )
+        _LOG.debug('Computing embedding for text length: %d', len(text))
+
+        if not text.strip():
+            _LOG.warning('Embedding empty or whitespace-only text')
+
+        try:
+            array = self.model.encode(
+                sentences=text,
+                show_progress_bar=self._show_progress,
+            )
+
+        except Exception as e:
+            _LOG.error('Failed to compute embedding: %s', e)
+            raise
+
         assert isinstance(array, np.ndarray)
         return array.astype(np.float32)
 
@@ -187,6 +211,7 @@ class SentenceTransformerEmbedder:
         """
         _LOG.debug('Retrieving memory usage statistics')
         cache_info = self.cache_info()
+
         cache_total = cache_info.hits + cache_info.misses
         if cache_total > 0:
             cache_hit_rate = cache_info.hits / cache_total
@@ -194,6 +219,8 @@ class SentenceTransformerEmbedder:
             cache_hit_rate = 0.0
 
         cache_hit_rate = round(cache_hit_rate, 2)
+        _LOG.info('Cache performance: %d hits, %.1f%% hit rate',
+                  cache_info.hits, cache_hit_rate)
 
         # Estimate cache memory usage (rough approximation).
         #
@@ -252,7 +279,10 @@ class SentenceTransformerEmbedder:
         _LOG.debug('Checking if cache should be cleared')
         with suppress(Exception):
             memory_percent = psutil.virtual_memory().percent / 100.0
-            return memory_percent > self._memory_threshold
+            if memory_percent > self._memory_threshold:
+                _LOG.info('Memory threshold exceeded: %.1f%% > %.1f%%',
+                         memory_percent * 100, self._memory_threshold * 100)
+                return True
         return False
 
     def __repr__(self) -> str:

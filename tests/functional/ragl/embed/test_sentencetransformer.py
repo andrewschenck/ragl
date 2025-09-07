@@ -89,7 +89,7 @@ class TestSentenceTransformerEmbedder(unittest.TestCase):
         dimensions = embedder.dimensions
 
         self.assertEqual(dimensions, 768)
-        self.mock_model.get_sentence_embedding_dimension.assert_called_once()
+        self.assertEqual(self.mock_model.get_sentence_embedding_dimension.call_count, 2)
 
     @patch('ragl.embed.sentencetransformer.SentenceTransformer')
     def test_dimensions_property_assertion(self, mock_sentence_transformer):
@@ -97,10 +97,9 @@ class TestSentenceTransformerEmbedder(unittest.TestCase):
         mock_sentence_transformer.return_value = self.mock_model
         self.mock_model.get_sentence_embedding_dimension.return_value = "invalid"
 
-        embedder = SentenceTransformerEmbedder(self.config)
-
+        # Now the assertion should fail during initialization
         with self.assertRaises(AssertionError):
-            _ = embedder.dimensions
+            embedder = SentenceTransformerEmbedder(self.config)
 
     @patch('ragl.embed.sentencetransformer.SentenceTransformer')
     def test_embed_impl(self, mock_sentence_transformer):
@@ -136,7 +135,7 @@ class TestSentenceTransformerEmbedder(unittest.TestCase):
 
         result = embedder.embed("test text")
 
-        mock_log.debug.assert_called_with('Checking if cache should be cleared')
+        mock_log.debug.assert_called_with('Computing embedding for text length: %d', 9)
         self.assertIsInstance(result, np.ndarray)
         self.assertEqual(result.dtype, np.float32)
 
@@ -172,7 +171,7 @@ class TestSentenceTransformerEmbedder(unittest.TestCase):
 
                 mock_clear.assert_called_once()
                 mock_log.info.assert_called_with(
-                    '%s: Clearing embed cache due to memory threshold',
+                    '%s: Clearing embedder cache due to memory threshold',
                     'SentenceTransformerEmbedder'
                 )
 
@@ -195,25 +194,6 @@ class TestSentenceTransformerEmbedder(unittest.TestCase):
 
                 mock_clear.assert_not_called()
 
-    # @patch('ragl.embed.sentencetransformer.SentenceTransformer')
-    # def test_cache_info(self, mock_sentence_transformer):
-    #     """Test cache info retrieval."""
-    #     mock_sentence_transformer.return_value = self.mock_model
-    #     embedder = SentenceTransformerEmbedder(self.config)
-    #
-    #     # Make some calls to populate cache
-    #     embedder.embed("text1")
-    #     embedder.embed("text2")
-    #     embedder.embed("text1")  # Should hit cache
-    #
-    #     cache_info = embedder.cache_info()
-    #
-    #     self.assertEqual(cache_info.hits, 1)
-    #     self.assertEqual(cache_info.misses, 2)
-    #     self.assertEqual(cache_info.currsize, 2)
-    #     self.assertEqual(cache_info.maxsize, 100)
-    #     # embedder.clear_cache()
-    #
     @patch('ragl.embed.sentencetransformer.SentenceTransformer')
     @patch('ragl.embed.sentencetransformer.gc')
     def test_clear_cache(self, mock_gc, mock_sentence_transformer):
