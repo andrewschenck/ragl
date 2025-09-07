@@ -481,6 +481,41 @@ class TestRedisVectorStore(unittest.TestCase):
         self.assertIn('memory_info', result)
 
     @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
+    def test_health_check_high_memory_warning(self, mock_validate_sync):
+        """Test health check logs warning when Redis memory usage exceeds 80%."""
+        mock_client = Mock()
+        mock_client.ping.return_value = True
+
+        # Set up Redis info to simulate high memory usage (85%)
+        mock_client.info.return_value = {
+            'used_memory':       850_000_000,  # 850MB used
+            'maxmemory':         1_000_000_000,  # 1GB max
+            'used_memory_human': '850M',
+            'maxmemory_human':   '1G',
+        }
+
+        # Mock index info
+        mock_index_info = {'num_docs': 100}
+
+        with patch.object(self.store, 'redis_client', mock_client), \
+            patch.object(self.store.index, 'info',
+                         return_value=mock_index_info), \
+            patch('ragl.store.redis._LOG.warning') as mock_warning:
+            health_status = self.store.health_check()
+
+            # Verify warning was logged for high memory usage
+            mock_warning.assert_called_once_with(
+                'Redis memory usage high: %.1f%%', 85.0
+            )
+
+            # Verify health status includes memory info
+            self.assertTrue(health_status['redis_connected'])
+            self.assertEqual(health_status['memory_info']['used_memory'],
+                             850_000_000)
+            self.assertEqual(health_status['memory_info']['maxmemory'],
+                             1_000_000_000)
+
+    @patch('redisvl.redis.connection.RedisConnectionFactory.validate_sync_redis')
     def test_health_check_redis_connection_error(self, mock_validate_sync):
         """Test health check with Redis connection error."""
         with patch.object(RedisVectorStore, '_enforce_schema_version'):

@@ -281,7 +281,7 @@ class SentenceTransformerEmbedder:
             memory_percent = psutil.virtual_memory().percent / 100.0
             if memory_percent > self._memory_threshold:
                 _LOG.info('Memory threshold exceeded: %.1f%% > %.1f%%',
-                         memory_percent * 100, self._memory_threshold * 100)
+                          memory_percent * 100, self._memory_threshold * 100)
                 return True
         return False
 
