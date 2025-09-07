@@ -23,7 +23,7 @@ Classes:
 
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from ragl.exceptions import ConfigurationError
@@ -104,7 +104,8 @@ class SentenceTransformerConfig(EmbedderConfig):
             to a model on disk.
 
         cache_maxsize:
-            Maximum number of embeddings to cache in memory.
+            Maximum number of entries to cache in memory. Set to
+            0 to disable caching.
         device:
             Device to use for embedding.
         auto_clear_cache:
@@ -116,14 +117,18 @@ class SentenceTransformerConfig(EmbedderConfig):
             Threshold for memory usage before cleaning up cache.
             This is a float between 0.0 and 1.0, where 1.0 means
             100% memory usage.
+       init_kwargs:
+            Additional keyword arguments to pass to the
+            SentenceTransformer constructor.
     """
 
     model_name_or_path: str = 'all-mpnet-base-v2'
-    cache_maxsize: int = 10_000  # set this to 0 to disable caching
+    cache_maxsize: int = 10_000
     device: str | None = None
     auto_clear_cache: bool = True
     show_progress: bool = False
     memory_threshold: float = 0.9
+    init_kwargs: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""

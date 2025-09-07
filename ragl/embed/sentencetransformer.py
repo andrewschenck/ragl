@@ -91,7 +91,9 @@ class SentenceTransformerEmbedder:
     def dimensions(self) -> int:
         """Retrieve the embedding dimension count."""
         dimensions = self.model.get_sentence_embedding_dimension()
-        assert isinstance(dimensions, int)
+        if not isinstance(dimensions, int) or dimensions <= 0:
+            raise ValueError('Invalid embedding dimensions '
+                             'retrieved from model')
         return dimensions
 
     def __init__(self, config: SentenceTransformerConfig) -> None:
@@ -111,11 +113,20 @@ class SentenceTransformerEmbedder:
             _LOG.info('Cache disabled (maxsize=%d)', config.cache_maxsize)
 
         model_path = Path(config.model_name_or_path)
-        self.model = SentenceTransformer(str(model_path), device=config.device)
+        kwargs_device = config.init_kwargs.pop('device', None)
+        if kwargs_device is not None:
+            _LOG.warning('Ignoring device setting in init_kwargs (%s); '
+                         'use config.device (%s) instead',
+                         kwargs_device, config.device)
+        self.model = SentenceTransformer(
+            model_name_or_path=str(model_path),
+            device=config.device,
+            **config.init_kwargs,
+        )
         self._cache_size = config.cache_maxsize
-        self._memory_threshold = config.memory_threshold
         self._auto_cleanup = config.auto_clear_cache
         self._show_progress = config.show_progress
+        self._memory_threshold = config.memory_threshold
         self._embed_cached = lru_cache(self._cache_size)(self._embed_impl)
         _LOG.debug('Embedder initialized: dims=%d, cache_size=%d, device=%s',
                    self.dimensions, self._cache_size, config.device)
