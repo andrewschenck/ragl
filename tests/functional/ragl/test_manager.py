@@ -641,17 +641,6 @@ class TestRAGManager(unittest.TestCase):
             mock_log.error.assert_called_with(
                 'tokenizer must implement TokenizerProtocol')
 
-    def test_init_invalid_chunking_parameters(self):
-        """Test RAGManager initialization with invalid chunking parameters."""
-
-        with patch('ragl.manager._LOG') as mock_log:
-            with self.assertRaises(ConfigurationError) as cm:
-                invalid_config = ManagerConfig(chunk_size=0, overlap=20,
-                                               paranoid=False)
-                RAGManager(invalid_config, self.mock_ragstore)
-
-            self.assertIn('self.chunk_size=0 must be positive', str(cm.exception))
-
     @patch('ragl.manager._LOG')
     def test_add_text_string_success(self, mock_log):
         """Test adding text as string successfully."""

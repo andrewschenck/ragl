@@ -118,13 +118,13 @@ class TestSentenceTransformerConfig(unittest.TestCase):
         """Test validation fails for negative cache size."""
         with self.assertRaises(ConfigurationError) as cm:
             SentenceTransformerConfig(cache_maxsize=-1)
-        self.assertIn('must be non-negative', str(cm.exception))
+        self.assertIn('cache_maxsize must be a non-negative integer', str(cm.exception))
 
     def test_validate_cache_maxsize_non_integer(self):
         """Test validation fails for non-integer cache size."""
         with self.assertRaises(ConfigurationError) as cm:
             SentenceTransformerConfig(cache_maxsize=10.5)
-        self.assertIn('must be non-negative', str(cm.exception))
+        self.assertIn('cache_maxsize must be a non-negative integer', str(cm.exception))
 
     def test_validate_cache_maxsize_zero(self):
         """Test validation passes for zero cache size."""
@@ -256,31 +256,31 @@ class TestRedisConfig(unittest.TestCase):
         """Test validation fails for negative db."""
         with self.assertRaises(ConfigurationError) as cm:
             RedisConfig(db=-1)
-        self.assertIn('must be non-negative', str(cm.exception))
+        self.assertIn('db must be a non-negative integer', str(cm.exception))
 
     def test_validate_db_non_integer(self):
         """Test validation fails for non-integer db."""
         with self.assertRaises(ConfigurationError) as cm:
             RedisConfig(db=1.5)
-        self.assertIn('must be non-negative', str(cm.exception))
+        self.assertIn('db must be a non-negative integer', str(cm.exception))
 
     def test_validate_socket_timeout_negative(self):
         """Test validation fails for negative socket timeout."""
         with self.assertRaises(ConfigurationError) as cm:
             RedisConfig(socket_timeout=0)
-        self.assertIn('must be positive', str(cm.exception))
+        self.assertIn('socket_timeout must be a positive integer', str(cm.exception))
 
     def test_validate_socket_connect_timeout_negative(self):
         """Test validation fails for negative socket connect timeout."""
         with self.assertRaises(ConfigurationError) as cm:
             RedisConfig(socket_connect_timeout=0)
-        self.assertIn('must be positive', str(cm.exception))
+        self.assertIn('socket_connect_timeout must be a positive integer', str(cm.exception))
 
     def test_validate_health_check_interval_negative(self):
         """Test validation fails for negative health check interval."""
         with self.assertRaises(ConfigurationError) as cm:
             RedisConfig(health_check_interval=0)
-        self.assertIn('must be positive', str(cm.exception))
+        self.assertIn('health_check_interval must be a positive integer', str(cm.exception))
 
     def test_inheritance(self):
         """Test that RedisConfig inherits from VectorStoreConfig."""
@@ -326,13 +326,13 @@ class TestManagerConfig(unittest.TestCase):
         """Test validation fails for negative chunk size."""
         with self.assertRaises(ConfigurationError) as cm:
             ManagerConfig(chunk_size=0)
-        self.assertIn('must be positive', str(cm.exception))
+        self.assertIn('chunk_size must be a positive integer', str(cm.exception))
 
     def test_validate_overlap_negative(self):
         """Test validation fails for negative overlap."""
         with self.assertRaises(ConfigurationError) as cm:
             ManagerConfig(overlap=-1)
-        self.assertIn('must be non-negative', str(cm.exception))
+        self.assertIn('overlap must be a non-negative integer', str(cm.exception))
 
     def test_validate_overlap_greater_than_chunk_size(self):
         """Test validation fails when overlap >= chunk_size."""
@@ -353,13 +353,13 @@ class TestManagerConfig(unittest.TestCase):
         """Test validation fails for negative max query length."""
         with self.assertRaises(ConfigurationError) as cm:
             ManagerConfig(max_query_length=0)
-        self.assertIn('must be positive', str(cm.exception))
+        self.assertIn('max_query_length must be a positive integer', str(cm.exception))
 
     def test_validate_max_input_length_negative(self):
         """Test validation fails for negative max input length."""
         with self.assertRaises(ConfigurationError) as cm:
             ManagerConfig(max_input_length=0)
-        self.assertIn('must be positive', str(cm.exception))
+        self.assertIn('max_input_length must be a positive integer', str(cm.exception))
 
     def test_validate_max_query_length_exceeds_max_input_length(self):
         """Test validation fails when max_query_length > max_input_length."""
