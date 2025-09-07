@@ -222,6 +222,7 @@ class SentenceTransformerEmbedder:
         _LOG.info('Cache performance: %d hits, %.1f%% hit rate',
                   cache_info.hits, cache_hit_rate)
 
+        # ruff: noqa: ERA001
         # Estimate cache memory usage (rough approximation).
         #
         # This is a rough estimate based on the number of cached
@@ -232,13 +233,13 @@ class SentenceTransformerEmbedder:
         #
         # embedding count * dimensions per embedding * 4 bytes (float32)
 
-        estimated_cache_size = (
-            cache_info.currsize *     # Number of cached embeddings
-            self.dimensions *         # Dimensions per embedding (float32)
-            4 /                       # Bytes per float32
-            (1024 * 1024)             # Convert to MB
-        )
-        estimated_cache_size = round(estimated_cache_size, 2)
+        # estimated_cache_size = (
+        #     cache_info.currsize *     # Number of cached embeddings
+        #     self.dimensions *         # Dimensions per embedding (float32)
+        #     4 /                       # Bytes per float32
+        #     (1024 * 1024)             # Convert to MB
+        # )
+        # estimated_cache_size = round(estimated_cache_size, 2)
 
         usage = {
             'cache_hits':                   cache_info.hits,
@@ -246,7 +247,6 @@ class SentenceTransformerEmbedder:
             'cache_size':                   cache_info.currsize,
             'cache_maxsize':                cache_info.maxsize,
             'cache_hit_rate':               cache_hit_rate,
-            'estimated_cache_memory_mb':    estimated_cache_size,
             'process_memory_mb':            None,
             'system_memory_percent':        None,
             'system_memory_threshold':      self._memory_threshold,

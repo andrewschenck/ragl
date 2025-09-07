@@ -15,6 +15,7 @@ Classes:
 """
 
 import logging
+from typing import Any
 
 from ragl.protocols import EmbedderProtocol, VectorStoreProtocol
 from ragl.textunit import TextUnit
@@ -124,6 +125,22 @@ class RAGStore:
         """
         _LOG.debug('Deleting %d texts', len(text_ids))
         return self.storage.delete_texts(text_ids)
+
+    def get_health_status(self) -> dict[str, Any]:
+        """
+        Return the health status of the storage backend and embedder.
+
+        Checks the health of both the embedder and storage components,
+        returning a dictionary with status and utilization details.
+
+        Returns:
+            Health status dictionary.
+        """
+        _LOG.debug('Retrieving health status')
+        return {
+            'embedder':     self.embedder.get_memory_usage(),
+            'storage':      self.storage.health_check(),
+        }
 
     def get_relevant(
             self,
