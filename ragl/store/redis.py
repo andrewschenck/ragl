@@ -154,6 +154,8 @@ class RedisVectorStore:
     TAG_SEPARATOR: ClassVar[str] = ','
     TEXT_COUNTER_KEY: ClassVar[str] = 'text_counter'
 
+    LARGE_BATCH_THRESHOLD: ClassVar[int] = 100
+
     index: SearchIndex
     index_name: str
     index_schema: IndexSchema
@@ -1097,10 +1099,23 @@ class RedisVectorStore:
             ValidationError:
                 If any input is invalid.
         """
-        _LOG.debug('Preparing batch data')
+        _LOG.debug('Preparing batch data for %d items',
+                   len(texts_and_embeddings))
+
         batch_data = {}
 
-        for text_unit, embedding in texts_and_embeddings:
+        total_items = len(texts_and_embeddings)
+        if total_items > self.LARGE_BATCH_THRESHOLD:
+            _LOG.info('Processing large batch: %d items', total_items)
+
+        for i, (text_unit, embedding) in enumerate(texts_and_embeddings):
+
+            very_large_batch = self.LARGE_BATCH_THRESHOLD * 10
+            chunk = very_large_batch / 2
+            if total_items > very_large_batch and (i + 1) % chunk == 0:
+                _LOG.info('Processed %d/%d items (%.1f%%)',
+                          i + 1, total_items, ((i + 1) / total_items) * 100)
+
             text_id, prepared_data = self._prepare_single_text_entry(
                 text_unit=text_unit,
                 embedding=embedding,
