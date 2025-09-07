@@ -462,11 +462,11 @@ class TestLogging(unittest.TestCase):
                           record.levelname == 'DEBUG']
         self.assertTrue(len(debug_messages) > 0)
 
-    def test_critical_logging_on_error(self):
-        """Test critical logging when errors occur."""
+    def test_error_logging_on_error(self):
+        """Test logging when errors occur."""
         factory = EmbedderFactory()
 
-        with self.assertLogs('ragl.factory', level='CRITICAL') as log:
+        with self.assertLogs('ragl.factory', level='ERROR') as log:
             try:
                 factory()  # Missing config
             except ConfigurationError:
@@ -474,7 +474,7 @@ class TestLogging(unittest.TestCase):
 
         # Verify critical messages are logged
         critical_messages = [record.levelname for record in log.records if
-                             record.levelname == 'CRITICAL']
+                             record.levelname == 'ERROR']
         self.assertTrue(len(critical_messages) > 0)
 
 
