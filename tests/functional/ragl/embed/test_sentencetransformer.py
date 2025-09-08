@@ -52,7 +52,7 @@ class TestSentenceTransformerEmbedder(unittest.TestCase):
         embedder = SentenceTransformerEmbedder(self.config)
 
         # Verify model initialization
-        mock_sentence_transformer.assert_called_once_with("all-MiniLM-L6-v2",
+        mock_sentence_transformer.assert_called_once_with(model_name_or_path="all-MiniLM-L6-v2",
                                                           device="cpu")
         self.assertEqual(embedder.model, self.mock_model)
         self.assertEqual(embedder._cache_size, 100)
@@ -74,7 +74,7 @@ class TestSentenceTransformerEmbedder(unittest.TestCase):
 
         embedder = SentenceTransformerEmbedder(config)
 
-        mock_sentence_transformer.assert_called_once_with("all-MiniLM-L6-v2",
+        mock_sentence_transformer.assert_called_once_with(model_name_or_path="all-MiniLM-L6-v2",
                                                           device="cuda")
         self.assertEqual(embedder._cache_size, 50)
         self.assertEqual(embedder._memory_threshold, 0.9)
@@ -102,8 +102,40 @@ class TestSentenceTransformerEmbedder(unittest.TestCase):
 
         # Verify embedder was still initialized properly
         self.assertEqual(embedder._cache_size, 0)
-        mock_sentence_transformer.assert_called_once_with("all-MiniLM-L6-v2",
+        mock_sentence_transformer.assert_called_once_with(model_name_or_path="all-MiniLM-L6-v2",
                                                           device="cpu")
+
+    @patch('ragl.embed.sentencetransformer.SentenceTransformer')
+    @patch('ragl.embed.sentencetransformer._LOG')
+    def test_init_kwargs_device_warning(self, mock_log,
+                                        mock_sentence_transformer):
+        """Test that device in init_kwargs triggers warning and is ignored."""
+        mock_sentence_transformer.return_value = self.mock_model
+
+        config = SentenceTransformerConfig(
+            model_name_or_path='all-MiniLM-L6-v2',
+            cache_maxsize=100,
+            memory_threshold=0.8,
+            auto_clear_cache=True,
+            device="cpu",
+            init_kwargs={"device": "cuda", "trust_remote_code": True}
+        )
+
+        embedder = SentenceTransformerEmbedder(config)
+
+        # Verify warning was logged
+        mock_log.warning.assert_called_once_with(
+            'Ignoring device setting in init_kwargs (%s); '
+            'use config.device (%s) instead',
+            'cuda', 'cpu'
+        )
+
+        # Verify SentenceTransformer was called with config.device, not init_kwargs device
+        mock_sentence_transformer.assert_called_once_with(
+            model_name_or_path="all-MiniLM-L6-v2",
+            device="cpu",  # Should use config.device
+            trust_remote_code=True  # Other init_kwargs should still be passed
+        )
 
     @patch('ragl.embed.sentencetransformer.SentenceTransformer')
     def test_dimensions_property(self, mock_sentence_transformer):
@@ -123,7 +155,7 @@ class TestSentenceTransformerEmbedder(unittest.TestCase):
         self.mock_model.get_sentence_embedding_dimension.return_value = "invalid"
 
         # Now the assertion should fail during initialization
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             embedder = SentenceTransformerEmbedder(self.config)
 
     @patch('ragl.embed.sentencetransformer.SentenceTransformer')
